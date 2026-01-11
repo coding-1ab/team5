@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter, Write};
 use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Archive, Deserialize, Serialize, Clone, Eq, PartialEq, Hash, Default)]
+#[derive(Archive, Deserialize, Serialize, Clone, Eq, PartialEq, Hash, Default, Debug)]
 #[rkyv(
     compare(PartialEq),
     derive(Debug),
