@@ -1,27 +1,13 @@
-use crate::str32::FixedStr32;
+use crate::{Credential, CredentialMap, SiteName};
+use aes_gcm::aead::Aead;
 use aes_gcm::Aes256Gcm;
+use aes_gcm::Error as AesError;
 use aes_gcm::Key;
 use aes_gcm::KeyInit;
 use aes_gcm::Nonce;
-use aes_gcm::aead::Aead;
 use rand::RngCore;
 use rkyv::rancor::Error as RkyvError;
-use aes_gcm::Error as AesError;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::collections::HashMap;
-
-#[derive(Archive, Deserialize, Serialize, Clone, Eq, PartialEq, Hash, Debug)]
-#[rkyv(compare(PartialEq), derive(Debug))]
-pub struct SiteName(FixedStr32);
-
-#[derive(Archive, Deserialize, Serialize, Clone, Eq, PartialEq, Hash, Debug)]
-#[rkyv(compare(PartialEq), derive(Debug))]
-pub struct Credential {
-    id: FixedStr32,
-    password: FixedStr32,
-}
-
-pub type CredentialMap = HashMap<SiteName, Credential>;
 
 pub fn encrypt_map(map: CredentialMap, key_bytes: &[u8; 32]) -> Vec<u8> {
     let flat: Vec<(SiteName, Credential)> = map.into_iter().collect();
@@ -59,11 +45,11 @@ pub fn decrypt_map(data: &[u8], key_bytes: &[u8; 32]) -> Result<CredentialMap, A
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::decrypt_map;
+    use crate::crypto::encrypt_map;
     use crate::crypto::Credential;
     use crate::crypto::CredentialMap;
     use crate::crypto::SiteName;
-    use crate::crypto::decrypt_map;
-    use crate::crypto::encrypt_map;
     use crate::str32::FixedStr32;
 
     #[test]
