@@ -12,6 +12,13 @@ pub type CredentialMap = HashMap<SiteName, Credential>;
 #[rkyv(compare(PartialEq), derive(Debug))]
 pub struct SiteName(FixedStr32);
 
+impl SiteName {
+    pub fn new(name: &str) -> SiteName {
+        let name = FixedStr32::new(name, &[]).unwrap();
+        Self(name)
+    }
+}
+
 #[derive(Archive, Deserialize, Serialize, Clone, Eq, PartialEq, Hash, Debug)]
 #[rkyv(compare(PartialEq), derive(Debug))]
 pub struct Credential {
