@@ -61,8 +61,8 @@ mod tests {
         };
         map.insert(SiteName(FixedStr32::new("naver", &[]).unwrap()), credential);
 
-        let master_passwd: MasterPassword = {[1,2,3,4,5,6,7,8], 8};
-        let wrong_password: MasterPassword = {[1,1,1,1,1,1,1,1]; 8]};
+        let master_passwd: MasterPassword = {Bytes: [1,2,3,4,5,6,7,8], Length: 8};
+        let wrong_password: MasterPassword = {Bytes: [1,1,1,1,1,1,1,1], Length: 8};
 
         let encrypted = encrypt_map(map.clone(), &master_passwd);
 
