@@ -16,8 +16,7 @@ pub enum MasterPasswordCreationError {
     derive(Hash),
 )]
 pub struct MasterPassword32 {
-    bytes: [u8; 32],
-    length: u8,
+    bytes: [u8; 32]
 }
 
 impl MasterPassword32 {
@@ -43,20 +42,12 @@ impl MasterPassword32 {
         let mut bytes = [0u8; 32];
         bytes[..raw.len()].copy_from_slice(raw);
 
-        Ok(Self {
-            bytes,
-            length: raw.len() as u8,
-        })
+        Ok(Self { bytes })
     }
 
-    /// AES-256 key cast
     #[inline]
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.bytes
-    }
-
-    pub fn length(&self) -> u8 {
-        self.length
     }
 }
 
