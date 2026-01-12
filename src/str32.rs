@@ -38,7 +38,23 @@ impl FixedStr32 {
         };
         let length = length as u8;
 
-        // TODO implement rule check
+        // implement rule check
+
+        for rule in rules {
+            match rule {
+                CharacterRule::MinimumLength(min) => {
+                    if length < *min {
+                        return Err(CreationError::RuleViolation(rule.clone()));
+                    }
+                }
+                CharacterRule::IncludeSpecialCharacters(chars) => {
+                    let has_any = contents.chars().any(|c| chars.contains(&c));
+                    if !has_any {
+                        return Err(CreationError::RuleViolation(rule.clone()));
+                    }
+                }
+            }
+        }
 
         let mut array = [char::default(); 32];
         for (i, c) in contents.chars().enumerate() {
