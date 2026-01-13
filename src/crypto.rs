@@ -1,13 +1,8 @@
-use crate::{Credential, CredentialMap, SiteName};
-use aes_gcm::aead::Aead;
-use aes_gcm::Aes256Gcm;
-use aes_gcm::Error as AesError;
-use aes_gcm::Key;
-use aes_gcm::KeyInit;
-use aes_gcm::Nonce;
+use std::collections::HashMap;
+use aes_gcm::{aead::Aead, Aes256Gcm, Error as AesError, Key, KeyInit, Nonce};
 use rand::RngCore;
 use rkyv::rancor::Error as RkyvError;
-use std::collections::HashMap;
+use crate::{Credential, CredentialMap, SiteName};
 
 pub fn encrypt_map(map: CredentialMap, key_bytes: &[u8; 32]) -> Vec<u8> {
     let flat: Vec<(SiteName, Credential)> = map.into_iter().collect();

@@ -1,9 +1,12 @@
-use crate::{Credential, CredentialMap, SiteName, crypto};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{Read, Write}
+};
 use aes_gcm::Error as AesError;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{Read, Write};
+use crate::{Credential, CredentialMap, SiteName, crypto};
 
+#[derive(Default)]
 pub struct Secrets {
     map: CredentialMap,
 }
@@ -14,6 +17,7 @@ impl Secrets {
             map: HashMap::new(),
         }
     }
+    
     pub fn load(path: &str, key_bytes: &[u8; 32]) -> Result<Self, AesError> {
         let mut file = File::options()
             .create(true)
@@ -33,6 +37,7 @@ impl Secrets {
 
         Ok(Secrets { map })
     }
+    
     pub fn store(&self, path: &str, key_bytes: &[u8; 32]) {
         let encrypted = crypto::encrypt_map(self.map.clone(), key_bytes);
 
