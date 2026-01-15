@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, /*Write*/};
+use std::fmt::{write, Display, Formatter};
 use std::string::String;
 use std::collections::BTreeMap;
 
@@ -38,7 +38,7 @@ impl SiteName {
 impl Display for SiteNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SiteNameError::Empty => f.write_str("Site name is empty"),
+            SiteNameError::Empty => write!(f, "Site name is empty"),
         }
     }
 }
@@ -118,8 +118,8 @@ impl Credential {
 impl Display for CredentialError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CredentialError::UserIdEmpty => f.write_str("User ID is empty"),
-            CredentialError::PasswordEmpty => f.write_str("Password is empty"),
+            CredentialError::UserIdEmpty => write!(f, "User ID is empty"),
+            CredentialError::PasswordEmpty => write!(f, "Password is empty"),
             CredentialError::PasswordRuleViolation(msg) => {
                 write!(f, "Password rule violation: {}", msg)
             }
