@@ -1,7 +1,7 @@
 use std::fmt::{write, Display, Formatter};
 use std::string::String;
 use std::collections::BTreeMap;
-
+use std::error::Error;
 
 /// SiteName
 
@@ -42,6 +42,8 @@ impl Display for SiteNameError {
         }
     }
 }
+
+impl Error for SiteNameError {}
 
 
 /// Password rules
@@ -120,17 +122,14 @@ impl Display for CredentialError {
         match self {
             CredentialError::UserIdEmpty => write!(f, "User ID is empty"),
             CredentialError::PasswordEmpty => write!(f, "Password is empty"),
-            CredentialError::PasswordRuleViolation(msg) => {
-                write!(f, "Password rule violation: {}", msg)
-            }
+            CredentialError::PasswordRuleViolation(msg) => write!(f, "Password rule violation: {}", msg),
         }
     }
 }
 
-pub fn prefix_range(
-    db: &DB,
-    input: String,
-) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
+impl Error for CredentialError {}
+
+pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
     let start = SiteName::from_unchecked(&input);
     let tmp = format!("{}{}", input, char::MAX);
     let end = SiteName::from_unchecked(&tmp);
