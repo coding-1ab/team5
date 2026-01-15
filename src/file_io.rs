@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io::Write;
@@ -6,7 +7,7 @@ use std::process;
 
 
 const DB_FILE: &str = "db.bin";
-const DB_FILE_OLD: &str = "db_old.bin";
+const DB_FILE_OLD: &str = "db.bin.old";
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum FileError {
@@ -20,23 +21,20 @@ pub enum FileError {
 impl Display for FileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileError::DatabaseMissing =>
-                f.write_str("Database file does not exist"),
-            FileError::IoRead =>
-                f.write_str("Failed to read database file"),
-            FileError::IoWrite =>
-                f.write_str("Failed to write database file"),
-            FileError::IoRename =>
-                f.write_str("Failed to replace database file"),
-            FileError::IoDelete =>
-                f.write_str("Failed to remove old database backup"),
+            FileError::DatabaseMissing => write!(f, "Database file does not exist"),
+            FileError::IoRead => write!(f, "Failed to read database file"),
+            FileError::IoWrite => write!(f, "Failed to write database file"),
+            FileError::IoRename => write!(f, "Failed to replace database file"),
+            FileError::IoDelete => write!(f, "Failed to remove old database backup"),
         }
     }
 }
 
+impl Error for FileError {}
+
 /// Load encrypted DB file as raw bytes.
 /// Policy:
-/// - If `db_old.bin` exists, ALWAYS use it
+/// - If `db.bin.old` exists, ALWAYS use it
 /// - Else if `db.bin` exists, use it
 /// - Else -> DatabaseMissing
 pub fn load_db() -> Result<Vec<u8>, FileError> {
@@ -59,9 +57,9 @@ pub fn load_db() -> Result<Vec<u8>, FileError> {
 /// - during program execution (manual backup)
 /// - right before program exit
 /// Algorithm:
-/// 1. If `db.bin` exists -> rename to `db_old.bin`
+/// 1. If `db.bin` exists -> rename to `db.bin.old`
 /// 2. Write new `db.bin`
-/// 3. Remove `db_old.bin`
+/// 3. Remove `db.bin.old`
 pub fn save_db(data: &[u8]) -> Result<(), FileError> {
     let path = Path::new(DB_FILE);
     let old_path = Path::new(DB_FILE_OLD);
@@ -91,6 +89,5 @@ pub fn save_db(data: &[u8]) -> Result<(), FileError> {
 }
 
 pub fn graceful_exit() {
-
     process::exit(0);
 }
