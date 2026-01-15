@@ -31,6 +31,8 @@ impl SiteName {
     pub fn as_str(&self) -> &str {
         &self.name
     }
+
+
 }
 
 impl Display for SiteNameError {
@@ -42,6 +44,7 @@ impl Display for SiteNameError {
 }
 
 impl Error for SiteNameError {}
+
 
 /// Password rules
 // (internal default)
@@ -67,8 +70,6 @@ pub struct Credential {
     pub password: String,
 }
 
-pub type DB = BTreeMap<SiteName, Vec<Credential>>;
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum CredentialError {
     UserIdEmpty,
@@ -77,39 +78,44 @@ pub enum CredentialError {
 }
 
 impl Credential {
-    pub fn new(user_id: &str, password: &str) -> Result<Self, CredentialError> {
-        if user_id.trim().is_empty() {
+    pub fn new(raw_id: String, raw_pw: String) -> Result<Self, CredentialError> {
+        if raw_id.trim().is_empty() {
             return Err(CredentialError::UserIdEmpty);
         }
 
-        if password.is_empty() {
+        if raw_pw.is_empty() {
             return Err(CredentialError::PasswordEmpty);
         }
 
-        let length = password.chars().count();
+        let length = raw_pw.len();
 
         for rule in default_password_rules() {
             match rule {
                 PasswordRule::MinimumLength(min) => {
                     if length < *min as usize {
-                        return Err(CredentialError::PasswordRuleViolation(format!("Minimum length is {}", min)));
+                        return Err(CredentialError::PasswordRuleViolation(
+                            format!("Minimum length is {}", min),
+                        ));
                     }
                 }
                 PasswordRule::IncludeCharacters(chars) => {
-                    if !password.chars().any(|c| chars.contains(&c)) {
-                        return Err(CredentialError::PasswordRuleViolation("Must include at least one special character".to_string()));
+                    ///TODO
+                    let c = ['#','!','@']; // temp
+                    if !raw_pw.contains(&c) {
+                        return Err(CredentialError::PasswordRuleViolation(
+                            "Must include at least one special character".to_string(),
+                        ));
                     }
                 }
             }
         }
 
-        Ok(Self { user_id: user_id.to_string(), password: password.to_string()})
-    }
-}
-
-impl Display for Credential {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "id: {}, password: {}", self.user_id, self.password)
+        Ok(
+            Self {
+            user_id: raw_id,
+            password: raw_pw,
+            }
+        )
     }
 }
 
@@ -124,6 +130,33 @@ impl Display for CredentialError {
 }
 
 impl Error for CredentialError {}
+
+
+pub type DB = BTreeMap<SiteName, Vec<Credential>>;
+
+pub fn add_cred(mut db: &DB, site_name: SiteName, user_id: String, password: String)
+    -> Result<(), CredentialError> {
+    let cred = Credential::new(user_id, password)?;
+    let creds_mut_ref = db.entry(site_name).or_insert(Vec::new());
+    let mut iter = std::iter::once(creds_mut_ref);
+    if let Some(creds) = iter.next() {
+        creds.push(cred);
+        ////////
+    };
+    OK()
+}
+
+pub fn change_cred(db: &DB,)
+    -> Result<(), CredentialError> {
+
+}
+
+pub fn delete_cred(db: &DB,)
+    -> Result<(), CredentialError> {
+    // Vec Iter로 먼저 해당 credential 삭제 
+    // Map Iter로 해당 Vec의 empty 여부 확인하여 참일 시 키 삭제;
+}
+
 
 pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
     let start = SiteName::from_unchecked(&input);
