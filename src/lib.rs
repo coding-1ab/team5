@@ -5,6 +5,7 @@ use crate::str32::FixedStr32;
 pub mod crypto;
 pub mod str32;
 pub mod secrets;
+pub mod ui;
 
 pub type CredentialMap = HashMap<SiteName, Credential>;
 
