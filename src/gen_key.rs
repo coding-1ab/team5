@@ -55,7 +55,7 @@ impl MasterPW {
 
 impl Salt {
     pub fn new() -> Self { // Noexcept
-        let mut s= [0u8; core::mem::size_of::<Self>()];
+        let mut s= [0u8; size_of::<Self>()];
         rand::rng().fill_bytes(&mut s);
         Self {salt: s}
     }
@@ -65,9 +65,15 @@ impl Salt {
     }
 }
 
+impl From<[u8; 16]> for Salt {
+    fn from(value: [u8; 16]) -> Self {
+        Self { salt: value }
+    }
+}
+
 impl Nonce {
     pub fn new() -> Self { // Noexcept
-        let mut n = [0u8; core::mem::size_of::<Self>()];
+        let mut n = [0u8; size_of::<Self>()];
         rand::rng().fill_bytes(&mut n);
         Self {nonce: n}
     }
@@ -104,6 +110,6 @@ pub fn change_master_pw(mut new_pw: String, mut salt: &Salt, mut key: &CryptoKey
     let new_pw = MasterPW::new(new_pw)?;
     let new_salt = Salt::new();
     let new_key = CryptoKey::new(new_pw, &salt);
-    OK(())
+    Ok(())
 
 }

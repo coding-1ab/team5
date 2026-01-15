@@ -1,10 +1,11 @@
-use crate::{Credential, SiteName};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
-use aes_gcm::aead::{Aead, KeyInit};
-use rand::RngCore;
-use rkyv::{Archive, Deserialize, Serialize};
-use rkyv::rancor::Error as RkyvError;
 use std::fmt::{Display, Formatter};
+use aes_gcm::{
+    Aes256Gcm, Key, Nonce,
+    aead::{Aead, KeyInit}
+};
+use rand::RngCore;
+use rkyv::rancor::Error as RkyvError;
+use crate::gen_key::Salt;
 
 
 type Magic = [u8; 4];
@@ -58,11 +59,11 @@ struct DbHeader {
 
 impl DbHeader {
 
-    const MAGIC_LEN: usize = core::mem::size_of::<Magic>();
-    const VERSION_LEN: usize = core::mem::size_of::<Version>();
-    const SALT_LEN: usize = core::mem::size_of::<Salt>();
-    const CIPHERTEXT_LEN_LEN: usize = core::mem::size_of::<CipherTextLen>();
-    const NONCE_LEN: usize = core::mem::size_of::<Nonce>();
+    const MAGIC_LEN: usize = size_of::<Magic>();
+    const VERSION_LEN: usize = size_of::<Version>();
+    const SALT_LEN: usize = size_of::<Salt>();
+    const CIPHERTEXT_LEN_LEN: usize = size_of::<CipherTextLen>();
+    const NONCE_LEN: usize = size_of::<Nonce>();
 
     fn parse(input: &[u8]) -> Result<(Self, &[u8]), CryptoError> {
         if input.len() < Self::SIZE {
@@ -101,7 +102,7 @@ impl DbHeader {
             Self {
                 magic,
                 version,
-                salt,
+                salt: Salt::from(salt),
                 ciphertext_len,
                 nonce,
             },
@@ -163,7 +164,7 @@ pub fn decrypt_db(
     }
 
     let ct_len = header.ciphertext_len as CipherTextLen;
-    if body.len() < ct_len {
+    if body.len() < ct_len as usize {
         return Err(CryptoError::InvalidFormat);
     }
 
@@ -171,7 +172,7 @@ pub fn decrypt_db(
     let plaintext = cipher
         .decrypt(
             Nonce::from_slice(&header.nonce),
-            &body[..ct_len],
+            &body[..ct_len as usize],
         )
         .map_err(|_| CryptoError::DecryptionFailed)?;
 
