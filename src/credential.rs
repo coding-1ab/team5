@@ -110,12 +110,13 @@ impl Credential {
             }
         }
 
-        Ok(
-            Self {
-            user_id: raw_id,
-            password: raw_pw,
-            }
-        )
+        Ok(Self { user_id: raw_id.to_string(), password: raw_pw.to_string()})
+    }
+}
+
+impl Display for Credential {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "id: {}, password: {}", self.user_id, self.password)
     }
 }
 
