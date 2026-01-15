@@ -2,10 +2,11 @@ use std::fmt::{write, Display, Formatter};
 use std::string::String;
 use std::collections::BTreeMap;
 use std::error::Error;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// SiteName
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Zeroize, ZeroizeOnDrop)]
 pub struct SiteName {
     name: String
 }
@@ -64,7 +65,7 @@ fn default_password_rules() -> &'static [PasswordRule] {
 
 /// Credential
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Credential {
     pub user_id: String,
     pub password: String,
@@ -145,17 +146,17 @@ pub fn add_cred(mut db: &DB, site_name: SiteName, user_id: String, password: Str
     OK()
 }
 
-pub fn change_cred(db: &DB,)
+// Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
+pub fn modify_cred(db: &DB,)
     -> Result<(), CredentialError> {
 
 }
-
+// Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
 pub fn delete_cred(db: &DB,)
     -> Result<(), CredentialError> {
     // Vec Iter로 먼저 해당 credential 삭제 
     // Map Iter로 해당 Vec의 empty 여부 확인하여 참일 시 키 삭제;
 }
-
 
 pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
     let start = SiteName::from_unchecked(&input);

@@ -22,12 +22,6 @@ pub struct Salt {
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub struct Nonce {
-    nonce: [u8; 12]
-}
-
-#[derive(Zeroize, ZeroizeOnDrop)]
-
 pub struct CryptoKey {
     key: [u8; 32]
 }
@@ -66,20 +60,14 @@ impl Salt {
         rand::rng().fill_bytes(&mut s);
         Self {salt: s}
     }
+    pub fn from(bytes: [u8; size_of::<Self>()]) -> Self {
+        Self {salt: bytes}
+    }
 
     pub fn as_bytes(&self) -> &[u8] {
         self.salt.as_slice()
     }
 }
-
-impl Nonce {
-    pub fn new() -> Self { // Noexcept
-        let mut n = [0u8; size_of::<Self>()];
-        rand::rng().fill_bytes(&mut n);
-        Self {nonce: n}
-    }
-}
-
 
 impl CryptoKey {
     fn new(pw: MasterPW, salt: &Salt) -> Self {
@@ -98,19 +86,18 @@ impl CryptoKey {
     }
 }
 
-pub fn gen_key(raw_pw: String, salt: &Salt, key: &CryptoKey)
+pub fn gen_key(raw_pw: String, salt: &Salt, key: &mut CryptoKey)
 // It is guaranteed that exceptions can only be thrown from MasterPW
-               -> Result<(), MasterPWError> {
+    -> Result<(), MasterPWError> {
     let pw = MasterPW::new(raw_pw)?;
-    let key = CryptoKey::new(pw, salt);
+    *key = CryptoKey::new(pw, salt);
     Ok(())
 }
 
-pub fn change_master_pw(mut new_pw: String, mut salt: &Salt, mut key: &CryptoKey)
+pub fn change_master_pw(raw_new_pw: String, salt: &mut Salt, key: &mut CryptoKey)
     -> Result<(), MasterPWError> {
-    let new_pw = MasterPW::new(new_pw)?;
-    let new_salt = Salt::new();
-    let new_key = CryptoKey::new(new_pw, &salt);
+    let new_pw = MasterPW::new(raw_new_pw)?;
+    *salt = Salt::new();
+    *key = CryptoKey::new(new_pw, &salt);
     Ok(())
-
 }
