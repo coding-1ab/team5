@@ -16,6 +16,7 @@ use eframe::{
         text::{InsertFontFamily, FontPriority, FontInsert}
     }
 };
+use crate::credential::DB;
 
 type TryCountRamming = i64;
 
@@ -51,7 +52,7 @@ pub struct GraphicalUserInterface {
     login: bool,
     id: String,
     password: String,
-    secrets: Secrets,
+    db: DB,
     window_open_list: WindowOpenList,
     output: String,
 }
@@ -65,7 +66,7 @@ impl Default for GraphicalUserInterface {
             login: false,
             id: String::new(),
             password: String::new(),
-            secrets: Default::default(),
+            db: Default::default(),
             window_open_list: Default::default(),
             output: String::new()
         }
