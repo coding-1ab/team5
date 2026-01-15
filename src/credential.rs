@@ -31,8 +31,6 @@ impl SiteName {
     pub fn as_str(&self) -> &str {
         &self.name
     }
-
-
 }
 
 impl Display for SiteNameError {
@@ -44,7 +42,6 @@ impl Display for SiteNameError {
 }
 
 impl Error for SiteNameError {}
-
 
 /// Password rules
 // (internal default)
@@ -95,25 +92,24 @@ impl Credential {
             match rule {
                 PasswordRule::MinimumLength(min) => {
                     if length < *min as usize {
-                        return Err(CredentialError::PasswordRuleViolation(
-                            format!("Minimum length is {}", min),
-                        ));
+                        return Err(CredentialError::PasswordRuleViolation(format!("Minimum length is {}", min)));
                     }
                 }
                 PasswordRule::IncludeCharacters(chars) => {
                     if !password.chars().any(|c| chars.contains(&c)) {
-                        return Err(CredentialError::PasswordRuleViolation(
-                            "Must include at least one special character".to_string(),
-                        ));
+                        return Err(CredentialError::PasswordRuleViolation("Must include at least one special character".to_string()));
                     }
                 }
             }
         }
 
-        Ok(Self {
-            user_id: user_id.to_string(),
-            password: password.to_string(),
-        })
+        Ok(Self { user_id: user_id.to_string(), password: password.to_string()})
+    }
+}
+
+impl Display for Credential {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "id: {}, password: {}", self.user_id, self.password)
     }
 }
 

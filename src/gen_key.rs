@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use argon2::Argon2;
 use rand::{/*Rng,*/ RngCore};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -53,6 +54,12 @@ impl MasterPW {
     }
 }
 
+impl Display for MasterPW {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.pw)
+    }
+}
+
 impl Salt {
     pub fn new() -> Self { // Noexcept
         let mut s= [0u8; size_of::<Self>()];
@@ -62,12 +69,6 @@ impl Salt {
 
     pub fn as_bytes(&self) -> &[u8] {
         self.salt.as_slice()
-    }
-}
-
-impl From<[u8; 16]> for Salt {
-    fn from(value: [u8; 16]) -> Self {
-        Self { salt: value }
     }
 }
 
