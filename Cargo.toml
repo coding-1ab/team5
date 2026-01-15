@@ -1,0 +1,13 @@
+[package]
+name = "team5"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rkyv = "0.8.13"
+aes-gcm = "0.10"
+rancor = "0.1.0-rc.2"
+argon2 = "0.5.3"
+rand = "0.9"
+zeroize = { version = "1.8", features = ["derive"] }
+eframe = "0.33.3"
