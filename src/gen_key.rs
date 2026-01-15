@@ -93,7 +93,7 @@ impl CryptoKey {
 
 pub fn gen_key(raw_pw: String, salt: &Salt, key: &CryptoKey)
 // It is guaranteed that exceptions can only be thrown from MasterPW
-    -> Result<(), MasterPWError> {
+               -> Result<(), MasterPWError> {
     let pw = MasterPW::new(raw_pw)?;
     let key = CryptoKey::new(pw, salt);
     Ok(())
