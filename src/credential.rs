@@ -1,7 +1,7 @@
-use std::fmt::{Display, Formatter, /*Write*/};
+use std::fmt::{write, Display, Formatter};
 use std::string::String;
 use std::collections::BTreeMap;
-
+use std::error::Error;
 
 /// SiteName
 
@@ -38,10 +38,12 @@ impl SiteName {
 impl Display for SiteNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SiteNameError::Empty => f.write_str("Site name is empty"),
+            SiteNameError::Empty => write!(f, "Site name is empty"),
         }
     }
 }
+
+impl Error for SiteNameError {}
 
 
 /// Password rules
@@ -118,19 +120,16 @@ impl Credential {
 impl Display for CredentialError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CredentialError::UserIdEmpty => f.write_str("User ID is empty"),
-            CredentialError::PasswordEmpty => f.write_str("Password is empty"),
-            CredentialError::PasswordRuleViolation(msg) => {
-                write!(f, "Password rule violation: {}", msg)
-            }
+            CredentialError::UserIdEmpty => write!(f, "User ID is empty"),
+            CredentialError::PasswordEmpty => write!(f, "Password is empty"),
+            CredentialError::PasswordRuleViolation(msg) => write!(f, "Password rule violation: {}", msg),
         }
     }
 }
 
-pub fn prefix_range(
-    db: &DB,
-    input: String,
-) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
+impl Error for CredentialError {}
+
+pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
     let start = SiteName::from_unchecked(&input);
     let tmp = format!("{}{}", input, char::MAX);
     let end = SiteName::from_unchecked(&tmp);
