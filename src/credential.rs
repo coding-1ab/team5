@@ -99,9 +99,7 @@ impl Credential {
                     }
                 }
                 PasswordRule::IncludeCharacters(chars) => {
-                    ///TODO
-                    let c = ['#','!','@']; // temp
-                    if !raw_pw.contains(&c) {
+                    if raw_pw.chars().any(|char| chars.contains(&char)) {
                         return Err(CredentialError::PasswordRuleViolation(
                             "Must include at least one special character".to_string(),
                         ));
@@ -110,7 +108,7 @@ impl Credential {
             }
         }
 
-        Ok(Self { user_id: raw_id.to_string(), password: raw_pw.to_string()})
+        Ok(Self { user_id: raw_id, password: raw_pw})
     }
 }
 
