@@ -32,16 +32,11 @@ pub enum CryptoError {
 impl Display for CryptoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CryptoError::InvalidFormat =>
-                f.write_str("Invalid encrypted database format"),
-            CryptoError::InvalidHeader =>
-                f.write_str("Invalid database header"),
-            CryptoError::VersionMismatch =>
-                f.write_str("Database version mismatch"),
-            CryptoError::DecryptionFailed =>
-                f.write_str("Failed to decrypt database (wrong key or corrupted data)"),
-            CryptoError::DeserializeFailed =>
-                f.write_str("Failed to deserialize decrypted database"),
+            CryptoError::InvalidFormat => write!(f, "Invalid encrypted database format"),
+            CryptoError::InvalidHeader => write!(f, "Invalid database header"),
+            CryptoError::VersionMismatch => write!(f, "Database version mismatch"),
+            CryptoError::DecryptionFailed => write!(f, "Failed to decrypt database (wrong key or corrupted data)"),
+            CryptoError::DeserializeFailed => write!(f, "Failed to deserialize decrypted database"),
         }
     }
 }
