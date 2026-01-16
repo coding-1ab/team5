@@ -134,7 +134,7 @@ impl Error for CredentialError {}
 
 pub type DB = BTreeMap<SiteName, Vec<Credential>>;
 
-pub fn add_cred(mut db: &DB, site_name: SiteName, user_id: String, password: String)
+pub fn add_cred(db: mut &DB, site_name: SiteName, user_id: String, password: String)
     -> Result<(), CredentialError> {
     let cred = Credential::new(user_id, password)?;
     let creds_mut_ref = db.entry(site_name).or_insert(Vec::new());
@@ -143,7 +143,7 @@ pub fn add_cred(mut db: &DB, site_name: SiteName, user_id: String, password: Str
         creds.push(cred);
         ////////
     };
-    OK()
+    Ok(())
 }
 
 // Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
