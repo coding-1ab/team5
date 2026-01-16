@@ -1,10 +1,12 @@
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::fs;
-use std::io::Write;
-use std::path::Path;
-use std::process;
-
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+    fs,
+    io::Write,
+    path::Path,
+    process,
+};
+use std::io::Read;
 
 const DB_FILE: &str = "db.bin";
 const DB_FILE_OLD: &str = "db.bin.old";
