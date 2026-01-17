@@ -16,7 +16,7 @@ struct MasterPW {
     pw: String
 }
 
-#[derive(Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop, Clone)]
 pub struct Salt {
     salt: [u8; 16]
 }

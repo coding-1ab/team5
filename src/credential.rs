@@ -1,15 +1,22 @@
+use std::borrow::Borrow;
 use std::fmt::{write, Display, Formatter};
 use std::string::String;
 use std::collections::BTreeMap;
 use std::error::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-
 /// SiteName
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Zeroize, ZeroizeOnDrop)]
+#[derive(
+    Archive, Serialize, Deserialize, CheckBytes,
+    Debug, Clone, Ord, PartialOrd, Eq, PartialEq,
+)]
+#[archive(compare(PartialEq), check_bytes)]
+#[archive_attr(derive(Ord, PartialOrd, Eq, PartialEq))]
 pub struct SiteName {
     name: String
 }
+
+use rkyv::{Archive, Serialize, Deserialize, Archived, CheckBytes};
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SiteNameError {
@@ -32,8 +39,16 @@ impl SiteName {
     pub fn as_str(&self) -> &str {
         &self.name
     }
-
-
+}
+impl Borrow<str> for SiteName {
+    fn borrow(&self) -> &str {
+        &self.name
+    }
+}
+impl AsRef<str> for SiteName {
+    fn as_ref(&self) -> &str {
+        &self.name
+    }
 }
 
 impl Display for SiteNameError {
@@ -65,7 +80,13 @@ fn default_password_rules() -> &'static [PasswordRule] {
 
 /// Credential
 
-#[derive(Debug, Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
+
+#[derive(
+    Archive, Serialize, Deserialize, CheckBytes,
+    Debug, Clone, Ord, PartialOrd, Eq, PartialEq,
+)]
+#[archive(compare(PartialEq), check_bytes)]
+#[archive_attr(derive(Ord, PartialOrd, Eq, PartialEq))]
 pub struct Credential {
     pub user_id: String,
     pub password: String,
@@ -134,7 +155,8 @@ impl Error for CredentialError {}
 
 pub type DB = BTreeMap<SiteName, Vec<Credential>>;
 
-pub fn add_cred(db: mut &DB, site_name: SiteName, user_id: String, password: String)
+
+pub fn add_credential(db: &mut DB, site_name: SiteName, user_id: String, password: String)
     -> Result<(), CredentialError> {
     let cred = Credential::new(user_id, password)?;
     let creds_mut_ref = db.entry(site_name).or_insert(Vec::new());
@@ -147,13 +169,20 @@ pub fn add_cred(db: mut &DB, site_name: SiteName, user_id: String, password: Str
 }
 
 // Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
-pub fn modify_cred(db: &DB,)
+pub fn change_credential(db: &DB,)
     -> Result<(), CredentialError> {
 
 }
 // Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
-pub fn delete_cred(db: &DB,)
+pub fn delete_credential(db: &mut DB, site_name: SiteName, credential: &Credential)
     -> Result<(), CredentialError> {
+    let ref_vec = db.get_mut(&site_name).unwrap();
+    if let Some(pos) = ref_vec.iter()
+        .position(|&x| x == credential)
+
+        ref_vec.remove(pos);
+        Ok( () )
+    }
     // Vec Iter로 먼저 해당 credential 삭제 
     // Map Iter로 해당 Vec의 empty 여부 확인하여 참일 시 키 삭제;
 }

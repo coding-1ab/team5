@@ -1,20 +1,21 @@
 use std::fmt::{Display, Formatter};
 use aes_gcm::{
-    Aes256Gcm, Key,
-    aead::{Aead, KeyInit}
+    Aes256Gcm,
+    aead::{Aead, Key, KeyInit}
 };
+use aes_gcm::aes::cipher::BlockEncrypt;
 use rand::RngCore;
-use rkyv::rancor::Error as RkyvError;
+use rkyv::{to_bytes, check_archived_root, Deserialize, AlignedVec, Infallible, archived_root};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::gen_key::{Salt, CryptoKey};
 use crate::credential::{DB, SiteName, Credential, CredentialError};
 
 
-type Magic = [u8; 4];
+type Magic = [u8; 8];
 type Version = u32;
 type CipherTextLen = u64;
 
-const HEADER_MAGIC: Magic = *b"PDB3";
+const HEADER_MAGIC: Magic = *b"TeamFive";
 /// Program-internal DB format version
 const DB_VERSION: Version = 1;
 
@@ -40,15 +41,18 @@ impl Nonce {
 }
 
 
-pub type EncryptedDb = Vec<u8>;
+pub type EncryptedDB = Vec<u8>;
 
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CryptoError {
-    InvalidFormat,
     InvalidHeader,
+    InvalidFormat,
     VersionMismatch,
+    InvalidKey,
+    EncryptionFailed,
     DecryptionFailed,
+    SerializeFailed,
     DeserializeFailed,
 }
 
@@ -58,8 +62,11 @@ impl Display for CryptoError {
             CryptoError::InvalidFormat => write!(f, "Invalid encrypted database format"),
             CryptoError::InvalidHeader => write!(f, "Invalid database header"),
             CryptoError::VersionMismatch => write!(f, "Database version mismatch"),
+            CryptoError::InvalidKey => write!(f, "Invalid key"),
+            CryptoError::EncryptionFailed => write!(f, "Encryption failed"),
             CryptoError::DecryptionFailed => write!(f, "Failed to decrypt database (wrong key or corrupted data)"),
             CryptoError::DeserializeFailed => write!(f, "Failed to deserialize decrypted database"),
+            CryptoError::SerializeFailed => write!(f, "Failed to serialize encrypted database"),
         }
     }
 }
@@ -90,7 +97,7 @@ impl DbHeader {
 
         let mut offset = 0;
 
-        let mut magic = [0u8; 4];
+        let mut magic = [0u8; Self::MAGIC_LEN];
         magic.copy_from_slice(&input[offset..offset + Self::MAGIC_LEN]);
         offset += Self::MAGIC_LEN;
 
@@ -103,7 +110,7 @@ impl DbHeader {
         );
         offset += Self::VERSION_LEN;
 
-        let mut salt = [0u8; 16];
+        let mut salt = [0u8; Self::SALT_LEN];
         salt.copy_from_slice(&input[offset..offset + Self::SALT_LEN]);
         offset += Self::SALT_LEN;
 
@@ -112,7 +119,7 @@ impl DbHeader {
         );
         offset += Self::CIPHERTEXT_LEN_LEN;
 
-        let mut nonce = [0u8; 12];
+        let mut nonce = [0u8; Self::NONCE_LEN];
         nonce.copy_from_slice(&input[offset..offset + Self::NONCE_LEN]);
         offset += Self::NONCE_LEN;
 
@@ -137,32 +144,6 @@ impl DbHeader {
     }
 }
 
-mod test_view {
-    struct CredentialView<'a> {
-        user_id: &'a String,
-        password: &'a String,
-    }
-    struct DBView<'a> {
-        site_name: &'a String,
-        credential: &'a CredentialView<'a>,
-    }
-    impl<'a> CredentialView<'a> {
-        fn from(&self, cred: &'a Credential) -> Self {
-            Self {
-                user_id: &'a cred.user_id,
-                password: &'a cred.password,
-            }
-        }
-    }
-    impl<'a> DBView<'a> {
-        fn from(&self, name: &'a SiteName, cred_v: &'a CredentialView) -> Self {
-            Self {
-                site_name: &'a name,
-                credential: &'a cred_v,
-            }
-        }
-    }
-}
 
 // 디버깅 자제
 pub fn encrypt_db(
@@ -170,14 +151,14 @@ pub fn encrypt_db(
     key: &CryptoKey,
     salt: Salt,
     nonce: Nonce,
-) -> (EncryptedDb, Nonce, Salt) {
-    let serialized = rkyv::to_bytes::<RkyvError>(&db).unwrap();
+) -> Result<(EncryptedDB, Nonce, Salt), CryptoError> {
+    let serialized = rkyv::to_bytes::<_,256>(&db).unwrap();
 
-
-    let cipher = Aes256Gcm::new(Key::from_slice(key.as_bytes()));
+    let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
+        .map_err(|_| CryptoError::InvalidKey)?;
     let ciphertext = cipher
         .encrypt(aes_gcm::Nonce::from_slice(nonce.as_bytes()), serialized.as_ref())
-        .unwrap();
+        .map_err(|_| CryptoError::EncryptionFailed)?;
 
     let header = DbHeader {
         magic: HEADER_MAGIC,
@@ -191,7 +172,7 @@ pub fn encrypt_db(
     header.write_to(&mut out);
     out.extend_from_slice(&ciphertext);
 
-    (out, header.nonce, header.salt)
+    Ok( (out, header.nonce, header.salt) )
 }
 
 // 디버깅 자제
@@ -200,8 +181,7 @@ pub fn decrypt_db(
     key: &CryptoKey,
 ) -> Result<(DB, Salt), CryptoError> {
     let (header, body) = DbHeader::parse(data)?;
-    // struct를 type으로 바꿀까?
-    // std 호환성 ...
+
     if header.version != DB_VERSION {
         return Err(CryptoError::VersionMismatch);
     }
@@ -211,7 +191,8 @@ pub fn decrypt_db(
         return Err(CryptoError::InvalidFormat);
     }
 
-    let cipher = Aes256Gcm::new(Key::from_slice(key.as_bytes()));
+    let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
+        .map_err(|_| CryptoError::InvalidKey)?;
     let plaintext = cipher
         .decrypt(
             aes_gcm::Nonce::from_slice(&header.nonce.as_bytes()[..ct_len as usize]),
@@ -219,12 +200,19 @@ pub fn decrypt_db(
         )
         .map_err(|_| CryptoError::DecryptionFailed)?;
 
-    let salt = header.salt;
+    let salt = header.salt.clone();
     drop(header); // header no longer needed
 
-    let db: DB =
-        rkyv::from_bytes(&plaintext)
-            .map_err(|_| CryptoError::DeserializeFailed)?;
+
+    let archived = unsafe {
+        archived_root::<DB>(&plaintext)
+    };
+    check_archived_root::<DB>(&plaintext)
+        .map_err(|_| CryptoError::InvalidFormat)?;
+
+    let db: DB = archived
+        .deserialize(&mut Infallible)
+        .map_err(|_| CryptoError::DeserializeFailed)?;
 
     Ok((db, salt))
 }
