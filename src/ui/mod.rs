@@ -4,10 +4,12 @@
 
 // 흠 뭐부터 하지
 
+use crate::credential::DB;
+
 pub mod graphical_user_interface;
 
 struct CharacterUserInterface {
-    secrets: Secrets
+    db: DB
 }
 
 impl CharacterUserInterface {

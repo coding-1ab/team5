@@ -16,7 +16,8 @@ use eframe::{
         text::{InsertFontFamily, FontPriority, FontInsert}
     }
 };
-use crate::credential::DB;
+use crate::credential::{prefix_range, DB};
+use crate::gen_key::CryptoKey;
 
 type TryCountRamming = i64;
 
@@ -52,9 +53,15 @@ pub struct GraphicalUserInterface {
     login: bool,
     id: String,
     password: String,
-    db: DB,
+    data_base: DB,
     window_open_list: WindowOpenList,
     output: String,
+}
+
+impl GraphicalUserInterface {
+    pub fn setting_database(&mut self, data_base: DB) {
+        self.data_base = data_base;
+    }
 }
 
 impl Default for GraphicalUserInterface {
@@ -66,13 +73,12 @@ impl Default for GraphicalUserInterface {
             login: false,
             id: String::new(),
             password: String::new(),
-            db: Default::default(),
+            data_base: Default::default(),
             window_open_list: Default::default(),
             output: String::new()
         }
     }
 }
-
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -104,7 +110,7 @@ impl eframe::App for GraphicalUserInterface {
                 |ctx, _| {
                     if ctx.input(|i| i.viewport().close_requested()) {
                         self.window_open_list.set("master_login", false);
-
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                     egui::CentralPanel::default().show(ctx, |ui| {
                         /*
@@ -125,10 +131,10 @@ impl eframe::App for GraphicalUserInterface {
                             ui.label("asdf");
                         }
                         if login_button.clicked() {
-                            println!("login_clikc");
-                            let master_password_32 = match MasterPassword32::new(&self.password) {
+                            println!("login_click");
+                            let master_password_32 = match CryptoKey::new(&self.password) {
                                 Ok(master_password_32) => master_password_32,
-                                Err(err) => {
+                                 Err(err) => {
                                     dbg!(err);
                                     return
                                 }
@@ -144,6 +150,10 @@ impl eframe::App for GraphicalUserInterface {
 
         if self.login {
             egui::CentralPanel::default().show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    prefix_range(&self.data_base, )
+                });
+
                 if ui.button("Submit").clicked() {
                     self.window_open_list.set("test", true);
                     ctx.show_viewport_immediate(
