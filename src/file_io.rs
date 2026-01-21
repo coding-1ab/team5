@@ -1,95 +1,256 @@
-use std::{
-    error::Error,
-    fmt::{Display, Formatter},
-    fs,
-    io::Write,
-    path::Path,
-    process,
-};
-use std::io::Read;
+use std::{error::Error, fmt::{Display, Formatter}};
+use fs2::FileExt;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use crate::header::{CipherTextLen, DBHeader, EncAesKey, EncryptedDB, Nonce, HEADER_LEN}
 
 const DB_FILE: &str = "db.bin";
 const DB_FILE_OLD: &str = "db.bin.old";
 
-#[derive(Debug, Eq, PartialEq)]
-pub enum FileError {
-    DatabaseMissing,
-    IoRead,
-    IoWrite,
-    IoRename,
-    IoDelete,
+
+#[derive(Debug)]
+pub enum FileIOError {
+    // Lock 관련
+    LockUnavailable, // 다른 프로세스가 락 보유
+
+    // 파일 열기/읽기/쓰기/동기화
+    FileOpenFailed(io::Error),
+    FileReadFailed(io::Error),
+    FileWriteFailed(io::Error),
+    FileSyncFailed(io::Error),
+
+    // 헤더/포맷 관련
+    InvalidHeader,
+    UnsupportedVersion,
+
+    // 백업 관련
+    DBBackupRenameFailed(io::Error),
+    DBBackupDeleteFailed(io::Error),
+
+    // 무결성(재시도 이후에도 복원 불가)
+    PersistentIntegrityFailure,
 }
 
-impl Display for FileError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for FileIOError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use FileIOError::*;
         match self {
-            FileError::DatabaseMissing => write!(f, "Database file does not exist"),
-            FileError::IoRead => write!(f, "Failed to read database file"),
-            FileError::IoWrite => write!(f, "Failed to write database file"),
-            FileError::IoRename => write!(f, "Failed to replace database file"),
-            FileError::IoDelete => write!(f, "Failed to remove old database backup"),
+            LockUnavailable => write!(f, "File is locked by another process"),
+            FileOpenFailed(e) => write!(f, "Failed to open file: {}", e),
+            FileReadFailed(e) => write!(f, "Failed to read file: {}", e),
+            FileWriteFailed(e) => write!(f, "Failed to write file: {}", e),
+            FileSyncFailed(e) => write!(f, "Failed to sync file: {}", e),
+            HeaderParseFailed => write!(f, "Failed to parse DB header"),
+            InvalidEncryptedHeader => write!(f, "Encrypted header invalid"),
+            DBBackupRenameFailed(e) => write!(f, "Failed to create DB backup (rename): {}", e),
+            DBBackupDeleteFailed(e) => write!(f, "Failed to delete DB backup: {}", e),
+            PersistentIntegrityFailure => write!(f, "Failed to write valid DB after retries"),
         }
     }
 }
 
-impl Error for FileError {}
+impl std::error::Error for FileIOError {}
 
-/// Load encrypted DB file as raw bytes.
-/// Policy:
-/// - If `db.bin.old` exists, ALWAYS use it
-/// - Else if `db.bin` exists, use it
-/// - Else -> DatabaseMissing
-pub fn load_db() -> Result<Vec<u8>, FileError> {
-    let old_path = Path::new(DB_FILE_OLD);
-    let path = Path::new(DB_FILE);
-
-    if old_path.exists() {
-        return fs::read(old_path).map_err(|_| FileError::IoRead);
-    }
-
-    if path.exists() {
-        return fs::read(path).map_err(|_| FileError::IoRead);
-    }
-
-    Err(FileError::DatabaseMissing)
+/// LockFile: 프로그램이 보유하는 락 소유권 객체.
+/// - db_fd: 항상 Some(File) — db 파일(바로 열 수 있도록)
+/// - old_fd: Option<File> — old 파일을 잠근 경우에만 Some
+pub struct LockFile {
+    db_fd: File,
+    old_fd: Option<File>,
+    db_path: PathBuf,
+    old_path: PathBuf,
 }
 
-/// Save encrypted DB atomically.
-/// This function can be called:
-/// - during program execution (manual backup)
-/// - right before program exit
-/// Algorithm:
-/// 1. If `db.bin` exists -> rename to `db.bin.old`
-/// 2. Write new `db.bin`
-/// 3. Remove `db.bin.old`
-pub fn save_db(data: &[u8]) -> Result<(), FileError> {
-    let path = Path::new(DB_FILE);
-    let old_path = Path::new(DB_FILE_OLD);
+impl LockFile {
+    /// 획득: db_path가 없으면 생성(create true). old_path가 존재하면 먼저 old를 열어 락을 걸고 나서 db 락을 시도.
+    /// 락 실패 시 `LockUnavailable` 반환.
+    pub fn acquire(db_path: &Path, old_path: &Path) -> Result<Self, FileIOError> {
+        // If old exists, open it and lock first (to respect lock ordering)
+        let old_exists = old_path.exists();
 
-    // Step 1: move current db to backup
-    if path.exists() {
-        if old_path.exists() {
-            fs::remove_file(old_path).map_err(|_| FileError::IoDelete)?;
+        let mut old_fd_opt: Option<File> = None;
+
+        if old_exists {
+            // open old for read+write (we may delete it later on success)
+            let old_fd = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(old_path)
+                .map_err(FileIOError::FileOpenFailed)?;
+
+            // try exclusive lock (non-blocking). If it fails, return LockUnavailable
+            if let Err(_) = old_fd.try_lock_exclusive() {
+                return Err(FileIOError::LockUnavailable);
+            }
+            old_fd_opt = Some(old_fd);
         }
 
-        fs::rename(path, old_path).map_err(|_| FileError::IoRename)?;
+        // Open (or create) db file
+        let db_fd = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(db_path)
+            .map_err(FileIOError::FileOpenFailed)?;
+
+        if let Err(_) = db_fd.try_lock_exclusive() {
+            // unlocking old if we locked it will happen on drop of old_fd_opt
+            return Err(FileIOError::LockUnavailable);
+        }
+
+        Ok(LockFile {
+            db_fd,
+            old_fd: old_fd_opt,
+            db_path: db_path.to_path_buf(),
+            old_path: old_path.to_path_buf(),
+        })
     }
 
-    // Step 2: write new db
-    {
-        let mut file = fs::File::create(path).map_err(|_| FileError::IoWrite)?;
-        file.write_all(data).map_err(|_| FileError::IoWrite)?;
-        file.sync_all().map_err(|_| FileError::IoWrite)?;
+    /// 내부적으로 보유한 경로 반환 (참고용)
+    pub fn db_path(&self) -> &Path {
+        &self.db_path
     }
-
-    // Step 3: remove backup
-    if old_path.exists() {
-        fs::remove_file(old_path).map_err(|_| FileError::IoDelete)?;
+    pub fn old_path(&self) -> &Path {
+        &self.old_path
     }
-
-    Ok(())
 }
 
-pub fn graceful_exit() {
-    process::exit(0);
+// Drop will release locks by dropping File objects; fs2::FileExt::unlock will be attempted implicitly on drop
+impl Drop for LockFile {
+    fn drop(&mut self) {
+        // best-effort unlock; ignore errors
+        let _ = self.db_fd.unlock();
+        if let Some(ref old) = self.old_fd {
+            let _ = old.unlock();
+        }
+    }
 }
+
+/// load_or_init_db:
+/// - 락 획득(필요시 old 및 db 둘 다 lock)
+/// - old가 존재하면 old를 우선 읽음. 아니면 db를 읽음.
+/// - 파일 길이가 0이면 `first_login = true` (빈 헤더 반환)
+/// - 파일이 있지만 헤더 크기보다 작으면 HeaderParseFailed
+/// - 정상 시 (first_login_flag, header_bytes, ciphertext_bytes, LockFile)
+pub fn load_or_init_db()
+        -> Result<(
+            bool, Nonce, Nonce, EncAesKey, CipherTextLen, EncryptedDB,
+            LockFile
+        ), FileIOError> {
+    let db_path = Path::new(DB_FILE);
+    let old_path = Path::new(DB_FILE_OLD);
+
+    // Acquire locks: old first if exists (lock ordering)
+    let lock = LockFile::acquire(db_path, old_path)?;
+
+    // Decide which file to use for loading: if old exists, use old (per invariant)
+    let target_path = if lock.old_fd.is_some() {
+        &lock.old_path
+    } else {
+        &lock.db_path
+    };
+
+    // Ensure file exists: acquire already created db file if absent; but old may exist or not
+    // Read file metadata
+    let meta = fs::metadata(target_path).map_err(FileIOError::FileReadFailed)?;
+
+    let file_len = meta.len() as usize;
+
+    if file_len == 0 {
+        // First login / empty DB
+        return Ok((true,
+                   Nonce::default(), Nonce::default(), EncAesKey{}, 0, Vec::new(), lock
+        ));
+    }
+
+    // Read whole file bytes
+    let bytes = fs::read(target_path).map_err(FileIOError::FileReadFailed)?;
+
+    // Parse header / Split ciphertext
+    let (header,ciphertext) = DBHeader::parse_header(bytes.as_slice())?;
+    ///TODO///////////////////////////
+    Ok((false, header.db_nonce, header.user_nonce, header.enc_aes_key, header.ciphertext_len, ciphertext, lock))
+}
+
+/// save_db:
+/// - Requires the caller to hold locks (i.e. LockFile created earlier and not dropped).
+/// - If db exists and db.old does not exist => rename db -> db.old (atomic on common FS)
+/// - Then open (or create) db, truncate, write header+ciphertext, fsync
+/// - Re-read or check file length to verify integrity
+/// - If integrity fails, retry up to 3 times. On success, delete db.old (if exists).
+pub fn save_db(
+    lock: &LockFile,
+    header: DBHeader,
+    ciphertext: EncryptedDB,
+) -> Result<(), FileIOError> {
+    let db_path = &lock.db_path;
+    let old_path = &lock.old_path;
+
+    // ### if db exists and old does not exist -> create backup by rename
+    let db_exists = db_path.exists();
+    let old_exists = old_path.exists();
+
+    if db_exists && !old_exists {
+        fs::rename(db_path, old_path).map_err(FileIOError::DBBackupRenameFailed)?;
+        // After rename, db_path may not exist; we'll create/truncate below
+    }
+
+    // Attempt up to N tries in case of integrity mismatch
+    let max_attempts = 3usize;
+    for attempt in 0..max_attempts {
+        // ### open (or create) db_path for write
+        let mut file = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(db_path)
+            .map_err(FileIOError::FileOpenFailed)?;
+
+        // Truncate to zero
+        file.set_len(0).map_err(FileIOError::FileWriteFailed)?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(FileIOError::FileWriteFailed)?;
+
+        // Write header + ciphertext
+        let mut bytes = Vec::with_capacity(HEADER_LEN);
+        header.write_to(&mut bytes);
+        file.write_all(bytes.as_slice()).map_err(FileIOError::FileWriteFailed)?;
+        ///TODO///////////////////////////////
+        file.write_all(ciphertext).map_err(FileIOError::FileWriteFailed)?;
+
+        // Sync to disk
+        file.sync_all().map_err(FileIOError::FileSyncFailed)?;
+
+        // Verify by comparing expected length to actual file length
+        let expected_len = HEADER_LEN + header.ciphertext_len;
+        let actual_len = file.metadata().map_err(FileIOError::FileReadFailed)?.len() as usize;
+///TODO//////////////////////////////////////////////////
+        if actual_len == expected_len {
+            // Success: attempt to remove old backup (if exists)
+            if old_path.exists() {
+                if let Err(e) = fs::remove_file(old_path) {
+                    // return failure to caller with specific error
+                    return Err(FileIOError::DBBackupDeleteFailed(e));
+                }
+            }
+            return Ok(());
+        } else {
+            // Integrity failed — try again unless we exhausted attempts.
+            if attempt + 1 >= max_attempts {
+                return Err(FileIOError::PersistentIntegrityFailure);
+            }
+            // else continue to retry
+        }
+    }
+
+    // unreachable due to return in loop, but keep as safeguard
+    Err(FileIOError::PersistentIntegrityFailure)
+}
+
+
+// pub fn graceful_exit() {
+//     process::exit(0);
+// }
+//
+
