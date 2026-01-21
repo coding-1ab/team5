@@ -131,7 +131,7 @@ impl Drop for LockFile {
 /// - 락 획득(필요시 old 및 db 둘 다 lock)
 /// - old가 존재하면 old를 우선 읽음. 아니면 db를 읽음.
 /// - 파일 길이가 0이면 `first_login = true` (빈 헤더 반환)
-/// - 파일이 있지만 헤더 크기보다 작으면 HeaderParseFailed
+/// - 파일이 있지만 헤더 파싱 실패하면 HeaderParseFailed
 /// - 정상 시 (first_login_flag, header_bytes, ciphertext_bytes, LockFile)
 pub fn load_or_init_db()
         -> Result<(
