@@ -148,21 +148,21 @@ pub mod site_name {
 }
 
 pub enum CredentialError {
-
+    PWNotFound,
 }
 
 const TMP_WRPD_USR_KEY_A: WrappedUserKey = Zeroizing::new(vec!(0; 32));
 pub fn add_credential(db: &mut DB, site_name: SiteName, user_id: UserID, password: UserPW)
     -> Result<(), (UserIDError, UserPWError)> {
-    let enc_pw =
-        encryt_user_pw(&site_name, &user_id, password, TMP_WRPD_USR_KEY_A);
+    let encrypted_pw =
+        encryt_user_pw(password, TMP_WRPD_USR_KEY_A);
     let ref_id = db
         .entry(site_name.into_string())
         .or_insert(HashMap::new())
         .or_upwrap();
     *ref_id
         .entry(user_id.into_string())
-        .or_insert(enc_pw)
+        .or_insert(encrypted_pw)
         .or_unwrap();
     
 
@@ -174,17 +174,17 @@ pub fn change_credential(db: &DB,)
 
 }
 // Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
-pub fn delete_credential(db: &mut DB, site_name: SiteName, credential: &Credential)
+pub fn delete_credential(db: &mut DB, site_name: SiteName, user_id: UserID)
     -> Result<(), CredentialError> {
-    let ref_vec = db.get_mut(&site_name).unwrap();
-    if let Some(pos) = ref_vec.iter()
-        .position(|&x| x == credential)
+    let ref_site = db.get_mut(&site_name.to_string())
+        .map_err(Err(CredentialError::PWNotFound)); // 못 찾음
+    *ref_site.remove(&user_id.to_string())
+        .map_err(Err(CredentialError::PWNotFound)); // 못 찾음
+    if *ref_site.is_empty() {
 
-        ref_vec.remove(pos);
-        Ok( () )
     }
-    // Vec Iter로 먼저 해당 credential 삭제 
-    // Map Iter로 해당 Vec의 empty 여부 확인하여 참일 시 키 삭제;
+        Ok( () )
+
 }
 
 pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {

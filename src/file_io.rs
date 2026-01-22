@@ -104,7 +104,8 @@ pub fn load_db()
     bak_file.take(usize::MAX).read_to_end(&mut data)
         .map_err(|err| FileIOError::FileReadFailed(err))?;
     let (header, cipher_text) = DBHeader::parse_header(data)?;
-
+    ///TODO 헤더 파싱 실패시 오류 알림 및 DB초기화
+    
     Ok( (
         false,
         header.db_salt, header.db_nonce, header.user_nonce, header.enc_aes_key,
