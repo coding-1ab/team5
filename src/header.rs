@@ -77,7 +77,7 @@ impl DBHeader {
             db_nonce: Nonce::default(),
             user_nonce: Nonce::default(),
             ciphertext_len: 0,
-            enc_aes_key: EncAesKey{}
+            enc_aes_key: EncAesKey::default()
         }
     }
 }
