@@ -3,6 +3,8 @@ use single_instance::SingleInstance;
 
 fn main() -> Result<(), eframe::Error> {
     let instance = SingleInstance::new("team-5").unwrap();
+    if core::mem::size_of::<usize>() != 64 { error!("Unsupported Architecture") };
+    
     if !instance.is_single() {
         // error!("This instance is not a single.");
         // return Ok(());

@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 rkyv = { version = "0.7", default-features = true, features = ["std", "alloc", "validation"] }
-fd-lock = "*"
+#fd-lock = "*"
 fs2 = "*"
 single-instance = "*"
 bytecheck = "0.6"

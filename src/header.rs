@@ -5,7 +5,7 @@ use crate::file_io::FileIOError;
 use crate::master_secrets::RSA_BIT_SIZE;
 
 
-// const SALT_LEN: usize = 32;
+const SALT_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
 const MAGIC_LEN: usize = 8;
 const VERSION_DIGITS: usize = 4;
@@ -14,8 +14,8 @@ const ENC_AES_KEY_SIZE: usize = RSA_BIT_SIZE / 8;
 
 pub type Magic = [u8; MAGIC_LEN];
 pub type Version = [u8; VERSION_DIGITS];
-// pub type Salt = [u8; SALT_LEN];
-pub type Nonce = Zeroizing<[u8; NONCE_LEN]>;
+pub type Salt = [u8; SALT_LEN];
+pub type Nonce = [u8; NONCE_LEN];
 pub type CipherTextLen = usize;
 pub type EncAesKey = [u8; ENC_AES_KEY_SIZE];
 
@@ -31,6 +31,7 @@ pub type EncryptedDB = Vec<u8>;
 pub(crate) struct DBHeader {
     magic: Magic,
     version: Version,
+    pub(crate) db_salt: Salt,
     pub(crate) db_nonce: Nonce, // AesKey
     pub(crate) user_nonce: Nonce, // AesKey
     pub(crate) enc_aes_key: EncAesKey,
@@ -72,6 +73,7 @@ impl DBHeader {
         Self {
             magic: DB_MAGIC,
             version: DB_VERSION,
+            db_salt: Salt::default(),
             db_nonce: Nonce::default(),
             user_nonce: Nonce::default(),
             ciphertext_len: 0,
