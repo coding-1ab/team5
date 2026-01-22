@@ -1,5 +1,6 @@
 
 use bytemuck::{Pod, Zeroable};
+use zeroize::Zeroizing;
 use crate::file_io::FileIOError;
 use crate::master_secrets::RSA_BIT_SIZE;
 
@@ -14,8 +15,8 @@ const ENC_AES_KEY_SIZE: usize = RSA_BIT_SIZE / 8;
 pub type Magic = [u8; MAGIC_LEN];
 pub type Version = [u8; VERSION_DIGITS];
 // pub type Salt = [u8; SALT_LEN];
-pub type Nonce = [u8; NONCE_LEN];
-pub type CipherTextLen = u64;
+pub type Nonce = Zeroizing<[u8; NONCE_LEN]>;
+pub type CipherTextLen = usize;
 pub type EncAesKey = [u8; ENC_AES_KEY_SIZE];
 
 /// Program_internal maginc literal
@@ -27,7 +28,7 @@ pub type EncryptedDB = Vec<u8>;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct DBHeader {
+pub(crate) struct DBHeader {
     magic: Magic,
     version: Version,
     pub(crate) db_nonce: Nonce, // AesKey
@@ -56,7 +57,7 @@ impl DBHeader {
             return Err(FileIOError::UnsupportedVersion);
         }
 
-        Ok((header, body))
+        Ok( (header, body.to_vec()) )
     }
 
     pub fn write_to(&self, out: &mut Vec<u8>) {

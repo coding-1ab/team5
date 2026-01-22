@@ -1,47 +1,13 @@
 use std::fmt::{Display, Formatter};
-use aes_gcm::{
-    Aes256Gcm,
-    aead::{Aead, Key, KeyInit}
-};
-use aes_gcm::aes::cipher::BlockEncrypt;
-use rand::RngCore;
+use aes_gcm::{Aes256Gcm, KeyInit};
+use aes_gcm::aead::Aead;
+use argon2::password_hash::SaltString;
 use rkyv::{to_bytes, check_archived_root, Deserialize, AlignedVec, Infallible, archived_root};
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::gen_key::{Salt, CryptoKey};
-use crate::credential::{DB, SiteName, Credential, CredentialError};
+use crate::master_secrets::{Salt, CryptoKey};
+use crate::data_base::{DB, SiteName};
 
 
-type Magic = [u8; 8];
-type Version = u32;
-type CipherTextLen = u64;
-
-const HEADER_MAGIC: Magic = *b"TeamFive";
-/// Program-internal DB format version
-const DB_VERSION: Version = 1;
-
-
-#[derive(Zeroize, ZeroizeOnDrop)]
-struct Nonce {
-    pub nonce: [u8; 12]
-}
-
-impl Nonce {
-    pub fn new() -> Self { // Noexcept
-        let mut n = [0u8; size_of::<Self>()];
-        rand::rng().fill_bytes(&mut n);
-        Self {nonce: n}
-    }
-    fn from(bytes: [u8; size_of::<Self>()]) -> Self {
-        Self {nonce: bytes}
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.nonce
-    }
-}
-
-
-pub type EncryptedDB = Vec<u8>;
 
 
 #[derive(Debug, Eq, PartialEq)]
@@ -72,77 +38,7 @@ impl Display for CryptoError {
 }
 
 
-// ( Crypto.rs-internal struct )
 
-struct DbHeader {
-    magic: Magic,
-    version: Version,
-    salt: Salt,
-    ciphertext_len: CipherTextLen,
-    nonce: Nonce,
-}
-
-impl DbHeader {
-
-    const MAGIC_LEN: usize = size_of::<Magic>();
-    const VERSION_LEN: usize = size_of::<Version>();
-    const SALT_LEN: usize = size_of::<Salt>();
-    const CIPHERTEXT_LEN_LEN: usize = size_of::<CipherTextLen>();
-    const NONCE_LEN: usize = size_of::<Nonce>();
-
-    fn parse(input: &[u8]) -> Result<(Self, &[u8]), CryptoError> {
-        if input.len() < core::mem::size_of::<Self>() {
-            return Err(CryptoError::InvalidFormat);
-        }
-
-        let mut offset = 0;
-
-        let mut magic = [0u8; Self::MAGIC_LEN];
-        magic.copy_from_slice(&input[offset..offset + Self::MAGIC_LEN]);
-        offset += Self::MAGIC_LEN;
-
-        if magic != HEADER_MAGIC {
-            return Err(CryptoError::InvalidHeader);
-        }
-
-        let version = u32::from_le_bytes(
-            input[offset..offset + Self::VERSION_LEN].try_into().unwrap(),
-        );
-        offset += Self::VERSION_LEN;
-
-        let mut salt = [0u8; Self::SALT_LEN];
-        salt.copy_from_slice(&input[offset..offset + Self::SALT_LEN]);
-        offset += Self::SALT_LEN;
-
-        let ciphertext_len = u64::from_le_bytes(
-            input[offset..offset + Self::CIPHERTEXT_LEN_LEN].try_into().unwrap(),
-        );
-        offset += Self::CIPHERTEXT_LEN_LEN;
-
-        let mut nonce = [0u8; Self::NONCE_LEN];
-        nonce.copy_from_slice(&input[offset..offset + Self::NONCE_LEN]);
-        offset += Self::NONCE_LEN;
-
-        Ok((
-            Self {
-                magic,
-                version,
-                salt: Salt::from(salt),
-                ciphertext_len,
-                nonce: Nonce::from(nonce),
-            },
-            &input[offset..],
-        ))
-    }
-
-    fn write_to(&self, out: &mut Vec<u8>) {
-        out.extend_from_slice(&self.magic);
-        out.extend_from_slice(&self.version.to_le_bytes());
-        out.extend_from_slice(&self.salt.as_bytes());
-        out.extend_from_slice(&self.ciphertext_len.to_le_bytes());
-        out.extend_from_slice(&self.nonce.as_bytes());
-    }
-}
 
 
 // 디버깅 자제
@@ -156,8 +52,9 @@ pub fn encrypt_db(
 
     let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
         .map_err(|_| CryptoError::InvalidKey)?;
+    nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let ciphertext = cipher
-        .encrypt(aes_gcm::Nonce::from_slice(nonce.as_bytes()), serialized.as_ref())
+        .encrypt(nonce, serialized.as_ref())
         .map_err(|_| CryptoError::EncryptionFailed)?;
 
     let header = DbHeader {
@@ -207,6 +104,7 @@ pub fn decrypt_db(
     let archived = unsafe {
         archived_root::<DB>(&plaintext)
     };
+
     check_archived_root::<DB>(&plaintext)
         .map_err(|_| CryptoError::InvalidFormat)?;
 

@@ -17,7 +17,6 @@ use eframe::{
     }
 };
 use crate::credential::{prefix_range, DB};
-use crate::gen_key::CryptoKey;
 
 type TryCountRamming = i64;
 
@@ -53,7 +52,7 @@ pub struct GraphicalUserInterface {
     login: bool,
     id: String,
     password: String,
-    data_base: DB,
+    db: DB,
     window_open_list: WindowOpenList,
     output: String,
 }
@@ -79,6 +78,7 @@ impl Default for GraphicalUserInterface {
         }
     }
 }
+
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -110,7 +110,7 @@ impl eframe::App for GraphicalUserInterface {
                 |ctx, _| {
                     if ctx.input(|i| i.viewport().close_requested()) {
                         self.window_open_list.set("master_login", false);
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+
                     }
                     egui::CentralPanel::default().show(ctx, |ui| {
                         /*
@@ -131,10 +131,10 @@ impl eframe::App for GraphicalUserInterface {
                             ui.label("asdf");
                         }
                         if login_button.clicked() {
-                            println!("login_click");
-                            let master_password_32 = match CryptoKey::new(&self.password) {
+                            println!("login_clikc");
+                            let master_password_32 = match MasterPassword32::new(&self.password) {
                                 Ok(master_password_32) => master_password_32,
-                                 Err(err) => {
+                                Err(err) => {
                                     dbg!(err);
                                     return
                                 }

@@ -41,8 +41,6 @@ impl std::fmt::Display for FileIOError {
             FileReadFailed(e) => write!(f, "Failed to read file: {}", e),
             FileWriteFailed(e) => write!(f, "Failed to write file: {}", e),
             FileSyncFailed(e) => write!(f, "Failed to sync file: {}", e),
-            HeaderParseFailed => write!(f, "Failed to parse DB header"),
-            InvalidEncryptedHeader => write!(f, "Encrypted header invalid"),
             DBBackupRenameFailed(e) => write!(f, "Failed to create DB backup (rename): {}", e),
             DBBackupDeleteFailed(e) => write!(f, "Failed to delete DB backup: {}", e),
             PersistentIntegrityFailure => write!(f, "Failed to write valid DB after retries"),
@@ -127,12 +125,7 @@ impl Drop for LockFile {
     }
 }
 
-/// load_or_init_db:
-/// - 락 획득(필요시 old 및 db 둘 다 lock)
-/// - old가 존재하면 old를 우선 읽음. 아니면 db를 읽음.
-/// - 파일 길이가 0이면 `first_login = true` (빈 헤더 반환)
-/// - 파일이 있지만 헤더 파싱 실패하면 HeaderParseFailed
-/// - 정상 시 (first_login_flag, header_bytes, ciphertext_bytes, LockFile)
+
 pub fn load_or_init_db()
         -> Result<(
             bool, Nonce, Nonce, EncAesKey, CipherTextLen, EncryptedDB,
@@ -170,19 +163,14 @@ pub fn load_or_init_db()
     // Parse header / Split ciphertext
     let (header,ciphertext) = DBHeader::parse_header(bytes.as_slice())?;
     ///TODO///////////////////////////
-    Ok((false, header.db_nonce, header.user_nonce, header.enc_aes_key, header.ciphertext_len, ciphertext, lock))
+    Ok( (false, header.db_nonce, header.user_nonce, header.enc_aes_key, header.ciphertext_len, ciphertext, lock) )
 }
 
-/// save_db:
-/// - Requires the caller to hold locks (i.e. LockFile created earlier and not dropped).
-/// - If db exists and db.old does not exist => rename db -> db.old (atomic on common FS)
-/// - Then open (or create) db, truncate, write header+ciphertext, fsync
-/// - Re-read or check file length to verify integrity
-/// - If integrity fails, retry up to 3 times. On success, delete db.old (if exists).
+
 pub fn save_db(
     lock: &LockFile,
     header: DBHeader,
-    ciphertext: EncryptedDB,
+    mut ciphertext: EncryptedDB,
 ) -> Result<(), FileIOError> {
     let db_path = &lock.db_path;
     let old_path = &lock.old_path;
@@ -213,14 +201,15 @@ pub fn save_db(
             .map_err(FileIOError::FileWriteFailed)?;
 
         // Write header + ciphertext
-        let mut bytes = Vec::with_capacity(HEADER_LEN);
+        let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
         header.write_to(&mut bytes);
-        file.write_all(bytes.as_slice()).map_err(FileIOError::FileWriteFailed)?;
-        ///TODO///////////////////////////////
-        file.write_all(ciphertext).map_err(FileIOError::FileWriteFailed)?;
+        bytes.append(&mut ciphertext);
+        file.write_all(bytes.as_slice())
+            .map_err(FileIOError::FileWriteFailed)?;
 
         // Sync to disk
-        file.sync_all().map_err(FileIOError::FileSyncFailed)?;
+        file.sync_all()
+            .map_err(FileIOError::FileSyncFailed)?;
 
         // Verify by comparing expected length to actual file length
         let expected_len = HEADER_LEN + header.ciphertext_len;
