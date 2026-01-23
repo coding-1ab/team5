@@ -6,6 +6,7 @@
 // 흠 뭐부터 하지
 
 use std::{fs, io, sync::Arc, collections::HashMap};
+use std::path::Path;
 use eframe::{
     egui::{
         self,
@@ -16,14 +17,20 @@ use eframe::{
         text::{InsertFontFamily, FontPriority, FontInsert}
     }
 };
+use eframe::egui::Context;
 use crate::credential::{prefix_range, DB};
+use crate::gen_key::CryptoKey;
 
 type TryCountRamming = i64;
+type FontLoadState = (TryCountRamming, bool);
 
 const CAN_TRY_LOAD_COUNT: i64 = 5;
 
+struct FontLoadList(HashMap<&'static str, FontLoadState>);
+
+
 #[derive(Default)]
-struct WindowOpenList(HashMap<String, bool>);
+struct WindowOpenList(HashMap<&'static str, bool>);
 
 impl WindowOpenList {
     fn new() -> Self {
@@ -34,13 +41,13 @@ impl WindowOpenList {
         self.0.get(key).copied().unwrap_or(false)
     }
 
-    fn set(&mut self, key: &str, value: bool) {
-        self.0.insert(key.to_string(), value);
+    fn set(&mut self, key: &'static str, value: bool) {
+        self.0.insert(key, value);
     }
 }
 
-impl AsRef<HashMap<String, bool>> for WindowOpenList {
-    fn as_ref(&self) -> &HashMap<String, bool> {
+impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
+    fn as_ref(&self) -> &HashMap<&'static str, bool> {
         &self.0
     }
 }
@@ -48,11 +55,13 @@ impl AsRef<HashMap<String, bool>> for WindowOpenList {
 pub struct GraphicalUserInterface {
     first_run: bool,
     load_malgun_gothic_font: bool,
+    load_nanum_gothic_font: bool,
     try_load_count_malgun_gothic_font: i64,
+    try_load_count_nanum_gothic_font: i64,
     login: bool,
     id: String,
     password: String,
-    db: DB,
+    data_base: DB,
     window_open_list: WindowOpenList,
     output: String,
 }
@@ -61,6 +70,15 @@ impl GraphicalUserInterface {
     pub fn setting_database(&mut self, data_base: DB) {
         self.data_base = data_base;
     }
+
+    pub fn font_load<P: AsRef<Path>>(context: &Context, name: &str, file_path: P, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error> {
+        if !*is_font_load {
+            *try_load_count += 1;
+            let font_data = fs::read(file_path)?;
+            add_font(context, name, FontData::from_owned(font_data), insert_font_family);
+        }
+        Ok(())
+    }
 }
 
 impl Default for GraphicalUserInterface {
@@ -68,7 +86,9 @@ impl Default for GraphicalUserInterface {
         Self {
             first_run: true,
             load_malgun_gothic_font: false,
+            load_nanum_gothic_font: false,
             try_load_count_malgun_gothic_font: 0,
+            try_load_count_nanum_gothic_font: 0,
             login: false,
             id: String::new(),
             password: String::new(),
@@ -79,23 +99,34 @@ impl Default for GraphicalUserInterface {
     }
 }
 
-
 impl eframe::App for GraphicalUserInterface {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if self.first_run {
-            if !self.load_malgun_gothic_font && self.try_load_count_malgun_gothic_font < CAN_TRY_LOAD_COUNT {
-                println!("맑은 고딕 폰트 로드 시도");
-                self.try_load_count_malgun_gothic_font += 1;
-                match add_malgun_gothic_font(ctx, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }) {
-                    Ok(_) => {
-                        println!("맑은 고딕 폰트 로드 성공");
-                        self.load_malgun_gothic_font = true;
-                    },
-                    Err(error) => {
-                        println!("맑은 고딕 폰트 로드 실패: {}", error);
-                        self.load_malgun_gothic_font = false;
-                    }
-                };
+            match Self::font_load(
+                ctx, "malgun_gothic", r"C:\Windows\Fonts\malgun.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
+                &mut self.load_malgun_gothic_font, &mut self.try_load_count_malgun_gothic_font
+            ) {
+                Ok(_) => {
+                    println!("Successfully loaded malgun gothic");
+                    self.load_malgun_gothic_font = true;
+                }
+                Err(e) => {
+                    println!("Error loading malgun gothic: {:?}", e);
+                    self.load_malgun_gothic_font = false;
+                }
+            }
+            match Self::font_load(
+                ctx, "nanum_gothic", r"/NanumGothic.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
+                &mut self.load_nanum_gothic_font, &mut self.try_load_count_nanum_gothic_font
+            ) {
+                Ok(_) => {
+                    println!("Successfully loaded nanum gothic");
+                    self.load_nanum_gothic_font = true;
+                }
+                Err(e) => {
+                    println!("Error loading nanum gothic: {:?}", e);
+                    self.load_nanum_gothic_font = false;
+                }
             }
             self.window_open_list.set("master_login", true);
             self.first_run = false;
@@ -110,7 +141,7 @@ impl eframe::App for GraphicalUserInterface {
                 |ctx, _| {
                     if ctx.input(|i| i.viewport().close_requested()) {
                         self.window_open_list.set("master_login", false);
-
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                     egui::CentralPanel::default().show(ctx, |ui| {
                         /*
@@ -122,6 +153,14 @@ impl eframe::App for GraphicalUserInterface {
                             ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
                         });
                         */
+                        egui::Grid::new("master_login_grid").num_columns(2).show(ui, |ui| {
+                            ui.label("마스터 로그인");
+                            // ui.text_edit_singleline()
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("master password");
+                            ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                        });
                         ui.horizontal(|ui| {
                             ui.label("master password");
                             ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
@@ -131,15 +170,17 @@ impl eframe::App for GraphicalUserInterface {
                             ui.label("asdf");
                         }
                         if login_button.clicked() {
-                            println!("login_clikc");
-                            let master_password_32 = match MasterPassword32::new(&self.password) {
+                            println!("login_click");
+
+                            let master_password_32 = match CryptoKey::new(&self.password) {
                                 Ok(master_password_32) => master_password_32,
-                                Err(err) => {
+                                 Err(err) => {
                                     dbg!(err);
                                     return
                                 }
                             };
                             println!("master password: {:?}", master_password_32);
+
                             self.window_open_list.set("master_login", false);
                             self.login = true;
                         }
