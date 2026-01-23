@@ -55,10 +55,7 @@ impl Display for FileIOError {
 impl Error for FileIOError {}
 
 
-pub fn load_db()
-    -> Result<(
-        bool, Salt, Nonce, Nonce, EncAesKey, CipherTextLen, EncryptedDB,
-    ), Err(FileIOError)> {
+pub fn load_db() -> Result<(bool, Salt, Nonce, Nonce, EncAesKey, CipherTextLen, EncryptedDB), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
 
@@ -113,10 +110,7 @@ pub fn load_db()
 }
 
 
-pub fn save_db(
-    header: DBHeader,
-    mut ciphertext: EncryptedDB,
-) -> Result<(), FileIOError> {
+pub fn save_db(header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
     
