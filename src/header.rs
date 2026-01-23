@@ -37,7 +37,7 @@ pub(crate) struct DBHeader {
     pub(crate) enc_aes_key: EncAesKey,
     pub(crate) ciphertext_len: CipherTextLen,
 }
-pub const HEADER_LEN: usize = core::mem::size_of::<DBHeader>();
+pub const HEADER_LEN: usize = size_of::<DBHeader>();
 
 impl DBHeader {
     pub fn parse_header(bytes: &[u8])

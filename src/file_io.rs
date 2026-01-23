@@ -4,7 +4,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use eframe::egui::Options;
-use crate::header::{CipherTextLen, DBHeader, EncAesKey, EncryptedDB, Nonce, Salt, HEADER_LEN}
+use crate::header::{CipherTextLen, DBHeader, EncAesKey, EncryptedDB, Nonce, Salt, HEADER_LEN};
 
 const DB_FILE: &str = "db.bin";
 const DB_BAK_FILE: &str = "db.bin.bak";
@@ -62,7 +62,7 @@ pub fn load_db()
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
 
-=    let mut first_login: bool;
+    let mut first_login: bool;
 
     let db_file = OpenOptions::new()
         .read(true)
