@@ -19,11 +19,11 @@ enum UserCryptoError { // 보안상 의도적으로 unwrap과 decrypto 시에 �
 }
 
 pub const MAX_USER_PW_LEN: usize = 32;
-pub type EncUserPW = (Zeroizing<Nonce<Aes256Gcm>>, Zeroizing<Vec<u8>>);
-pub type UserKeyWrapper = Zeroizing<[u8; 32]>;
-pub type WrappedUserKey = Zeroizing<Vec<u8>>;
-pub type UserKey = Zeroizing<[u8; 32]>;
-
+// pub type EncUserPW = (Zeroizing<Nonce<Aes256Gcm>>, Zeroizing<Vec<u8>>);
+// pub type UserKeyWrapper = Zeroizing<[u8; 32]>;
+// pub type WrappedUserKey = Zeroizing<Vec<u8>>;
+// pub type UserKey = Zeroizing<[u8; 32]>;
+//TODO 명시적 Zeroizing 호출로 변경하기
 
 fn get_system_identity() -> UserKeyWrapper {
     let mut sys = System::new();

@@ -151,11 +151,13 @@ pub enum CredentialError {
     PWNotFound,
 }
 
-const TMP_WRPD_USR_KEY_A: WrappedUserKey = Zeroizing::new(vec!(0; 32));
 pub fn add_credential(db: &mut DB, site_name: SiteName, user_id: UserID, password: UserPW)
     -> Result<(), (UserIDError, UserPWError)> {
+    let tmp_wrpd_usr_key: WrappedUserKey = Zeroizing::new(vec!(4u8; 32));
+
+
     let encrypted_pw =
-        encryt_user_pw(password, TMP_WRPD_USR_KEY_A);
+        encryt_user_pw(password, tmp_wrpd_usr_key);
     let ref_id = db
         .entry(site_name.into_string())
         .or_insert(HashMap::new())

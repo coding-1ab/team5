@@ -3,6 +3,7 @@ use fs2::FileExt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use eframe::egui::Options;
 use crate::header::{CipherTextLen, DBHeader, EncAesKey, EncryptedDB, Nonce, Salt, HEADER_LEN}
 
 const DB_FILE: &str = "db.bin";
@@ -104,7 +105,6 @@ pub fn load_db()
     bak_file.take(usize::MAX).read_to_end(&mut data)
         .map_err(|err| FileIOError::FileReadFailed(err))?;
     let (header, cipher_text) = DBHeader::parse_header(data);
-    // Err(FileIOError::InvalidHeader)
     ///TODO 헤더 파싱 실패시 오류 알림 및 DB초기화 (이곳에서 직접 처리)
     write!(1, "헤더 파싱에 실패하여 DB를 초기화합니다.");
     Ok( (
@@ -121,8 +121,7 @@ pub fn save_db(
 ) -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
-
-
+    
     let mut db_file = OpenOptions::new()
         .create(true)
         .read(true)
