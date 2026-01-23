@@ -54,7 +54,6 @@ impl Display for FileIOError {
 
 impl Error for FileIOError {}
 
-
 pub fn load_db() -> Result<(bool, Salt, Nonce, Nonce, EncAesKey, CipherTextLen, EncryptedDB), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
@@ -68,7 +67,9 @@ pub fn load_db() -> Result<(bool, Salt, Nonce, Nonce, EncAesKey, CipherTextLen, 
         .open(db_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
 
-    db_file.try_lock_exclusive()?;
+    if db_file.try_lock_exclusive().is_err() {
+        return Err(FileIOError::LockUnavailable);
+    };
 
     let bak_file = OpenOptions::new()
         .read(true)
@@ -77,7 +78,9 @@ pub fn load_db() -> Result<(bool, Salt, Nonce, Nonce, EncAesKey, CipherTextLen, 
         .open(bak_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
 
-    bak_file.try_lock_exclusive()?;
+    if bak_file.try_lock_exclusive().is_err() {
+        return Err(FileIOError::LockUnavailable);
+    };
 
     let db_exists = db_file.metadata()?.len() > 0;
     let bak_exists = bak_file.metadata()?.len() > 0;
@@ -121,7 +124,9 @@ pub fn save_db(header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), File
         .open(db_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
 
-    db_file.try_lock_exclusive()?;
+    if db_file.try_lock_exclusive().is_err() {
+        return Err(FileIOError::LockUnavailable);
+    };
 
     let mut bak_file = OpenOptions::new()
         .create(true)
@@ -130,7 +135,9 @@ pub fn save_db(header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), File
         .open(bak_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
 
-    bak_file.try_lock_exclusive()?;
+    if bak_file.try_lock_exclusive().is_err() {
+        return Err(FileIOError::LockUnavailable);
+    };
 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
     header.write_to(&mut bytes);
