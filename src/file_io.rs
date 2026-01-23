@@ -70,9 +70,8 @@ pub fn load_db()
         .create(true)
         .open(db_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    if db_file.try_lock_exclusive()? {
-        return Err(FileIOError::LockUnavailable);
-    }
+
+    db_file.try_lock_exclusive()?;
 
     let bak_file = OpenOptions::new()
         .read(true)
@@ -80,9 +79,8 @@ pub fn load_db()
         .create(true)
         .open(bak_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    if bak_file.try_lock_exclusive()? {
-        return Err(FileIOError::LockUnavailable);
-    }
+
+    bak_file.try_lock_exclusive()?;
 
     let db_exists = db_file.metadata()?.len() > 0;
     let bak_exists = bak_file.metadata()?.len() > 0;
@@ -128,9 +126,8 @@ pub fn save_db(
         .write(true)
         .open(db_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    if db_file.try_lock_exclusive() {
-        return Err(FileIOError::LockUnavailable);
-    }
+
+    db_file.try_lock_exclusive()?;
 
     let mut bak_file = OpenOptions::new()
         .create(true)
@@ -138,9 +135,8 @@ pub fn save_db(
         .write(true)
         .open(bak_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    if bak_file.try_lock_exclusive() {
-        return Err(FileIOError::LockUnavailable);
-    }
+
+    bak_file.try_lock_exclusive()?;
 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
     header.write_to(&mut bytes);
