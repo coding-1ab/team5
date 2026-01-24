@@ -18,16 +18,27 @@ use eframe::{
     }
 };
 use eframe::egui::Context;
-use crate::credential::{prefix_range, DB};
-use crate::gen_key::CryptoKey;
+use crate::data_base::DB;
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
 
 const CAN_TRY_LOAD_COUNT: i64 = 5;
 
+#[derive(Default)]
 struct FontLoadList(HashMap<&'static str, FontLoadState>);
 
+impl AsRef<HashMap<&'static str, FontLoadState>> for FontLoadList {
+    fn as_ref(&self) -> &HashMap<&'static str, FontLoadState> {
+        &self.0
+    }
+}
+
+impl AsMut<HashMap<&'static str, FontLoadState>> for FontLoadList {
+    fn as_mut(&mut self) -> &mut HashMap<&'static str, FontLoadState> {
+        &mut self.0
+    }
+}
 
 #[derive(Default)]
 struct WindowOpenList(HashMap<&'static str, bool>);
@@ -54,6 +65,7 @@ impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
 
 pub struct GraphicalUserInterface {
     first_run: bool,
+    font_load_list: FontLoadList,
     load_malgun_gothic_font: bool,
     load_nanum_gothic_font: bool,
     try_load_count_malgun_gothic_font: i64,
@@ -71,7 +83,7 @@ impl GraphicalUserInterface {
         self.data_base = data_base;
     }
 
-    pub fn font_load<P: AsRef<Path>>(context: &Context, name: &str, file_path: P, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error> {
+    pub fn font_load_from_owned<P: AsRef<Path>>(context: &Context, name: &str, file_path: P, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error> {
         if !*is_font_load {
             *try_load_count += 1;
             let font_data = fs::read(file_path)?;
@@ -79,12 +91,76 @@ impl GraphicalUserInterface {
         }
         Ok(())
     }
+
+    pub fn font_load_from_static<P: AsRef<Path>>(context: &Context, name: &str, file_path: &'static str, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error> {
+        if !*is_font_load {
+            *try_load_count += 1;
+            let font_data = include_bytes!(file_path);
+            add_font(context, name, FontData::from_static(font_data), insert_font_family);
+        }
+        Ok(())
+    }
+
+    fn font_load_malgun_gothic_font(&mut self, context: &Context) -> Result<(), ()> {
+        let (mut malgun_gothic_try_load_count, mut malgun_gothic_load) = self.font_load_list.as_ref().get("malgun_gothic").ok_or(Err(()))?;
+        match Self::font_load_from_owned(
+            context, "malgun_gothic", r"C:\Windows\Fonts\malgun.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
+            &mut malgun_gothic_load, &mut malgun_gothic_try_load_count
+        ) {
+            Ok(_) => {
+                println!("Successfully loaded malgun gothic");
+                malgun_gothic_load = true;
+            }
+            Err(e) => {
+                println!("Error loading malgun gothic: {:?}", e);
+                malgun_gothic_load = false;
+            }
+        }
+        self.font_load_list.as_mut().insert("malgun_gothic", (malgun_gothic_try_load_count, malgun_gothic_load));
+        Ok(())
+    }
+
+    fn font_load_nanum_gothic_font(&mut self, context: &Context) {
+        let font = include_bytes!("../../NanumGothic.ttf");
+        let font_data = FontData::from_static(font);
+
+        match Self::font_load_from_owned(
+            context, "nanum_gothic", r"/NanumGothic.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
+            &mut self.load_nanum_gothic_font, &mut self.try_load_count_nanum_gothic_font
+        ) {
+            Ok(_) => {
+                println!("Successfully loaded nanum gothic");
+                self.load_nanum_gothic_font = true;
+            }
+            Err(e) => {
+                println!("Error loading nanum gothic: {:?}", e);
+                self.load_nanum_gothic_font = false;
+            }
+        }
+    }
+
+    fn font_load_emoji_font(&mut self, context: &Context) {
+        match Self::font_load_from_owned(
+            context, "windows_emoji", r"C:\Windows\Fonts\seguiemj.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
+            &mut self.load_nanum_gothic_font, &mut self.try_load_count_nanum_gothic_font
+        ) {
+            Ok(_) => {
+                println!("Successfully loaded nanum gothic");
+                self.load_nanum_gothic_font = true;
+            }
+            Err(e) => {
+                println!("Error loading nanum gothic: {:?}", e);
+                self.load_nanum_gothic_font = false;
+            }
+        }
+    }
 }
 
 impl Default for GraphicalUserInterface {
     fn default() -> Self {
         Self {
             first_run: true,
+            font_load_list: FontLoadList::default(),
             load_malgun_gothic_font: false,
             load_nanum_gothic_font: false,
             try_load_count_malgun_gothic_font: 0,
@@ -102,32 +178,8 @@ impl Default for GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if self.first_run {
-            match Self::font_load(
-                ctx, "malgun_gothic", r"C:\Windows\Fonts\malgun.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
-                &mut self.load_malgun_gothic_font, &mut self.try_load_count_malgun_gothic_font
-            ) {
-                Ok(_) => {
-                    println!("Successfully loaded malgun gothic");
-                    self.load_malgun_gothic_font = true;
-                }
-                Err(e) => {
-                    println!("Error loading malgun gothic: {:?}", e);
-                    self.load_malgun_gothic_font = false;
-                }
-            }
-            match Self::font_load(
-                ctx, "nanum_gothic", r"/NanumGothic.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
-                &mut self.load_nanum_gothic_font, &mut self.try_load_count_nanum_gothic_font
-            ) {
-                Ok(_) => {
-                    println!("Successfully loaded nanum gothic");
-                    self.load_nanum_gothic_font = true;
-                }
-                Err(e) => {
-                    println!("Error loading nanum gothic: {:?}", e);
-                    self.load_nanum_gothic_font = false;
-                }
-            }
+            self.font_load_malgun_gothic_font(ctx);
+            self.font_load_nanum_gothic_font(ctx);
             self.window_open_list.set("master_login", true);
             self.first_run = false;
         }
@@ -239,23 +291,7 @@ impl eframe::App for GraphicalUserInterface {
 
 
 impl GraphicalUserInterface {
-    fn load_emoji_font(&mut self, ctx: &egui::Context) -> Result<(), io::Error> {
-        let emoji = fs::read(r"C:\Windows\Fonts\seguiemj.ttf")?;
 
-        let mut fonts = egui::FontDefinitions::default();
-
-        fonts.font_data.insert(
-            "windows_emoji".to_owned(),
-            Arc::new(egui::FontData::from_owned(emoji)),
-        );
-
-        fonts.families.get_mut(&egui::FontFamily::Proportional).ok_or(io::Error::new(io::ErrorKind::InvalidData, "FontFamily is invalid!"))?
-            .insert(0, "windows_emoji".to_string());
-
-        ctx.set_fonts(fonts);
-
-        Ok(())
-    }
 }
 
 fn add_font(context: &egui::Context, name: &str, font_data: FontData, font_family: InsertFontFamily) {
