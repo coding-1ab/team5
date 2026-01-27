@@ -6,6 +6,7 @@
 // 흠 뭐부터 하지
 
 use std::{fs, io, sync::Arc, collections::HashMap};
+use std::any::{Any, TypeId};
 use std::path::Path;
 use eframe::{
     egui::{
@@ -78,79 +79,68 @@ pub struct GraphicalUserInterface {
     output: String,
 }
 
+trait FontType<const N: usize>{}
+
+impl FontType<18446744073709551615> for Vec<u8> {}
+
+impl<const N: usize> FontType<N> for &'static [u8; N] {}
+
 impl GraphicalUserInterface {
     pub fn setting_database(&mut self, data_base: DB) {
         self.data_base = data_base;
     }
 
-    pub fn font_load_from_owned<P: AsRef<Path>>(context: &Context, name: &str, file_path: P, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error> {
-        if !*is_font_load {
-            *try_load_count += 1;
-            let font_data = fs::read(file_path)?;
-            add_font(context, name, FontData::from_owned(font_data), insert_font_family);
-        }
-        Ok(())
+    fn font_load<const N: usize, T, F>(&mut self, context: &Context, name: &'static str, font_load_function: F, insert_font_family: InsertFontFamily) -> Result<(), io::Error>
+    where
+        F: FnOnce() -> Result<T, io::Error>,
+        T: 'static + FontType<N>
+    {
+        let (font_try_count_ramming, is_font_load) = self.font_load_list.0.entry(name).or_default();
+        font_load(context, name, font_load_function, insert_font_family, is_font_load, font_try_count_ramming)
     }
 
-    pub fn font_load_from_static<P: AsRef<Path>>(context: &Context, name: &str, file_path: &'static str, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error> {
-        if !*is_font_load {
-            *try_load_count += 1;
-            let font_data = include_bytes!(file_path);
-            add_font(context, name, FontData::from_static(font_data), insert_font_family);
-        }
-        Ok(())
-    }
-
-    fn font_load_malgun_gothic_font(&mut self, context: &Context) -> Result<(), ()> {
-        let (mut malgun_gothic_try_load_count, mut malgun_gothic_load) = self.font_load_list.as_ref().get("malgun_gothic").ok_or(Err(()))?;
-        match Self::font_load_from_owned(
-            context, "malgun_gothic", r"C:\Windows\Fonts\malgun.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
-            &mut malgun_gothic_load, &mut malgun_gothic_try_load_count
+    fn font_load_malgun_gothic_font(&mut self, context: &Context) -> Result<(), ()> {;
+        match self.font_load(
+            context, "malgun_gothic", || {
+            fs::read(r"C:\Windows\Fonts\malgun.ttf")
+        }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }
         ) {
             Ok(_) => {
                 println!("Successfully loaded malgun gothic");
-                malgun_gothic_load = true;
             }
             Err(e) => {
                 println!("Error loading malgun gothic: {:?}", e);
-                malgun_gothic_load = false;
             }
         }
-        self.font_load_list.as_mut().insert("malgun_gothic", (malgun_gothic_try_load_count, malgun_gothic_load));
         Ok(())
     }
 
     fn font_load_nanum_gothic_font(&mut self, context: &Context) {
-        let font = include_bytes!("../../NanumGothic.ttf");
-        let font_data = FontData::from_static(font);
-
-        match Self::font_load_from_owned(
-            context, "nanum_gothic", r"/NanumGothic.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
-            &mut self.load_nanum_gothic_font, &mut self.try_load_count_nanum_gothic_font
+        match self.font_load(
+            context, "nanum_gothic", || {
+                Ok(include_bytes!("../../NanumGothic.ttf"))
+            }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
         ) {
             Ok(_) => {
                 println!("Successfully loaded nanum gothic");
-                self.load_nanum_gothic_font = true;
             }
             Err(e) => {
                 println!("Error loading nanum gothic: {:?}", e);
-                self.load_nanum_gothic_font = false;
             }
         }
     }
 
     fn font_load_emoji_font(&mut self, context: &Context) {
-        match Self::font_load_from_owned(
-            context, "windows_emoji", r"C:\Windows\Fonts\seguiemj.ttf", InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
-            &mut self.load_nanum_gothic_font, &mut self.try_load_count_nanum_gothic_font
+        match self.font_load(
+            context, "windows_emoji", || {
+                fs::read(r"C:\Windows\Fonts\seguiemj.ttf")
+            }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }
         ) {
             Ok(_) => {
                 println!("Successfully loaded nanum gothic");
-                self.load_nanum_gothic_font = true;
             }
             Err(e) => {
                 println!("Error loading nanum gothic: {:?}", e);
-                self.load_nanum_gothic_font = false;
             }
         }
     }
@@ -297,6 +287,29 @@ impl GraphicalUserInterface {
 fn add_font(context: &egui::Context, name: &str, font_data: FontData, font_family: InsertFontFamily) {
     let font = FontInsert::new(name, font_data, vec![font_family]);
     context.add_font(font);
+}
+
+pub fn font_load<const N: usize, T, F>(context: &Context, name: &str, font_load_function: F, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error>
+where
+    F: FnOnce() -> Result<T, io::Error>,
+    T: 'static + FontType<N>
+{
+    if !*is_font_load {
+        *try_load_count += 1;
+        let font_load: Box<dyn Any> = Box::new(font_load_function()?);
+        let tid = TypeId::of::<T>();
+        let font_data;
+        if tid == TypeId::of::<Vec<u8>>() {
+            font_data = FontData::from_owned(*font_load.downcast::<Vec<u8>>().unwrap());
+        } else if tid == TypeId::of::<&'static [u8; N]>() {
+            font_data = FontData::from_static(*font_load.downcast::<&'static [u8; N]>().unwrap().as_ref());
+        } else {
+            unreachable!();
+        }
+        add_font(context, name, font_data, insert_font_family);
+    }
+    *is_font_load = true;
+    Ok(())
 }
 
 fn add_malgun_gothic_font(context: &egui::Context, font_family: InsertFontFamily) -> Result<(), io::Error> {
