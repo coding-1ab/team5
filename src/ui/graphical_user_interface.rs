@@ -5,41 +5,22 @@
 
 // 흠 뭐부터 하지
 
-use std::{fs, io, sync::Arc, collections::HashMap};
-use std::any::{Any, TypeId};
-use std::path::Path;
+use std::{fs, io, collections::HashMap};
 use eframe::{
     egui::{
         self,
         FontData
     },
-    epaint::{
-        self,
-        text::{InsertFontFamily, FontPriority, FontInsert}
-    }
+    epaint::text::{InsertFontFamily, FontPriority, FontInsert}
 };
 use eframe::egui::Context;
-use crate::data_base::DB;
+use crate::data_base::{prefix_range, DB};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
+type FontLoadList = HashMap<&'static str, FontLoadState>;
 
 const CAN_TRY_LOAD_COUNT: i64 = 5;
-
-#[derive(Default)]
-struct FontLoadList(HashMap<&'static str, FontLoadState>);
-
-impl AsRef<HashMap<&'static str, FontLoadState>> for FontLoadList {
-    fn as_ref(&self) -> &HashMap<&'static str, FontLoadState> {
-        &self.0
-    }
-}
-
-impl AsMut<HashMap<&'static str, FontLoadState>> for FontLoadList {
-    fn as_mut(&mut self) -> &mut HashMap<&'static str, FontLoadState> {
-        &mut self.0
-    }
-}
 
 #[derive(Default)]
 struct WindowOpenList(HashMap<&'static str, bool>);
@@ -105,24 +86,19 @@ impl GraphicalUserInterface {
         F: FnOnce() -> Result<T, io::Error>,
         T: 'static + FontType<N>
     {
-        let (font_try_count_ramming, is_font_load) = self.font_load_list.0.entry(name).or_default();
+        let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
         font_load(context, name, font_load_function, insert_font_family, is_font_load, font_try_count_ramming)
     }
 
-    fn font_load_malgun_gothic_font(&mut self, context: &Context) -> Result<(), ()> {;
+    fn font_load_malgun_gothic_font(&mut self, context: &Context) {
         match self.font_load(
             context, "malgun_gothic", || {
             fs::read(r"C:\Windows\Fonts\malgun.ttf")
         }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }
         ) {
-            Ok(_) => {
-                println!("Successfully loaded malgun gothic");
-            }
-            Err(e) => {
-                println!("Error loading malgun gothic: {:?}", e);
-            }
+            Ok(_) => println!("Successfully loaded malgun gothic"),
+            Err(e) => println!("Error loading malgun gothic: {:?}", e),
         }
-        Ok(())
     }
 
     fn font_load_nanum_gothic_font(&mut self, context: &Context) {
@@ -131,12 +107,8 @@ impl GraphicalUserInterface {
                 Ok(include_bytes!("../../NanumGothic.ttf"))
             }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
         ) {
-            Ok(_) => {
-                println!("Successfully loaded nanum gothic");
-            }
-            Err(e) => {
-                println!("Error loading nanum gothic: {:?}", e);
-            }
+            Ok(_) => println!("Successfully loaded nanum gothic"),
+            Err(e) => println!("Error loading nanum gothic: {:?}", e),
         }
     }
 
@@ -146,12 +118,8 @@ impl GraphicalUserInterface {
                 fs::read(r"C:\Windows\Fonts\seguiemj.ttf")
             }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }
         ) {
-            Ok(_) => {
-                println!("Successfully loaded nanum gothic");
-            }
-            Err(e) => {
-                println!("Error loading nanum gothic: {:?}", e);
-            }
+            Ok(_) => println!("Successfully loaded emoji_font"),
+            Err(e) => println!("Error loading emoji_font: {:?}", e),
         }
     }
 }
@@ -196,6 +164,7 @@ impl eframe::App for GraphicalUserInterface {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                     egui::CentralPanel::default().show(ctx, |ui| {
+                        // todo
                         /*
                         egui::Grid::new("login_grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
                             ui.label("id");
@@ -207,6 +176,7 @@ impl eframe::App for GraphicalUserInterface {
                         */
                         egui::Grid::new("master_login_grid").num_columns(2).show(ui, |ui| {
                             ui.label("마스터 로그인");
+                            // todo
                             // ui.text_edit_singleline()
                         });
                         ui.horizontal(|ui| {
@@ -224,6 +194,8 @@ impl eframe::App for GraphicalUserInterface {
                         if login_button.clicked() {
                             println!("login_click");
 
+                            // todo
+                            /*
                             let master_password_32 = match CryptoKey::new(&self.password) {
                                 Ok(master_password_32) => master_password_32,
                                  Err(err) => {
@@ -232,6 +204,7 @@ impl eframe::App for GraphicalUserInterface {
                                 }
                             };
                             println!("master password: {:?}", master_password_32);
+                            */
 
                             self.window_open_list.set("master_login", false);
                             self.login = true;
@@ -244,7 +217,7 @@ impl eframe::App for GraphicalUserInterface {
         if self.login {
             egui::CentralPanel::default().show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    prefix_range(&self.data_base, )
+                    prefix_range(&self.data_base, todo!())
                 });
 
                 if ui.button("Submit").clicked() {
@@ -289,12 +262,7 @@ impl eframe::App for GraphicalUserInterface {
     }
 }
 
-
-impl GraphicalUserInterface {
-
-}
-
-fn add_font(context: &egui::Context, name: &str, font_data: FontData, font_family: InsertFontFamily) {
+fn add_font(context: &Context, name: &str, font_data: FontData, font_family: InsertFontFamily) {
     let font = FontInsert::new(name, font_data, vec![font_family]);
     context.add_font(font);
 }
@@ -311,9 +279,4 @@ where
         *is_font_load = true;
     }
     Ok(())
-}
-
-fn add_malgun_gothic_font(context: &egui::Context, font_family: InsertFontFamily) -> Result<(), io::Error> {
-    let font_data = fs::read(r"C:\Windows\Fonts\malgun.ttf")?;
-    Ok(add_font(context, "malgun_gothic", FontData::from_owned(font_data), font_family))
 }
