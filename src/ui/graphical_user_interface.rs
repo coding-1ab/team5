@@ -79,11 +79,21 @@ pub struct GraphicalUserInterface {
     output: String,
 }
 
-trait FontType<const N: usize>{}
+pub trait FontType<const N: usize> {
+    fn into_font_data(self) -> FontData;
+}
 
-impl FontType<18446744073709551615> for Vec<u8> {}
+impl FontType<18446744073709551615> for Vec<u8> {
+    fn into_font_data(self) -> FontData {
+        FontData::from_owned(self)
+    }
+}
 
-impl<const N: usize> FontType<N> for &'static [u8; N] {}
+impl<const N: usize> FontType<N> for &'static [u8; N] {
+    fn into_font_data(self) -> FontData {
+        FontData::from_static(self.as_ref())
+    }
+}
 
 impl GraphicalUserInterface {
     pub fn setting_database(&mut self, data_base: DB) {
@@ -292,23 +302,14 @@ fn add_font(context: &egui::Context, name: &str, font_data: FontData, font_famil
 pub fn font_load<const N: usize, T, F>(context: &Context, name: &str, font_load_function: F, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error>
 where
     F: FnOnce() -> Result<T, io::Error>,
-    T: 'static + FontType<N>
+    T: FontType<N>
 {
     if !*is_font_load {
         *try_load_count += 1;
-        let font_load: Box<dyn Any> = Box::new(font_load_function()?);
-        let tid = TypeId::of::<T>();
-        let font_data;
-        if tid == TypeId::of::<Vec<u8>>() {
-            font_data = FontData::from_owned(*font_load.downcast::<Vec<u8>>().unwrap());
-        } else if tid == TypeId::of::<&'static [u8; N]>() {
-            font_data = FontData::from_static(*font_load.downcast::<&'static [u8; N]>().unwrap().as_ref());
-        } else {
-            unreachable!();
-        }
+        let font_data = font_load_function()?.into_font_data();
         add_font(context, name, font_data, insert_font_family);
+        *is_font_load = true;
     }
-    *is_font_load = true;
     Ok(())
 }
 
