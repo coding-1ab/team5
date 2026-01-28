@@ -91,12 +91,12 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
     manual_zeroize!(source, salt);
     nonce
 }
-static mut USER_KEY_NONCE: Option<aead::Nonce::<Aes256Gcm>> = None;
+static USER_KEY_NONCE: OnceLock<Nonce<Aes256Gcm>> = OnceLock::new();
 unsafe fn wrap_user_key(user_key: UserKey)
                         -> Result<WrappedUserKey, DBIOError> {
     let mut wrapper = get_system_identity();
     let nonce = USER_KEY_NONCE
-            .get_or_insert_with(|| Aes256Gcm::generate_nonce(&mut OsRng));
+        .get_or_init(|| Aes256Gcm::generate_nonce(&mut OsRng));
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())
         .unwrap();
     let ciphertext =
@@ -113,7 +113,7 @@ unsafe fn unwrap_user_key(wrapped_key: &WrappedUserKey)
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())
         .unwrap();
     let nonce = USER_KEY_NONCE
-        .get_or_insert_with(|| Aes256Gcm::generate_nonce(&mut OsRng));
+        .get_or_init(|| Aes256Gcm::generate_nonce(&mut OsRng));
     let plaintext = cipher
         .decrypt(&nonce, wrapped_key.as_slice())
         .map_err(|_| DBIOError::InvalidSession)?;
