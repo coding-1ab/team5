@@ -7,7 +7,6 @@ edition = "2024"
 rkyv = { version = "0.8"}
 fs2 = "*"
 single-instance = "*"
-bytecheck = "0.6"
 bytemuck = "*"
 
 aes-gcm = { version = "*", features = ["zeroize"] }
