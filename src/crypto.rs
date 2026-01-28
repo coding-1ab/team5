@@ -1,8 +1,11 @@
+use crate::master_secrets::_manual_zeroize;
 use crate::data_base::DB;
 use crate::header::EncryptedDB;
-use ecies::PublicKey;
+use ecies::{PublicKey, SecretKey};
 use rkyv::rancor::Error;
 use std::fmt::{Display, Formatter};
+use zeroize::Zeroize;
+use crate::manual_zeroize;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CryptoError {
@@ -30,17 +33,18 @@ impl Display for CryptoError {
 
 
 
-pub fn encrypt_db(db: &DB, pk: &PublicKey,)
-    -> Result<EncryptedDB, CryptoError> {
+pub fn encrypt_db(db: &DB, pk: &mut Box<PublicKey>,)
+                  -> Result<EncryptedDB, CryptoError> {
     let serialized = rkyv::to_bytes::<Error>(db).unwrap();
     let encrypted = ecies::encrypt(&pk.serialize(), &serialized).unwrap();
-
+    
     Ok( encrypted )
 }
 
-pub fn decrypt_db(data: &[u8], key: &PublicKey,
+pub fn decrypt_db(data: &[u8], mut sk: Box<SecretKey>,
 ) -> Result<DB, CryptoError> {
-    let decrypted = ecies::decrypt(&data, &key.serialize()).unwrap();
+    let decrypted = ecies::decrypt(&data, &sk.serialize()).unwrap();
+    manual_zeroize!(*sk);
     let db = rkyv::from_bytes::<DB, Error>(&decrypted).unwrap();
 
     Ok( db )

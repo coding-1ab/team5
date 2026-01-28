@@ -84,7 +84,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
     nonce
 }
 static USER_KEY_NONCE: OnceLock<Nonce<Aes256Gcm>> = OnceLock::new();
-unsafe fn wrap_user_key(user_key: UserKey)
+pub unsafe fn wrap_user_key(user_key: UserKey)
                         -> Result<WrappedUserKey, DBIOError> {
     let mut wrapper = get_system_identity();
     let nonce = USER_KEY_NONCE
@@ -99,7 +99,7 @@ unsafe fn wrap_user_key(user_key: UserKey)
     Ok( ciphertext )
 }
 
-unsafe fn unwrap_user_key(wrapped_key: &WrappedUserKey)
+pub unsafe fn unwrap_user_key(wrapped_key: &WrappedUserKey)
                           -> Result<UserKey, DBIOError> {
     let mut wrapper = get_system_identity();
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())

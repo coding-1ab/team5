@@ -1,5 +1,5 @@
 use crate::header::Salt;
-use crate::user_secrets::UserKey;
+use crate::user_secrets::{wrap_user_key, UserKey, WrappedUserKey};
 use aes_gcm::Aes256Gcm;
 use argon2::password_hash::rand_core;
 use argon2::{Argon2, ParamsBuilder};
@@ -15,7 +15,7 @@ use sha2::digest::generic_array::GenericArray;
 use sha2::Digest;
 use sha2::Sha256;
 use std::ptr;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod master_pw {
     use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -123,14 +123,24 @@ fn master_pw_kdf(master_pw: &MasterPW, salt: &mut Salt, kdf_out: &mut [u8]) -> (
         .unwrap();
 }
 
-pub type EciesKeyPair = Box<(PublicKey,SecretKey)>;
+// #[derive(Zeroize, ZeroizeOnDrop)]
+pub struct EciesKeyPair {pub pk: Box<PublicKey>, pub sk: Box<SecretKey>}
+impl EciesKeyPair {
+    pub fn new(pk: PublicKey, sk: SecretKey) -> EciesKeyPair {
+        EciesKeyPair{ pk: Box::new(pk), sk: Box::new(sk) }
+    }
+    pub fn void() -> EciesKeyPair {
+        Self {
+            pk: Box::new( PublicKey::parse_slice(&[0u8;65], None).unwrap()),
+            sk: Box::new(SecretKey::parse_slice(&[0u8;32]).unwrap()),
+        }
+    }
+}
 
-
-pub fn set_master_pw(raw_new_pw: &mut str, /*todo!()*/)
-                     -> Result<(), MasterPWError> {
-    let _rng = OsRng;
+pub fn set_master_pw(mut raw_new_pw: String, /*todo!()*/)
+                     -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
     let mut salt = Salt::default();
-    let mut master_pw = MasterPW::new(raw_new_pw)?;
+    let mut master_pw = MasterPW::new(&raw_new_pw)?;
     raw_new_pw.zeroize();
     let mut kdf_out = MasterKdfKey::default();
     loop {
@@ -139,18 +149,18 @@ pub fn set_master_pw(raw_new_pw: &mut str, /*todo!()*/)
             break;
         }
     }
-    let _key_pair = get_ecies_keypair(&kdf_out);
+    let ecies_key_pair = get_ecies_keypair(&kdf_out);
+    let user_key = get_user_key(&master_pw, &kdf_out);
+    let wrapped_user_key = unsafe{ wrap_user_key(user_key).unwrap() };
     kdf_out.zeroize();
-
     master_pw.zeroize();
-
-    Ok(())
+    Ok( (ecies_key_pair?, salt, wrapped_user_key) )
 }
 
 pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterPWError> {
     let sk = SecretKey::parse(&kdf_key).unwrap();
     let pk = PublicKey::from_secret_key(&sk);
-    Ok( Box::new( (pk,sk) ) )
+    Ok(  EciesKeyPair::new(pk, sk) )
 }
 
 pub fn get_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> UserKey {

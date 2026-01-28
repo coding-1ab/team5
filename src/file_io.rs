@@ -58,8 +58,8 @@ impl Display for FileIOError {
 }
 
 impl Error for FileIOError {}
-pub(crate) fn load_db() ->
-                 Result<(bool, Option<FileIOWarn>, Option<DBHeader>, Option<EncryptedDB>), FileIOError> {
+pub fn load_db() ->
+                 Result<(bool, Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
 
@@ -106,7 +106,7 @@ pub(crate) fn load_db() ->
     if bak_file.metadata()
         .map_err(|err| FileIOError::FileReadFailed(err))?
         .len() == 0 {
-        return Ok( (true, user_warn, None, None) )
+        return Ok( (true, user_warn, DBHeader::empty_valid(), None) )
     }
 
     let read_triales = 3;
@@ -117,7 +117,7 @@ pub(crate) fn load_db() ->
         let parsed = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
-                return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), None, None))
+                return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
             }
             Err(e) => return Err(e)
         };
@@ -126,9 +126,9 @@ pub(crate) fn load_db() ->
             continue;
         }
 
-        return Ok( (false, user_warn, Some(parsed.0), Some(parsed.1)) )
+        return Ok( (false, user_warn, parsed.0, Some(parsed.1)) )
     }
-    Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), None, None) )
+    Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
 }
 
 

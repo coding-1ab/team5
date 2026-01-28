@@ -1,7 +1,6 @@
 use crate::file_io::FileIOError;
 use bytemuck::{Pod, Zeroable};
 
-
 const SALT_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
 const MAGIC_LEN: usize = 8;
@@ -24,11 +23,11 @@ pub type EncryptedDB = Vec<u8>;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct DBHeader {
-    magic: Magic,
-    version: Version,
-    pub(crate) db_salt: Salt, // argon2 salt
-    pub(crate) user_nonce: Nonce,
+pub struct DBHeader {
+    pub(crate) magic: Magic,
+    pub(crate) version: Version,
+    pub db_salt: Salt, // argon2 salt
+    // pub(crate) user_nonce: Nonce,
     pub(crate) ciphertext_checksum: CiphTxtChksum,
     pub(crate) ciphertext_len: CipherTextLen,
 }
@@ -64,7 +63,7 @@ impl DBHeader {
             magic: DB_MAGIC,
             version: DB_VERSION,
             db_salt: Salt::default(), // argon2 slat
-            user_nonce: Nonce::default(),
+            // user_nonce: Nonce::default(),
             ciphertext_checksum: Default::default(),
             ciphertext_len: 0,
         }
