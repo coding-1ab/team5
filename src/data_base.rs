@@ -152,6 +152,9 @@ pub mod site_name {
             }
             Ok( Self {0: normalized} )
         }
+        pub fn from_unchecked(input: &str) -> SiteName {
+            Self {0: input.trim().to_string().to_lowercase()}
+        }
     }
     impl Display for SiteNameError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -280,9 +283,9 @@ pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key
 }
 
 
-// pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
-//     let start = format!("{}{}", input, char::MAX);
-//     let end = SiteName::from_unchecked(&start);
+// pub fn prefix_range(db: &DB, input: &str) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
+//     let start = SiteName::from_unchecked(format!("{}{}", input, char::MAX).as_str());
+//     let end = SiteName::from_unchecked(&start.0);
 //     db.range(start..end)
 // }
 

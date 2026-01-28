@@ -4,11 +4,10 @@ use aes_gcm::{Aes256Gcm, KeyInit};
 use aes_gcm::aead::Aead;
 use argon2::password_hash::SaltString;
 use ecies::PublicKey;
-use rkyv::{to_bytes, check_archived_root, Deserialize, AlignedVec, Infallible, archived_root, deserialize};
+use rkyv::{Serialize, Deserialize};
 use rkyv::rancor::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::master_secrets::{Salt, CryptoKey};
-use crate::data_base::{DB, SiteName};
+use crate::data_base::{DB};
 use crate::header::EncryptedDB;
 
 #[derive(Debug, Eq, PartialEq)]
