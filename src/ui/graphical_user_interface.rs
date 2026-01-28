@@ -5,15 +5,12 @@
 
 // 흠 뭐부터 하지
 
-use std::{fs, io, collections::HashMap};
-use eframe::{
-    egui::{
-        self,
-        FontData
-    },
-    epaint::text::{InsertFontFamily, FontPriority, FontInsert}
-};
 use eframe::egui::Context;
+use eframe::{
+    egui::{self, FontData},
+    epaint::text::{FontInsert, FontPriority, InsertFontFamily},
+};
+use std::{collections::HashMap, fs, io};
 //use crate::data_base::{prefix_range, DB};
 
 type TryCountRamming = i64;
@@ -57,22 +54,6 @@ pub struct GraphicalUserInterface {
     output: String,
 }
 
-pub trait FontType<const N: usize> {
-    fn into_font_data(self) -> FontData;
-}
-
-impl FontType<18446744073709551615> for Vec<u8> {
-    fn into_font_data(self) -> FontData {
-        FontData::from_owned(self)
-    }
-}
-
-impl<const N: usize> FontType<N> for &'static [u8; N] {
-    fn into_font_data(self) -> FontData {
-        FontData::from_static(self.as_ref())
-    }
-}
-
 impl GraphicalUserInterface {
     /*
     pub fn setting_database(&mut self, data_base: DB) {
@@ -80,31 +61,59 @@ impl GraphicalUserInterface {
     }
     */
 
-    fn font_load<const N: usize, T, F>(&mut self, context: &Context, name: &'static str, font_load_function: F, insert_font_family: InsertFontFamily) -> Result<(), io::Error>
-    where
-        F: FnOnce() -> Result<T, io::Error>,
-        T: 'static + FontType<N>
-    {
+    fn font_load(
+        &mut self,
+        context: &Context,
+        name: &'static str,
+        font_data: FontData,
+        insert_font_family: InsertFontFamily,
+    ) -> Result<(), io::Error> {
         let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
-        font_load(context, name, font_load_function, insert_font_family, is_font_load, font_try_count_ramming)
+        font_load(
+            context,
+            name,
+            font_data,
+            insert_font_family,
+            is_font_load,
+            font_try_count_ramming,
+        )
     }
 
     fn font_load_malgun_gothic_font(&mut self, context: &Context) {
+        let font_file_contents = match fs::read(r"C:\Windows\Fonts\malgun.ttf") {
+            Ok(contents) => contents,
+            Err(e) => {
+                eprintln!("Error loading malgun gothic: {:?}", e);
+                return;
+            }
+        };
+        let font_data = FontData::from_owned(font_file_contents);
+
         match self.font_load(
-            context, "malgun_gothic", || {
-            fs::read(r"C:\Windows\Fonts\malgun.ttf")
-        }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }
+            context,
+            "malgun_gothic",
+            font_data,
+            InsertFontFamily {
+                family: egui::FontFamily::Proportional,
+                priority: FontPriority::Highest,
+            },
         ) {
             Ok(_) => println!("Successfully loaded malgun gothic"),
             Err(e) => println!("Error loading malgun gothic: {:?}", e),
-        }
+        };
     }
 
     fn font_load_nanum_gothic_font(&mut self, context: &Context) {
+        let font_data = FontData::from_static(include_bytes!("../../NanumGothic.ttf"));
+
         match self.font_load(
-            context, "nanum_gothic", || {
-                Ok(include_bytes!("../../NanumGothic.ttf"))
-            }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest },
+            context,
+            "nanum_gothic",
+            font_data,
+            InsertFontFamily {
+                family: egui::FontFamily::Proportional,
+                priority: FontPriority::Highest,
+            },
         ) {
             Ok(_) => println!("Successfully loaded nanum gothic"),
             Err(e) => println!("Error loading nanum gothic: {:?}", e),
@@ -112,10 +121,23 @@ impl GraphicalUserInterface {
     }
 
     fn font_load_emoji_font(&mut self, context: &Context) {
+        let font_file_contents = match fs::read(r"C:\Windows\Fonts\seguiemj.ttf") {
+            Ok(contents) => contents,
+            Err(e) => {
+                eprintln!("Error loading emoji_font: {:?}", e);
+                return;
+            }
+        };
+        let font_data = FontData::from_owned(font_file_contents);
+
         match self.font_load(
-            context, "windows_emoji", || {
-                fs::read(r"C:\Windows\Fonts\seguiemj.ttf")
-            }, InsertFontFamily { family: egui::FontFamily::Proportional, priority: FontPriority::Highest }
+            context,
+            "windows_emoji",
+            font_data,
+            InsertFontFamily {
+                family: egui::FontFamily::Proportional,
+                priority: FontPriority::Highest,
+            },
         ) {
             Ok(_) => println!("Successfully loaded emoji_font"),
             Err(e) => println!("Error loading emoji_font: {:?}", e),
@@ -134,7 +156,7 @@ impl Default for GraphicalUserInterface {
             re_check_password: String::new(),
             //data_base: Default::default(),
             window_open_list: Default::default(),
-            output: String::new()
+            output: String::new(),
         }
     }
 }
@@ -144,6 +166,7 @@ impl eframe::App for GraphicalUserInterface {
         if self.first_run {
             self.font_load_malgun_gothic_font(ctx);
             self.font_load_nanum_gothic_font(ctx);
+            self.font_load_emoji_font(ctx);
             self.window_open_list.set("master_login", true);
             self.first_run = false;
         }
@@ -170,18 +193,23 @@ impl eframe::App for GraphicalUserInterface {
                             ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
                         });
                         */
-                        egui::Grid::new("master_login_grid").num_columns(2).show(ui, |ui| {
-                            ui.label("마스터 로그인");
-                            // todo
-                            // ui.text_edit_singleline()
-                        });
+                        egui::Grid::new("master_login_grid")
+                            .num_columns(2)
+                            .show(ui, |ui| {
+                                ui.label("마스터 로그인");
+                                // todo
+                                // ui.text_edit_singleline()
+                            });
                         ui.horizontal(|ui| {
                             ui.label("master password");
                             ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
                         });
                         ui.horizontal(|ui| {
                             ui.label("master password");
-                            ui.add(egui::TextEdit::singleline(&mut self.re_check_password).password(true));
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.re_check_password)
+                                    .password(true),
+                            );
                         });
                         let login_button = ui.button("로그인");
                         if login_button.hovered() {
@@ -232,13 +260,19 @@ impl eframe::App for GraphicalUserInterface {
                                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                             }
                             egui::CentralPanel::default().show(ctx, |ui| {
-                                egui::Grid::new("test_grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                                    ui.label("id");
-                                    ui.text_edit_singleline(&mut self.id);
-                                    ui.end_row();
-                                    ui.label("password");
-                                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
-                                });
+                                egui::Grid::new("test_grid")
+                                    .num_columns(2)
+                                    .spacing([8.0, 6.0])
+                                    .show(ui, |ui| {
+                                        ui.label("id");
+                                        ui.text_edit_singleline(&mut self.id);
+                                        ui.end_row();
+                                        ui.label("password");
+                                        ui.add(
+                                            egui::TextEdit::singleline(&mut self.password)
+                                                .password(true),
+                                        );
+                                    });
                                 let login_button = ui.button("asdf");
                                 if login_button.hovered() {
                                     ui.label("asdf");
@@ -250,7 +284,10 @@ impl eframe::App for GraphicalUserInterface {
                             });
                         },
                     );
-                    self.output = format!("You typed id: {}\nYou typed password: {}", self.id, self.password);
+                    self.output = format!(
+                        "You typed id: {}\nYou typed password: {}",
+                        self.id, self.password
+                    );
                 }
 
                 ui.separator();
@@ -267,16 +304,33 @@ fn add_font(context: &Context, name: &str, font_data: FontData, font_family: Ins
     context.add_font(font);
 }
 
-pub fn font_load<const N: usize, T, F>(context: &Context, name: &str, font_load_function: F, insert_font_family: InsertFontFamily, is_font_load: &mut bool, try_load_count: &mut i64) -> Result<(), io::Error>
-where
-    F: FnOnce() -> Result<T, io::Error>,
-    T: FontType<N>
-{
+pub fn font_load(
+    context: &Context,
+    name: &str,
+    font_data: FontData,
+    insert_font_family: InsertFontFamily,
+    is_font_load: &mut bool,
+    try_load_count: &mut i64,
+) -> Result<(), io::Error> {
     if !*is_font_load {
         *try_load_count += 1;
-        let font_data = font_load_function()?.into_font_data();
         add_font(context, name, font_data, insert_font_family);
         *is_font_load = true;
     }
     Ok(())
+}
+
+fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>) -> Result<T, E> {
+    for i in 1..=CAN_TRY_LOAD_COUNT {
+        match to_try() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                if i == CAN_TRY_LOAD_COUNT {
+                    return Err(e);
+                }
+            }
+        }
+    };
+
+    unreachable!()
 }
