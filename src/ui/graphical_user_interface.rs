@@ -61,22 +61,9 @@ impl GraphicalUserInterface {
     }
     */
 
-    fn font_load(
-        &mut self,
-        context: &Context,
-        name: &'static str,
-        font_data: FontData,
-        insert_font_family: InsertFontFamily,
-    ) -> Result<(), io::Error> {
+    fn font_load(&mut self, context: &Context, name: &'static str, font_data: FontData, insert_font_family: InsertFontFamily, ) -> Result<(), io::Error> {
         let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
-        font_load(
-            context,
-            name,
-            font_data,
-            insert_font_family,
-            is_font_load,
-            font_try_count_ramming,
-        )
+        font_load(context, name, font_data, insert_font_family, is_font_load, font_try_count_ramming)
     }
 
     fn font_load_malgun_gothic_font(&mut self, context: &Context) {
@@ -90,9 +77,7 @@ impl GraphicalUserInterface {
         let font_data = FontData::from_owned(font_file_contents);
 
         match self.font_load(
-            context,
-            "malgun_gothic",
-            font_data,
+            context, "malgun_gothic", font_data,
             InsertFontFamily {
                 family: egui::FontFamily::Proportional,
                 priority: FontPriority::Highest,
@@ -107,9 +92,7 @@ impl GraphicalUserInterface {
         let font_data = FontData::from_static(include_bytes!("../../NanumGothic.ttf"));
 
         match self.font_load(
-            context,
-            "nanum_gothic",
-            font_data,
+            context, "nanum_gothic", font_data,
             InsertFontFamily {
                 family: egui::FontFamily::Proportional,
                 priority: FontPriority::Highest,
@@ -131,9 +114,7 @@ impl GraphicalUserInterface {
         let font_data = FontData::from_owned(font_file_contents);
 
         match self.font_load(
-            context,
-            "windows_emoji",
-            font_data,
+            context, "windows_emoji", font_data,
             InsertFontFamily {
                 family: egui::FontFamily::Proportional,
                 priority: FontPriority::Highest,
