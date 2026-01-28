@@ -1,4 +1,7 @@
+use sha2::Digest;
 use std::fmt::{Display, Formatter};
+use std::{mem, ptr};
+use std::io::Read;
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, Key, KeyInit, AeadCore}
@@ -9,53 +12,63 @@ use rand_chacha::ChaCha20Rng;
 // use rand::RngCore;
 use rand_core::RngCore;
 use rand_core::OsRng;
-use argon2::Argon2;
-use argon2::password_hash::{PasswordHasher, rand_core, Salt};
-use rand_chacha::rand_core::SeedableRng;
-use rsa::{RsaPrivateKey, RsaPublicKey, };
-use rsa::rand_core::CryptoRngCore;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use crate::{ZeroizingString};
+use argon2::{Argon2, ParamsBuilder};
+use argon2::password_hash::{PasswordHasher, rand_core};
+use ecies::SecretKey;
+use ecies::PublicKey;
+use ecies::utils::generate_keypair;
+use rand_xoshiro::Xoshiro256Plus;
+use rkyv::rancor::ResultExt;
+use sha2::digest::ExtendableOutput;
+use sha2::digest::generic_array::GenericArray;
+use sha2::Sha256;
+use zeroize::{zeroize_flat_type, Zeroize, ZeroizeOnDrop, Zeroizing};
+use crate::crypto::CryptoError;
+use crate::header::Salt;
+use master_pw::*;
+use crate::user_secrets::UserKey;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum MasterPWError {
-    Empty,
-    TooShort,
-    TooLong,
-    NonAscii,
-}
+mod master_pw {
+    use std::fmt::Display;
+    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-const MAX_MASTER_PW_LEN: usize = 32;
-struct MasterPW {
-    pw: ZeroizingString
-}
-
-impl MasterPW {
-    fn new(raw_pw: ZeroizingString) -> Result<Self, MasterPWError> {
-        if raw_pw.is_empty() {
-            return Err(MasterPWError::Empty);
-        }
-        if raw_pw.len() < 8 {
-            return Err(MasterPWError::TooShort);
-        }
-        if raw_pw.len() > MAX_MASTER_PW_LEN {
-            return Err(MasterPWError::TooLong);
-        }
-        if !raw_pw.is_ascii() {
-            return Err(MasterPWError::NonAscii);
-        }
-        Ok( Self {pw: raw_pw} )
+    #[derive(Debug, Clone, Eq, PartialEq)]
+    pub enum MasterPWError {
+        Empty,
+        TooShort,
+        TooLong,
+        NonAscii,
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.pw.as_bytes()
+    // const MAX_MASTER_PW_LEN: usize = 32;
+
+    #[derive(Zeroize, ZeroizeOnDrop)]
+    pub struct MasterPW (String);
+
+    impl MasterPW {
+        pub fn new(raw_pw: &str) -> Result<MasterPW, MasterPWError> {
+            if raw_pw.is_empty() {
+                return Err(MasterPWError::Empty);
+            }
+            if raw_pw.len() < 8 {
+                return Err(MasterPWError::TooShort);
+            }
+            // if raw_pw.len() > MAX_MASTER_PW_LEN {
+            //     return Err(MasterPWError::TooLong);
+            // }
+            if !raw_pw.is_ascii() {
+                return Err(MasterPWError::NonAscii);
+            }
+            Ok( Self{ 0: raw_pw.to_owned() } )
+        }
+        pub fn as_bytes(&self) -> &[u8] {
+            self.0.as_bytes()
+        }
     }
 }
 
-impl Display for MasterPW {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.pw)
-    }
+pub fn zeroize_slice(bytes: &mut [u8]) {
+    bytes.zeroize();
 }
 
 pub type MasterKdfKey = [u8; 32];
@@ -64,34 +77,105 @@ pub fn gen_aes_key() {
 
 }
 
-pub const RSA_BIT_SIZE: usize = 4096;
-pub type RsaKeys = (RsaPrivateKey, RsaPublicKey);
-pub fn gen_rsa_keys(mut master_kdf_key: MasterKdfKey, salt: Salt)
-                   -> Result<(RsaKeys), MasterPWError>{
-    let mut rng = ChaCha20Rng::from_seed(master_kdf_key);
-    master_kdf_key.zeroize();
-    let prv_key = RsaPrivateKey::new(&mut rng, RSA_BIT_SIZE)
-        .expect("RSA key generation failed");
-    let pub_key = RsaPublicKey::from(&prv_key);
+// secp256k1 곡선의 유효 범위 (N)
+const SECP256K1_ORDER: [u8; 32] = [
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
+    0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
+    0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
+];
 
+fn is_valid_ecies_key(key: &[u8]) -> bool {
+    let is_zero = key.iter().all(|&b| b == 0);
+    if is_zero { return false; }
+    for i in 0..32 {
+        if key[i] < SECP256K1_ORDER[i] { return true; }
+        if key[i] > SECP256K1_ORDER[i] { return false; }
+    }
+    false
 }
 
-pub fn master_pw_kdf(raw_pw: ZeroizingString, salt: &SaltString)
-                     -> Result<MasterKdfKey, MasterPWError> {
-    let pw = MasterPW::new(raw_pw)?;
-    let master_kdf_key = MasterKdfKey{};
-    let mut rng = OsRng;
-    let argon2 = Argon2::default();
-    argon2
-        .hash_password_into(pw.as_bytes(), salt.as_bytes(), master_kdf_key.as_mut_slice())
-        .expect("argon2 failed");
-    Ok(master_kdf_key)
+pub fn _manual_zeroize<T>(data: &mut T) {
+    let size = std::mem::size_of::<T>();
+    let ptr = data as *mut T as *mut u8;
+    unsafe {
+        for i in 0..size {
+            ptr::write_volatile(ptr.add(i), 0);
+        }
+    }
 }
-pub fn _set_master_pw(raw_new_pw: ZeroizingString)
-                      -> Result<(), MasterPWError> {
+#[macro_export]
+macro_rules! manual_zeroize {
+    ($($var:expr),+ $(,)?) => {
+        $(
+            _manual_zeroize(&mut $var);
+        )+
+    };
+}
+
+#[inline]
+fn master_pw_kdf(master_pw: &MasterPW, salt: &mut Salt, kdf_out: &mut [u8]) -> () {
+    OsRng.fill_bytes(salt.as_mut_slice());
+    salt[5]=5; salt[10]=10; salt[15]=15; salt[20]=20; salt[25]=25; salt[30]=30;
+    for (t, s) in salt.iter_mut().zip(master_pw.as_bytes().iter()) {
+        *t ^= *s;
+    }
+    let params = ParamsBuilder::new()
+        .m_cost(65536) // 64MB 지정 (KB 단위)
+        .t_cost(8)     // 반복 횟수
+        .p_cost(3)     // 병렬 처리 수준
+        .build()
+        .unwrap();
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        params
+    );
+    argon2.hash_password_into(master_pw.as_bytes(), salt.as_slice(), kdf_out.as_mut())
+        .unwrap();
+}
+
+pub type EciesKeyPair = Box<(PublicKey,SecretKey)>;
+
+
+pub fn set_master_pw(raw_new_pw: &mut str, /*todo!()*/)
+                     -> Result<(), MasterPWError> {
     let mut rng = OsRng;
-    let mut salt = Salt::generate(&mut rng);
-    let master_kdf_key = master_pw_kdf(raw_new_pw, &mut salt)?;
-    let rsa_keys: RsaKeys = gen_rsa_keys(master_kdf_key, salt)?;
+    let mut salt = Salt::default();
+    let mut master_pw = MasterPW::new(raw_new_pw)?;
+    raw_new_pw.zeroize();
+    let mut kdf_out = MasterKdfKey::default();
+    loop {
+        master_pw_kdf(&master_pw, &mut salt, &mut kdf_out);
+        if is_valid_ecies_key(kdf_out.as_ref()) {
+            break;
+        }
+    }
+    let key_pair = get_ecies_keypair(&kdf_out);
+    kdf_out.zeroize();
+
+    master_pw.zeroize();
+
     Ok(())
+}
+
+pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterPWError> {
+    let sk = SecretKey::parse(&kdf_key).unwrap();
+    let pk = PublicKey::from_secret_key(&sk);
+    Ok( Box::new( (pk,sk) ) )
+}
+
+pub fn get_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> UserKey {
+    let mut hasher1 = Sha256::new();
+    hasher1.update(master_pw.as_bytes());
+    let mut hasher2 = hasher1.clone();
+    let mut tmp = [0u8;32];
+    hasher1.finalize_into(GenericArray::from_mut_slice(tmp.as_mut_slice()));
+    hasher2.update(&kdf_key);
+    hasher2.update(&tmp);
+    hasher2.update(&tmp);
+    let mut result = UserKey::default();
+    hasher2.finalize_into(GenericArray::from_mut_slice(result.as_mut_slice()));
+    tmp.zeroize();
+    result
 }

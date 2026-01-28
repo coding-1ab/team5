@@ -1,33 +1,42 @@
 use std::borrow::Borrow;
 use std::string::String;
 use std::collections::{BTreeMap, HashMap};
-use rkyv::{Archive, Serialize, Deserialize, Archived, CheckBytes};
+use rkyv::{Archive, Serialize, Deserialize, Archived,};
 use std::error::Error;
+use std::hash::BuildHasher;
 use eframe::egui::TextBuffer;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 pub use user_pw::{UserPW, UserPWError};
 pub use user_id::{UserID, UserIDError};
 pub use site_name::{SiteName, SiteNameError};
-use crate::data_base::site_name::_SiteName;
-use crate::data_base::user_id::_UserID;
-use crate::user_secrets::{encryt_user_pw, EncUserPW, WrappedUserKey};
+use crate::user_secrets::{decrypt_user_pw, encryt_user_pw, EncryptdUsrPW, WrappedUserKey};
 
 pub mod user_pw {
     use std::fmt::{Display, Formatter};
     use std::error::Error;
-    use zeroize::Zeroizing;
+    use rkyv::{Archive, Deserialize, Serialize};
+    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-    pub type UserPW = Zeroizing<String>; /// 외부 입출력용, 수정 금지
-
+    #[derive(Zeroize, ZeroizeOnDrop)]
+    #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd)]
+    #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
+    pub struct UserPW (pub String);
     #[derive(Debug)]
     pub enum UserPWError {
         Empty,
     }
-    fn new(input: UserPW) -> Result<_UserPW, UserPWError> {
-        if input.trim().is_empty() {
-            return Err(UserPWError::Empty);
+    impl UserPW {
+        fn new(input: &str) -> Result<UserPW, UserPWError> {
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                return Err(UserPWError::Empty);
+            }
+
+            Ok( Self {0: trimmed.to_string()} )
         }
-        Ok(input)
+        pub(crate) fn void() -> Self {
+            Self {0: String::new()}
+        }
     }
     impl Display for UserPWError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -40,92 +49,110 @@ pub mod user_pw {
 }
 
 pub mod user_id {
+    use std::cmp::Ordering;
     use std::fmt::{Display, Formatter};
     use std::error::Error;
-    use zeroize::Zeroizing;
+    use std::usize::MAX;
+    use rkyv::{Archive, Deserialize, Serialize};
+    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-    pub type _UserID = String; /// DB 내부 저장용, 복사 금지
-    pub type UserID = Zeroizing<String>; /// 외부 입출력용, 수정 금지
+    const MAX_USER_ID_LEN: usize = 32;
+    #[derive(Zeroize, ZeroizeOnDrop)]
+    #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd)]
+    #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
+    #[derive(Hash)]
+pub struct UserID (pub String);
 
     #[derive(Debug)]
     pub enum UserIDError {
         Empty,
+        // TooLong,
     }
-    fn new(input: UserID) -> Result<_UserID, UserIDError> {
-        if input.trim().is_empty() {
-            return Err(UserIDError::Empty);
+    impl UserID {
+        fn new(input: &str) -> Result<UserID, UserIDError> {
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                return Err(UserIDError::Empty);
+            }
+            // if trimmed.len() > MAX_USER_ID_LEN {
+            //     return Err(UserIDError::TooLong);
+            // }
+
+            Ok( Self { 0: trimmed.to_string() } )
         }
-        Ok( input.to_string() )
     }
     impl Display for UserIDError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
                 UserIDError::Empty => write!(f, "User ID is empty"),
+                // UserIDError::TooLong => write!(f, "User ID is too long"),
             }
         }
     }
     impl Error for UserIDError {}
 }
 
-pub type DB = BTreeMap<_SiteName, HashMap<_UserID, EncUserPW>>;
 
 pub mod site_name {
     use url::Url;
     use std::fmt::{Display, Formatter};
     use std::error::Error;
-    use zeroize::Zeroizing;
+    use rkyv::{Archive, Deserialize, Serialize};
+    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+    use crate::data_base::DB;
 
-    pub type _SiteName = String; /// DB 내부 저장용, 복사 금지
-    pub type SiteName = Zeroizing<String>; /// 외부 입출력용, 수정 금지
-
-
+    #[derive(Zeroize, ZeroizeOnDrop)]
+    #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd, Clone)]
+    #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
+    pub struct SiteName (pub String);
     #[derive(Debug)]
     pub enum SiteNameError {
         Empty,
         ContainsWhitespace,
-        InvalidUrl,
+        InvalidUrl(String),
         InvalidHost,
     }
-
-    pub fn validate_and_normalize(input: SiteName) -> Result<_SiteName, SiteNameError> {
-        if input.trim().is_empty() {
-            return Err(SiteNameError::Empty);
+    impl SiteName {
+        pub fn new(input: &str) -> Result<SiteName, SiteNameError> {
+            if input.trim().is_empty() {
+                return Err(SiteNameError::Empty);
+            }
+            if input.chars().any(|c| c.is_whitespace()) {
+                Err(SiteNameError::ContainsWhitespace)?;
+            }
+            let with_scheme = Zeroizing::new(
+                if input.contains("://") {
+                    input.to_string()
+                } else {
+                    format!("dummy://{}", input)
+                }
+            );
+            let mut url =
+                Url::parse(&with_scheme)
+                    .map_err(|err| SiteNameError::InvalidUrl(err.to_string()))?;
+            let host = url.host_str()
+                .ok_or(SiteNameError::InvalidHost)?;
+            let mut normalized = String::new();
+            normalized.reserve_exact(input.trim().len());
+            normalized.push_str(host);
+            if let Some(port) = url.port() {
+                normalized.push(':');
+                normalized.push_str(&port.to_string());
+            }
+            if !url.path().is_empty() && url.path() != "/" {
+                normalized.push_str(url.path());
+            }
+            if let Some(q) = url.query() {
+                normalized.push('?');
+                normalized.push_str(q);
+            }
+            if let Some(f) = url.fragment() {
+                normalized.push('#');
+                normalized.push_str(f);
+            }
+            Ok( Self {0: normalized} )
         }
-        if input.chars().any(|c| c.is_whitespace()) {
-            Err(SiteNameError::ContainsWhitespace)?;
-        }
-        let with_scheme = if input.contains("://") {
-            input.to_string()
-        } else {
-            format!("dummy://{}", input)
-        };
-        let url =
-            Url::parse(&with_scheme)
-                .map_err(|_| SiteNameError::InvalidUrl)?;
-
-        let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
-
-        let mut normalized = String::new();
-        normalized.push_str(host);
-        if let Some(port) = url.port() {
-            normalized.push(':');
-            normalized.push_str(&port.to_string());
-        }
-        if !url.path().is_empty() && url.path() != "/" {
-            normalized.push_str(url.path());
-        }
-        if let Some(q) = url.query() {
-            normalized.push('?');
-            normalized.push_str(q);
-        }
-        if let Some(f) = url.fragment() {
-            normalized.push('#');
-            normalized.push_str(f);
-        }
-
-        Ok( normalized.to_string() )
     }
-
     impl Display for SiteNameError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -135,8 +162,8 @@ pub mod site_name {
                 SiteNameError::ContainsWhitespace => {
                     write!(f, "Site name must not contain whitespace")
                 }
-                SiteNameError::InvalidUrl => {
-                    write!(f, "Site name is not a valid URL or host")
+                SiteNameError::InvalidUrl(err) => {
+                    write!(f, "Site name is not a valid URL or host\nError: {}", err)
                 }
                 SiteNameError::InvalidHost => {
                     write!(f, "Site name does not contain a valid host")
@@ -147,60 +174,124 @@ pub mod site_name {
     impl Error for SiteNameError {}
 }
 
-pub enum CredentialError {
-    PWNotFound,
+pub type DB = BTreeMap<SiteName, HashMap<UserID, EncryptdUsrPW>>;
+
+
+#[derive(Debug)]
+pub enum DBIOError {
+    UserNotFound,
+    SiteNotFound,
+    UserAlreadyExists,
+    UserPWEncryptionFailed,
+    UserPWDecryptionFailed,
+    InvalidSession, // 호출될 시 DB 저장 후 프로그램 종료
 }
 
-pub fn add_credential(db: &mut DB, site_name: SiteName, user_id: UserID, password: UserPW)
-    -> Result<(), (UserIDError, UserPWError)> {
-    let tmp_wrpd_usr_key: WrappedUserKey = Zeroizing::new(vec!(4u8; 32));
+pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: WrappedUserKey)
+                    -> Result<(), DBIOError> {
+    let encryted_pw= encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
+    let users
+        = db.entry(site_name).or_insert_with(HashMap::new);
 
-    let encrypted_pw =
-        encryt_user_pw(password, tmp_wrpd_usr_key);
-    let ref_id = db
-        .entry(site_name.into_string())
-        .or_insert(HashMap::new())
-        .or_upwrap();
-    *ref_id
-        .entry(user_id.into_string())
-        .or_insert(encrypted_pw)
-        .or_unwrap();
-    
-
-}
-
-// Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
-pub fn change_credential(db: &DB,)
-    -> Result<(), CredentialError> {
-
-}
-// Vec과 String의 재할당시 메모리 이동을 고려하여 zeroize 구현
-pub fn delete_credential(db: &mut DB, site_name: SiteName, user_id: UserID)
-    -> Result<(), CredentialError> {
-    let ref_site = db.get_mut(&site_name.to_string())
-        .map_err(Err(CredentialError::PWNotFound)); // 못 찾음
-    *ref_site.remove(&user_id.to_string())
-        .map_err(Err(CredentialError::PWNotFound)); // 못 찾음
-    if *ref_site.is_empty() {
-
+    match users.entry(user_id) {
+        std::collections::hash_map::Entry::Vacant(e) => {
+            e.insert(encryted_pw);
+            Ok( () )
+        }
+        std::collections::hash_map::Entry::Occupied(_) => {
+            Err(DBIOError::UserAlreadyExists)
+        }
     }
-        Ok( () )
 
 }
 
-pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
-    let start = format!("{}{}", input, char::MAX);
-    let end = SiteName::from_unchecked(&start);
-    db.range(start..end)
-}
+pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: WrappedUserKey, )
+    -> Result<(), DBIOError> {
+    let encrypted = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 
-#[cfg(test)]
-fn explor_db(input_site: String, db: &DB) {
-    for (site, credentials) in prefix_range(&db, input_site) {
-        println!("Site: {}", site.as_str());
-        for cred in credentials {
-            println!("  user_id: {}", cred.user_id);
+    let users = match db.entry(site_name) {
+        std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
+        std::collections::btree_map::Entry::Vacant(_) => {
+            return Err(DBIOError::SiteNotFound);
+        }
+    };
+
+    match users.entry(user_id) {
+        std::collections::hash_map::Entry::Occupied(mut e) => {
+            let pw = e.get_mut();
+            pw.zeroize();
+
+            *pw = encrypted;
+            Ok(())
+        }
+        std::collections::hash_map::Entry::Vacant(_) => {
+            Err(DBIOError::UserNotFound)
         }
     }
 }
+
+pub fn remove_password(
+    db: &mut DB,
+    site_name: SiteName,
+    user_id: UserID,
+) -> Result<(), DBIOError> {
+
+    let remove_site = {
+        let users = match db.entry(site_name.clone()) {
+            std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::btree_map::Entry::Vacant(_) => {
+                return Err(DBIOError::SiteNotFound);
+            }
+        };
+
+        match users.entry(user_id) {
+            std::collections::hash_map::Entry::Occupied(e) => {
+                e.remove_entry();
+                users.is_empty()
+            }
+            std::collections::hash_map::Entry::Vacant(_) => {
+                return Err(DBIOError::UserNotFound);
+            }
+        }
+    };
+
+    if remove_site {
+        db.remove(&site_name);
+    }
+
+    Ok(())
+}
+
+pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: WrappedUserKey,
+) -> Result<UserPW, DBIOError> {
+
+    let users = db
+        .get(site_name)
+        .ok_or(DBIOError::SiteNotFound)?;
+
+    let encrypted_pw = users
+        .get(user_id)
+        .ok_or(DBIOError::UserNotFound)?;
+
+    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key, )
+        .map_or(Err(DBIOError::UserPWEncryptionFailed), Ok)?;
+    Ok( pw )
+}
+
+
+// pub fn prefix_range(db: &DB, input: String) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
+//     let start = format!("{}{}", input, char::MAX);
+//     let end = SiteName::from_unchecked(&start);
+//     db.range(start..end)
+// }
+
+// #[cfg(test)]
+// fn explor_db(input_site: String, db: &DB) {
+//     for (site, credentials) in prefix_range(&db, input_site) {
+//         println!("Site: {}", site.as_str());
+//         for cred in credentials {
+//             println!("  user_id: {}", cred.user_id);
+//         }
+//     }
+// }
