@@ -274,11 +274,11 @@ pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key
 }
 
 
-// pub fn prefix_range(db: &DB, input: &str) -> impl Iterator<Item = (&SiteName, &Vec<Credential>)> {
-//     let start = SiteName::from_unchecked(format!("{}{}", input, char::MAX).as_str());
-//     let end = SiteName::from_unchecked(&start.0);
-//     db.range(start..end)
-// }
+pub fn prefix_range(db: &DB, input: &str) -> impl Iterator<Item = (& SiteName, &HashMap<UserID,EncryptdUsrPW>)> {
+    let start = SiteName::from_unchecked(format!("{}{}", input, char::MAX).as_str());
+    let end = SiteName::from_unchecked(&start.0);
+    db.range(start..end)
+}
 
 // #[cfg(test)]
 // fn explor_db(input_site: String, db: &DB) {

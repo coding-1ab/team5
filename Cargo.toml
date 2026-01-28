@@ -24,5 +24,4 @@ log = "0.4.29"
 url = "2.5.8"
 
 [patch.crates-io]
-# 라이브러리 A가 내부적으로 쓰는 library_b도 로컬 경로로 강제 지정
 url = { path = "./libs/url-2.5.8" }
