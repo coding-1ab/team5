@@ -151,7 +151,7 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     };
     // }
 
-    let mut bak_file = OpenOptions::new()
+    let bak_file = OpenOptions::new()
         .create(true)
         .read(true)
         .write(true)

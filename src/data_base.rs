@@ -1,14 +1,9 @@
 use crate::user_secrets::{decrypt_user_pw, encryt_user_pw, EncryptdUsrPW, WrappedUserKey};
-use eframe::egui::TextBuffer;
-use rkyv::{Archive, Deserialize, Serialize, };
 pub use site_name::{SiteName, SiteNameError};
-use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
-use std::error::Error;
-use std::hash::BuildHasher;
 pub use user_id::{UserID, UserIDError};
 pub use user_pw::{UserPW, UserPWError};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 pub mod user_pw {
     use rkyv::{Archive, Deserialize, Serialize};
@@ -123,7 +118,7 @@ pub mod site_name {
                     format!("dummy://{}", input)
                 }
             );
-            let mut url =
+            let url =
                 Url::parse(&with_scheme)
                     .map_err(|err| SiteNameError::InvalidUrl(err.to_string()))?;
             let host = url.host_str()
