@@ -274,10 +274,10 @@ pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key
 }
 
 
-pub fn prefix_range<'d>(db: &'d DB, input: &str) -> impl Iterator<Item = (&'d SiteName, &'d HashMap<UserID,EncryptdUsrPW>)> {
+pub fn prefix_range<'d>(db: &'d mut DB, input: &str) -> impl Iterator<Item = (&'d SiteName, &'d mut HashMap<UserID,EncryptdUsrPW>)> {
     let start = SiteName::from_unchecked(format!("{}{}", input, char::MAX).as_str());
     let end = SiteName::from_unchecked(&start.0);
-    db.range(start..end)
+    db.range_mut(start..end)
 }
 
 // #[cfg(test)]
