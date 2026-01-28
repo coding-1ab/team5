@@ -7,7 +7,6 @@ edition = "2024"
 rkyv = { version = "0.8"}
 fs2 = "*"
 single-instance = "*"
-bytecheck = "0.6"
 bytemuck = "*"
 
 aes-gcm = { version = "*", features = ["zeroize"] }
@@ -19,9 +18,13 @@ sha2 = "0.10"
 zeroize = { version = "*", features = ["derive"] }
 memlock = "*"
 
-eframe = "0.33.3"
+eframe = { version = "0.33.3", optional = true }
 log = "0.4.29"
 url = "2.5.8"
 
 [patch.crates-io]
 url = { path = "./libs/url-2.5.8" }
+
+[features]
+gui = ["eframe"]
+cui = []

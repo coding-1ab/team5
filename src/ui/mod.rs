@@ -6,6 +6,7 @@
 
 use crate::data_base::DB;
 
+#[cfg(feature = "gui")]
 pub mod graphical_user_interface;
 
 struct CharacterUserInterface {
@@ -17,9 +18,9 @@ impl CharacterUserInterface {
 }
 
 struct UserInterface {
-    #[cfg(feature = "GraphicalUserInterface")]
-    graphical_user_interface: GraphicalUserInterface,
-    #[cfg(feature = "CharacterUserInterface")]
+    #[cfg(feature = "gui")]
+    graphical_user_interface: graphical_user_interface::GraphicalUserInterface,
+    #[cfg(feature = "cui")]
     character_user_interface: CharacterUserInterface
 }
 
