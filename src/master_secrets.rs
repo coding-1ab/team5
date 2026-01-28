@@ -1,36 +1,31 @@
-use sha2::Digest;
-use std::fmt::{Display, Formatter};
-use std::{mem, ptr};
-use std::io::Read;
+use crate::header::Salt;
+use crate::user_secrets::UserKey;
 use aes_gcm::{
-    Aes256Gcm, Nonce,
-    aead::{Aead, Key, KeyInit, AeadCore}
+    aead::{Aead, AeadCore, KeyInit},
+    Aes256Gcm
 };
-use rand_chacha::ChaCha20Rng;
+use argon2::password_hash::{rand_core, PasswordHasher};
+use argon2::{Argon2, ParamsBuilder};
+use ecies::PublicKey;
+use ecies::SecretKey;
+use master_pw::*;
+use rand_core::OsRng;
 // use rand::RngCore::SeedableRng;
 // use rand::rngs::OsRng;
 // use rand::RngCore;
 use rand_core::RngCore;
-use rand_core::OsRng;
-use argon2::{Argon2, ParamsBuilder};
-use argon2::password_hash::{PasswordHasher, rand_core};
-use ecies::SecretKey;
-use ecies::PublicKey;
-use ecies::utils::generate_keypair;
-use rand_xoshiro::Xoshiro256Plus;
 use rkyv::rancor::ResultExt;
-use sha2::digest::ExtendableOutput;
 use sha2::digest::generic_array::GenericArray;
+use sha2::digest::ExtendableOutput;
+use sha2::Digest;
 use sha2::Sha256;
-use zeroize::{zeroize_flat_type, Zeroize, ZeroizeOnDrop, Zeroizing};
-use crate::crypto::CryptoError;
-use crate::header::Salt;
-use master_pw::*;
-use crate::user_secrets::UserKey;
+use std::fmt::Display;
+use std::io::Read;
+use std::ptr;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod master_pw {
-    use std::fmt::Display;
-    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+    use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[derive(Debug, Clone, Eq, PartialEq)]
     pub enum MasterPWError {

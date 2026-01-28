@@ -1,14 +1,8 @@
-use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter};
-use aes_gcm::{Aes256Gcm, KeyInit};
-use aes_gcm::aead::Aead;
-use argon2::password_hash::SaltString;
-use ecies::PublicKey;
-use rkyv::{Serialize, Deserialize};
-use rkyv::rancor::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::data_base::{DB};
+use crate::data_base::DB;
 use crate::header::EncryptedDB;
+use ecies::PublicKey;
+use rkyv::rancor::Error;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CryptoError {

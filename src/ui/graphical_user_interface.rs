@@ -5,16 +5,16 @@
 
 // 흠 뭐부터 하지
 
-use std::{fs, io, collections::HashMap};
+use crate::data_base::{prefix_range, DB};
+use eframe::egui::Context;
 use eframe::{
     egui::{
         self,
         FontData
     },
-    epaint::text::{InsertFontFamily, FontPriority, FontInsert}
+    epaint::text::{FontInsert, FontPriority, InsertFontFamily}
 };
-use eframe::egui::Context;
-use crate::data_base::{prefix_range, DB};
+use std::{collections::HashMap, fs, io};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);

@@ -1,23 +1,15 @@
+use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::master_secrets::_manual_zeroize;
-use std::io::Read;
-use sysinfo::{Pid, System};
-use std::process;
-use std::string::FromUtf8Error;
-use aes_gcm::{aead, AeadCore, Aes256Gcm, KeyInit};
+use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
-use aes_gcm::aead::generic_array::sequence::GenericSequence;
+use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
 use argon2::{Argon2, ParamsBuilder};
-use eframe::egui::CursorIcon::Default;
-use eframe::egui::text_selection::visuals::paint_cursor_end;
-use rand::thread_rng;
-use rand_chacha::ChaCha20Rng;
-use rand_chacha::rand_core::SeedableRng;
-use sha2::{Sha256, Digest};
 use sha2::digest::generic_array::GenericArray;
-use zeroize::{Zeroize, Zeroizing};
-use crate::crypto::CryptoError;
-use crate::data_base::{DBIOError, SiteName, UserID, UserPW, DB};
-use crate::{data_base, header, manual_zeroize};
+use sha2::{Digest, Sha256};
+use std::process;
+use std::sync::OnceLock;
+use sysinfo::{Pid, System};
+use zeroize::Zeroize;
 
 
 /// 명시적 zeroize로 변경하기

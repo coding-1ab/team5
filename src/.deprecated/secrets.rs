@@ -1,4 +1,4 @@
-use crate::{Credential, CredentialMap, SiteName, CryptoKey256};
+use crate::{Credential, CredentialMap, CryptoKey256, SiteName};
 use aes_gcm::Error as AesError;
 use std::collections::HashMap;
 use std::fs::File;

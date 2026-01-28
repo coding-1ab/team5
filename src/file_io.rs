@@ -1,12 +1,10 @@
-use std::{error::Error, fmt::{Display, Formatter}};
+use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
 use fs2::FileExt;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
-use eframe::egui::text_selection::text_cursor_state::slice_char_range;
-use log::{error, warn};
 use sha2::{Digest, Sha256};
-use crate::header::{CiphTxtChksum, CipherTextLen, DBHeader, EncryptedDB, Nonce, Salt, HEADER_LEN};
+use std::fs::{self, OpenOptions};
+use std::io::{self, Read, Write};
+use std::path::Path;
+use std::{error::Error, fmt::{Display, Formatter}};
 
 const DB_FILE: &str = "db.bin";
 const DB_BAK_FILE: &str = "db.bin.bak";

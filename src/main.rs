@@ -10,10 +10,11 @@ fn main() -> Result<(), eframe::Error> {
         // return Ok(());
     }
     let options = eframe::NativeOptions::default();
+    Ok(())
 
-    eframe::run_native(
+    /*eframe::run_native(
         "eframe example",
         options,
         Box::new(|_cc| Ok(Box::new(team5::ui::graphical_user_interface::GraphicalUserInterface::default()))),
-    )
+    )*/
 }

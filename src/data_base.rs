@@ -1,21 +1,20 @@
+use crate::user_secrets::{decrypt_user_pw, encryt_user_pw, EncryptdUsrPW, WrappedUserKey};
+use eframe::egui::TextBuffer;
+use rkyv::{Archive, Deserialize, Serialize, };
+pub use site_name::{SiteName, SiteNameError};
 use std::borrow::Borrow;
-use std::string::String;
 use std::collections::{BTreeMap, HashMap};
-use rkyv::{Archive, Serialize, Deserialize, Archived,};
 use std::error::Error;
 use std::hash::BuildHasher;
-use eframe::egui::TextBuffer;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-pub use user_pw::{UserPW, UserPWError};
 pub use user_id::{UserID, UserIDError};
-pub use site_name::{SiteName, SiteNameError};
-use crate::user_secrets::{decrypt_user_pw, encryt_user_pw, EncryptdUsrPW, WrappedUserKey};
+pub use user_pw::{UserPW, UserPWError};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub mod user_pw {
-    use std::fmt::{Display, Formatter};
-    use std::error::Error;
     use rkyv::{Archive, Deserialize, Serialize};
-    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+    use std::error::Error;
+    use std::fmt::{Display, Formatter};
+    use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[derive(Zeroize, ZeroizeOnDrop)]
     #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd)]
@@ -49,12 +48,10 @@ pub mod user_pw {
 }
 
 pub mod user_id {
-    use std::cmp::Ordering;
-    use std::fmt::{Display, Formatter};
-    use std::error::Error;
-    use std::usize::MAX;
     use rkyv::{Archive, Deserialize, Serialize};
-    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+    use std::error::Error;
+    use std::fmt::{Display, Formatter};
+    use zeroize::{Zeroize, ZeroizeOnDrop};
 
     const MAX_USER_ID_LEN: usize = 32;
     #[derive(Zeroize, ZeroizeOnDrop)]
@@ -94,12 +91,11 @@ pub struct UserID (pub String);
 
 
 pub mod site_name {
-    use url::Url;
-    use std::fmt::{Display, Formatter};
-    use std::error::Error;
     use rkyv::{Archive, Deserialize, Serialize};
+    use std::error::Error;
+    use std::fmt::{Display, Formatter};
+    use url::Url;
     use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-    use crate::data_base::DB;
 
     #[derive(Zeroize, ZeroizeOnDrop)]
     #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd, Clone)]

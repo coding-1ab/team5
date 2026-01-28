@@ -1,7 +1,5 @@
-
-use bytemuck::{Pod, Zeroable};
-use zeroize::Zeroizing;
 use crate::file_io::FileIOError;
+use bytemuck::{Pod, Zeroable};
 
 
 const SALT_LEN: usize = 32;
