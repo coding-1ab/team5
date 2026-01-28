@@ -1,10 +1,7 @@
 use crate::header::Salt;
 use crate::user_secrets::UserKey;
-use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit},
-    Aes256Gcm
-};
-use argon2::password_hash::{rand_core, PasswordHasher};
+use aes_gcm::Aes256Gcm;
+use argon2::password_hash::rand_core;
 use argon2::{Argon2, ParamsBuilder};
 use ecies::PublicKey;
 use ecies::SecretKey;
@@ -14,15 +11,11 @@ use rand_core::OsRng;
 // use rand::rngs::OsRng;
 // use rand::RngCore;
 use rand_core::RngCore;
-use rkyv::rancor::ResultExt;
 use sha2::digest::generic_array::GenericArray;
-use sha2::digest::ExtendableOutput;
 use sha2::Digest;
 use sha2::Sha256;
-use std::fmt::Display;
-use std::io::Read;
 use std::ptr;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 mod master_pw {
     use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -135,7 +128,7 @@ pub type EciesKeyPair = Box<(PublicKey,SecretKey)>;
 
 pub fn set_master_pw(raw_new_pw: &mut str, /*todo!()*/)
                      -> Result<(), MasterPWError> {
-    let mut rng = OsRng;
+    let _rng = OsRng;
     let mut salt = Salt::default();
     let mut master_pw = MasterPW::new(raw_new_pw)?;
     raw_new_pw.zeroize();
@@ -146,7 +139,7 @@ pub fn set_master_pw(raw_new_pw: &mut str, /*todo!()*/)
             break;
         }
     }
-    let key_pair = get_ecies_keypair(&kdf_out);
+    let _key_pair = get_ecies_keypair(&kdf_out);
     kdf_out.zeroize();
 
     master_pw.zeroize();

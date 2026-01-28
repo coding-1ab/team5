@@ -9,7 +9,7 @@ fn main() -> Result<(), eframe::Error> {
         // error!("This instance is not a single.");
         // return Ok(());
     }
-    let options = eframe::NativeOptions::default();
+    let _options = eframe::NativeOptions::default();
     Ok(())
 
     /*eframe::run_native(
