@@ -20,7 +20,6 @@ sysinfo = "0.30"
 #rsa = "0.9"
 ecies = "*"
 sha2 = "0.10"
-hashbrown = "0.14"
 zeroize = { version = "*", features = ["derive"] }
 memlock = "*"
 
@@ -28,6 +27,6 @@ eframe = "0.33.3"
 log = "0.4.29"
 url = "2.5.8"
 
-[path.crate-io]
+[patch.crates-io]
 # 라이브러리 A가 내부적으로 쓰는 library_b도 로컬 경로로 강제 지정
 url = { path = "./libs/url-2.5.8" }
