@@ -1,6 +1,8 @@
+use std::borrow::Borrow;
 use crate::user_secrets::{decrypt_user_pw, encryt_user_pw, EncryptdUsrPW, WrappedUserKey};
 pub use site_name::{SiteName, SiteNameError};
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Bound;
 pub use user_id::{UserID, UserIDError};
 pub use user_pw::{UserPW, UserPWError};
 use zeroize::Zeroize;
@@ -20,7 +22,7 @@ pub mod user_pw {
         Empty,
     }
     impl UserPW {
-        fn new(input: &str) -> Result<UserPW, UserPWError> {
+        pub fn new(input: &str) -> Result<UserPW, UserPWError> {
             let trimmed = input.trim();
             if trimmed.is_empty() {
                 return Err(UserPWError::Empty);
@@ -61,7 +63,7 @@ pub struct UserID (pub String);
         // TooLong,
     }
     impl UserID {
-        fn new(input: &str) -> Result<UserID, UserIDError> {
+        pub fn new(input: &str) -> Result<UserID, UserIDError> {
             let trimmed = input.trim();
             if trimmed.is_empty() {
                 return Err(UserIDError::Empty);
@@ -167,9 +169,20 @@ pub mod site_name {
     }
     impl Error for SiteNameError {}
 }
+impl Borrow<[u8]> for SiteName {
+    #[inline]
+    fn borrow(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+impl Borrow<str> for SiteName {
+    #[inline]
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
 
 pub type DB = BTreeMap<SiteName, HashMap<UserID, EncryptdUsrPW>>;
-
 
 #[derive(Debug)]
 pub enum DBIOError {
@@ -181,7 +194,7 @@ pub enum DBIOError {
     InvalidSession, // 호출될 시 DB 저장 후 프로그램 종료
 }
 
-pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: WrappedUserKey)
+pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
                     -> Result<(), DBIOError> {
     let encryted_pw= encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
@@ -200,7 +213,7 @@ pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: 
 
 }
 
-pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: WrappedUserKey, )
+pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey, )
     -> Result<(), DBIOError> {
     let encrypted = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 
@@ -225,11 +238,8 @@ pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw
     }
 }
 
-pub fn remove_password(
-    db: &mut DB,
-    site_name: SiteName,
-    user_id: UserID,
-) -> Result<(), DBIOError> {
+pub fn remove_password(db: &mut DB, site_name: SiteName, user_id: UserID, )
+    -> Result<(), DBIOError> {
 
     let remove_site = {
         let users = match db.entry(site_name.clone()) {
@@ -257,7 +267,7 @@ pub fn remove_password(
     Ok(())
 }
 
-pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: WrappedUserKey,
+pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey,
 ) -> Result<UserPW, DBIOError> {
 
     let users = db
@@ -274,18 +284,24 @@ pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key
 }
 
 
-pub fn prefix_range<'d>(db: &'d mut DB, input: &str) -> impl Iterator<Item = (&'d SiteName, &'d mut HashMap<UserID,EncryptdUsrPW>)> {
-    let start = SiteName::from_unchecked(format!("{}{}", input, char::MAX).as_str());
-    let end = SiteName::from_unchecked(&start.0);
-    db.range_mut(start..end)
+pub fn prefix_range<'d>(db: &'d DB, prefix: &str, )
+    -> impl Iterator<Item = (&'d SiteName, &'d HashMap<UserID, EncryptdUsrPW>)> {
+    let prefix_bytes = prefix.as_bytes();
+
+    db.range::<[u8], _>((
+        Bound::Included(prefix_bytes),
+        Bound::Unbounded,
+    ))
+        .take_while(move |(k, _)| k.0.as_bytes().starts_with(prefix_bytes))
 }
 
-// #[cfg(test)]
-// fn explor_db(input_site: String, db: &DB) {
-//     for (site, credentials) in prefix_range(&db, input_site) {
-//         println!("Site: {}", site.as_str());
-//         for cred in credentials {
-//             println!("  user_id: {}", cred.user_id);
-//         }
-//     }
-// }
+
+pub fn explor_db(db: &mut DB, input_site: &str, wrapped_key: &WrappedUserKey) {
+    let range =  prefix_range(db, input_site);
+    for (site, credentials) in range {
+        println!("Site: {}", site.0.as_str());
+        for cred in credentials {
+            println!("  user_id: {:?}, password: {:?}", cred, get_password(db, &site, &cred.0, &wrapped_key).unwrap());
+        }
+    }
+}

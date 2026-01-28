@@ -133,8 +133,7 @@ pub fn encryt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key
     let mut user_key = unsafe{ unwrap_user_key(&wrapped_key)? };
     let cipher = Aes256Gcm::new_from_slice(user_key.as_slice())
         .map_err(|_| DBIOError::InvalidSession)?;
-    let ciphertext =
-        cipher
+    let ciphertext = cipher
             .encrypt(aes_gcm::Nonce::from_slice(nonce.as_slice()), user_pw.0.as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
     user_key.zeroize();

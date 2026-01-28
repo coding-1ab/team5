@@ -1,4 +1,4 @@
-use crate::header::Salt;
+use crate::header::{EncryptedDB as OtherEncryptedDB, Salt};
 use crate::user_secrets::{wrap_user_key, UserKey, WrappedUserKey};
 use aes_gcm::Aes256Gcm;
 use argon2::password_hash::rand_core;
@@ -15,17 +15,23 @@ use sha2::digest::generic_array::GenericArray;
 use sha2::Digest;
 use sha2::Sha256;
 use std::ptr;
+use rkyv::rancor::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+use crate::data_base::DB;
 
-mod master_pw {
+pub mod master_pw {
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[derive(Debug, Clone, Eq, PartialEq)]
     pub enum MasterPWError {
+        // 생성
         Empty,
         TooShort,
         TooLong,
         NonAscii,
+
+        // 로그인
+        IncorrectPW
     }
 
     // const MAX_MASTER_PW_LEN: usize = 32;
@@ -102,8 +108,7 @@ macro_rules! manual_zeroize {
 }
 
 #[inline]
-fn master_pw_kdf(master_pw: &MasterPW, salt: &mut Salt, kdf_out: &mut [u8]) -> () {
-    OsRng.fill_bytes(salt.as_mut_slice());
+fn master_pw_kdf(master_pw: &MasterPW, mut salt: Salt, kdf_out: &mut [u8]) -> () {
     salt[5]=5; salt[10]=10; salt[15]=15; salt[20]=20; salt[25]=25; salt[30]=30;
     for (t, s) in salt.iter_mut().zip(master_pw.as_bytes().iter()) {
         *t ^= *s;
@@ -121,48 +126,77 @@ fn master_pw_kdf(master_pw: &MasterPW, salt: &mut Salt, kdf_out: &mut [u8]) -> (
     );
     argon2.hash_password_into(master_pw.as_bytes(), salt.as_slice(), kdf_out.as_mut())
         .unwrap();
+    salt.zeroize();
 }
 
-// #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EciesKeyPair {pub pk: Box<PublicKey>, pub sk: Box<SecretKey>}
 impl EciesKeyPair {
     pub fn new(pk: PublicKey, sk: SecretKey) -> EciesKeyPair {
         EciesKeyPair{ pk: Box::new(pk), sk: Box::new(sk) }
     }
-    pub fn void() -> EciesKeyPair {
-        Self {
-            pk: Box::new( PublicKey::parse_slice(&[0u8;65], None).unwrap()),
-            sk: Box::new(SecretKey::parse_slice(&[0u8;32]).unwrap()),
-        }
-    }
+}
+pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterPWError> {
+    let sk = SecretKey::parse(&kdf_key)
+        .map_err(|_| MasterPWError::IncorrectPW)?;
+    let pk = PublicKey::from_secret_key(&sk);
+    Ok(  EciesKeyPair::new(pk, sk) )
 }
 
-pub fn set_master_pw(mut raw_new_pw: String, /*todo!()*/)
-                     -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
+pub fn check_master_pw_and_login(mut raw_pw: String, mut salt: Salt)
+                                 -> Result<(EciesKeyPair, WrappedUserKey), MasterPWError> {
+    let mut master_pw = MasterPW::new(&raw_pw)?;
+    raw_pw.zeroize();
+    let mut kdf_out = MasterKdfKey::default();
+    master_pw_kdf(&master_pw, salt, &mut kdf_out);
+    let ecies_key_pair = get_ecies_keypair(&kdf_out)?;
+    let user_key = get_user_key(&master_pw, &kdf_out);
+    let wrapped_user_key = unsafe{ wrap_user_key(user_key)
+        .map_err(|_| MasterPWError::IncorrectPW)? };
+    kdf_out.zeroize();
+    master_pw.zeroize();
+    salt.zeroize();
+    Ok( (ecies_key_pair, wrapped_user_key) )
+}
+pub fn set_master_pw_and_1st_login(mut raw_new_pw: String)
+                                   -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
     let mut salt = Salt::default();
     let mut master_pw = MasterPW::new(&raw_new_pw)?;
     raw_new_pw.zeroize();
     let mut kdf_out = MasterKdfKey::default();
     loop {
-        master_pw_kdf(&master_pw, &mut salt, &mut kdf_out);
+        OsRng.fill_bytes(salt.as_mut_slice());
+        master_pw_kdf(&master_pw, salt, &mut kdf_out);
         if is_valid_ecies_key(kdf_out.as_ref()) {
             break;
         }
     }
-    let ecies_key_pair = get_ecies_keypair(&kdf_out);
+    let ecies_key_pair = get_ecies_keypair(&kdf_out).ok().unwrap();
     let user_key = get_user_key(&master_pw, &kdf_out);
     let wrapped_user_key = unsafe{ wrap_user_key(user_key).unwrap() };
     kdf_out.zeroize();
     master_pw.zeroize();
-    Ok( (ecies_key_pair?, salt, wrapped_user_key) )
+    Ok( (ecies_key_pair, salt, wrapped_user_key) )
 }
-
-pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterPWError> {
-    let sk = SecretKey::parse(&kdf_key).unwrap();
-    let pk = PublicKey::from_secret_key(&sk);
-    Ok(  EciesKeyPair::new(pk, sk) )
-}
-
+// pub fn change_master_pw(mut raw_new_pw: String)
+//                         -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
+//     let mut salt = Salt::default();
+//     let mut master_pw = MasterPW::new(&raw_new_pw)?;
+//     raw_new_pw.zeroize();
+//     let mut kdf_out = MasterKdfKey::default();
+//     loop {
+//         OsRng.fill_bytes(salt.as_mut_slice());
+//         master_pw_kdf(&master_pw, salt, &mut kdf_out);
+//         if is_valid_ecies_key(kdf_out.as_ref()) {
+//             break;
+//         }
+//     }
+//     let ecies_key_pair = get_ecies_keypair(&kdf_out).ok().unwrap();
+//     let user_key = get_user_key(&master_pw, &kdf_out);
+//     let wrapped_user_key = unsafe{ wrap_user_key(user_key).unwrap() };
+//     kdf_out.zeroize();
+//     master_pw.zeroize();
+//     Ok( (ecies_key_pair, salt, wrapped_user_key) )
+// }
 pub fn get_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> UserKey {
     let mut hasher1 = Sha256::new();
     hasher1.update(master_pw.as_bytes());
@@ -176,4 +210,25 @@ pub fn get_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> UserKey {
     hasher2.finalize_into(GenericArray::from_mut_slice(result.as_mut_slice()));
     tmp.zeroize();
     result
+}
+
+pub type EncryptedDB = Vec<u8>;
+
+pub fn encrypt_db(db: &DB, pk: &mut Box<PublicKey>,)
+                  -> Result<EncryptedDB, MasterPWError> {
+    let serialized = rkyv::to_bytes::<Error>(db).unwrap();
+    let encrypted = ecies::encrypt(&pk.serialize(), &serialized).unwrap();
+
+    Ok( encrypted )
+}
+
+pub fn decrypt_db(bytes: &[u8], mut sk: Box<SecretKey>,
+) -> Result<DB, MasterPWError> {
+    let mut decrypted = ecies::decrypt(&bytes, &sk.serialize())
+        .map_err(|_| MasterPWError::IncorrectPW)?;
+    manual_zeroize!(*sk);
+    let db = rkyv::from_bytes::<DB, Error>(&decrypted).unwrap();
+    decrypted.zeroize();
+
+    Ok( db )
 }
