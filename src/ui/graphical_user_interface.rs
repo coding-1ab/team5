@@ -5,16 +5,16 @@
 
 // 흠 뭐부터 하지
 
-use crate::data_base::{prefix_range, DB};
-use eframe::egui::Context;
+use std::{fs, io, collections::HashMap};
 use eframe::{
     egui::{
         self,
         FontData
     },
-    epaint::text::{FontInsert, FontPriority, InsertFontFamily}
+    epaint::text::{InsertFontFamily, FontPriority, FontInsert}
 };
-use std::{collections::HashMap, fs, io};
+use eframe::egui::Context;
+//use crate::data_base::{prefix_range, DB};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
@@ -48,14 +48,11 @@ impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
 pub struct GraphicalUserInterface {
     first_run: bool,
     font_load_list: FontLoadList,
-    load_malgun_gothic_font: bool,
-    load_nanum_gothic_font: bool,
-    try_load_count_malgun_gothic_font: i64,
-    try_load_count_nanum_gothic_font: i64,
     login: bool,
     id: String,
     password: String,
-    data_base: DB,
+    re_check_password: String,
+    //data_base: DB,
     window_open_list: WindowOpenList,
     output: String,
 }
@@ -77,9 +74,11 @@ impl<const N: usize> FontType<N> for &'static [u8; N] {
 }
 
 impl GraphicalUserInterface {
+    /*
     pub fn setting_database(&mut self, data_base: DB) {
         self.data_base = data_base;
     }
+    */
 
     fn font_load<const N: usize, T, F>(&mut self, context: &Context, name: &'static str, font_load_function: F, insert_font_family: InsertFontFamily) -> Result<(), io::Error>
     where
@@ -129,14 +128,11 @@ impl Default for GraphicalUserInterface {
         Self {
             first_run: true,
             font_load_list: FontLoadList::default(),
-            load_malgun_gothic_font: false,
-            load_nanum_gothic_font: false,
-            try_load_count_malgun_gothic_font: 0,
-            try_load_count_nanum_gothic_font: 0,
             login: false,
             id: String::new(),
             password: String::new(),
-            data_base: Default::default(),
+            re_check_password: String::new(),
+            //data_base: Default::default(),
             window_open_list: Default::default(),
             output: String::new()
         }
@@ -185,13 +181,17 @@ impl eframe::App for GraphicalUserInterface {
                         });
                         ui.horizontal(|ui| {
                             ui.label("master password");
-                            ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                            ui.add(egui::TextEdit::singleline(&mut self.re_check_password).password(true));
                         });
                         let login_button = ui.button("로그인");
                         if login_button.hovered() {
                             ui.label("asdf");
                         }
                         if login_button.clicked() {
+                            if self.password != self.re_check_password {
+                                ui.label("invalid password");
+                                return;
+                            }
                             println!("login_click");
 
                             // todo
@@ -217,7 +217,7 @@ impl eframe::App for GraphicalUserInterface {
         if self.login {
             egui::CentralPanel::default().show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    prefix_range(&self.data_base, todo!())
+                    //prefix_range(&self.data_base, todo!())
                 });
 
                 if ui.button("Submit").clicked() {

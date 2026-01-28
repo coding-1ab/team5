@@ -4,7 +4,7 @@
 
 // 흠 뭐부터 하지
 
-use crate::credential::DB;
+use crate::data_base::DB;
 
 pub mod graphical_user_interface;
 
