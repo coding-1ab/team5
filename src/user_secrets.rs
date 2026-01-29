@@ -16,7 +16,7 @@ use zeroize::Zeroize;
 /// 종료전 유효성 검사
 pub const MAX_USER_PW_LEN: usize = 32;
 pub type EncryptdUsrPW = Vec<u8>;
-pub type UserPWNonce = Box<[u8; 32]>;
+pub type UserPWNonce = Box<[u8; 12]>;
 pub type UserKeyWrapper = Box<[u8; 32]>;
 pub type WrappedUserKey = Vec<u8>;
 pub type UserKey = Box<[u8; 32]>;
@@ -38,7 +38,7 @@ fn get_system_identity() -> UserKeyWrapper {
     let mut kernel_version = System::kernel_version().unwrap_or_else(|| "?\"$unknown".into());
     let mut total_memory = sys.total_memory();
     let mut total_processors = sys.physical_core_count();
-
+    
     let mut hasher = Sha256::new();
     hasher.update(&s_pid.as_u32().to_le_bytes());
     hasher.update(&ppid.to_le_bytes());
@@ -70,6 +70,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
         .m_cost(16384) // 16MB 지정 (KB 단위)
         .t_cost(3)     // 반복 횟수
         .p_cost(3)     // 병렬 처리 수준
+        .output_len(12)
         .build()
         .unwrap();
     let argon2 = Argon2::new(
