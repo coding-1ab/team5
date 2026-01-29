@@ -301,7 +301,7 @@ pub fn explor_db(db: &mut DB, input_site: &str, wrapped_key: &WrappedUserKey) {
     for (site, credentials) in range {
         println!("Site: {}", site.0.as_str());
         for cred in credentials {
-            println!("  user_id: {:?}, password: {:?}", cred, get_password(db, &site, &cred.0, &wrapped_key).unwrap());
+            println!("  user_id: {:?}, password: {:?}", cred, get_password(db, &site, &cred.0, &wrapped_key).expect_err("Error when getting password"));
         }
     }
 }

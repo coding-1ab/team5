@@ -100,7 +100,7 @@ pub mod tests {
         add_password(&mut db,
                      SiteName::new("www.123.com").unwrap(),
                      UserID::new("id1111").unwrap(), UserPW::new("pw123").unwrap(),
-                     &wrapped_user_key).unwrap();
+                     &wrapped_user_key).expect_err("Error when adding password");
         add_password(&mut db,
                      SiteName::new("www.123.com").unwrap(),
                      UserID::new("id2222").unwrap(), UserPW::new("pw456").unwrap(),
