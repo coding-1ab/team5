@@ -1,8 +1,8 @@
-use std::borrow::Borrow;
-use crate::user_secrets::{decrypt_user_pw, encryt_user_pw, EncryptdUsrPW, WrappedUserKey};
+use crate::user_secrets::{EncryptdUsrPW, WrappedUserKey, decrypt_user_pw, encryt_user_pw};
 pub use site_name::{SiteName, SiteNameError};
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
-use std::ops::Bound;
+use std::ops::{Bound, RangeFrom};
 pub use user_id::{UserID, UserIDError};
 pub use user_pw::{UserPW, UserPWError};
 use zeroize::Zeroize;
@@ -13,10 +13,20 @@ pub mod user_pw {
     use std::fmt::{Display, Formatter};
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
-    #[derive(Zeroize, ZeroizeOnDrop)]
-    #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd)]
+    #[derive(
+        Zeroize,
+        ZeroizeOnDrop,
+        Archive,
+        Serialize,
+        Deserialize,
+        PartialEq,
+        Eq,
+        Debug,
+        Ord,
+        PartialOrd,
+    )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
-    pub struct UserPW (pub String);
+    pub struct UserPW(pub String);
     #[derive(Debug)]
     pub enum UserPWError {
         Empty,
@@ -28,10 +38,12 @@ pub mod user_pw {
                 return Err(UserPWError::Empty);
             }
 
-            Ok( Self {0: trimmed.to_string()} )
+            Ok(Self {
+                0: trimmed.to_string(),
+            })
         }
         pub(crate) fn void() -> Self {
-            Self {0: String::new()}
+            Self { 0: String::new() }
         }
     }
     impl Display for UserPWError {
@@ -51,11 +63,21 @@ pub mod user_id {
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
     const MAX_USER_ID_LEN: usize = 32;
-    #[derive(Zeroize, ZeroizeOnDrop)]
-    #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd)]
+    #[derive(
+        Zeroize,
+        ZeroizeOnDrop,
+        Archive,
+        Serialize,
+        Deserialize,
+        PartialEq,
+        Eq,
+        Debug,
+        Ord,
+        PartialOrd,
+    )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
     #[derive(Hash)]
-pub struct UserID (pub String);
+    pub struct UserID(pub String);
 
     #[derive(Debug)]
     pub enum UserIDError {
@@ -72,7 +94,9 @@ pub struct UserID (pub String);
             //     return Err(UserIDError::TooLong);
             // }
 
-            Ok( Self { 0: trimmed.to_string() } )
+            Ok(Self {
+                0: trimmed.to_string(),
+            })
         }
     }
     impl Display for UserIDError {
@@ -86,7 +110,6 @@ pub struct UserID (pub String);
     impl Error for UserIDError {}
 }
 
-
 pub mod site_name {
     use rkyv::{Archive, Deserialize, Serialize};
     use std::error::Error;
@@ -94,10 +117,21 @@ pub mod site_name {
     use url::Url;
     use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-    #[derive(Zeroize, ZeroizeOnDrop)]
-    #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd, Clone)]
+    #[derive(
+        Zeroize,
+        ZeroizeOnDrop,
+        Archive,
+        Serialize,
+        Deserialize,
+        PartialEq,
+        Eq,
+        Debug,
+        Ord,
+        PartialOrd,
+        Clone,
+    )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
-    pub struct SiteName (pub String);
+    pub struct SiteName(pub String);
     #[derive(Debug)]
     pub enum SiteNameError {
         Empty,
@@ -113,18 +147,14 @@ pub mod site_name {
             if input.chars().any(|c| c.is_whitespace()) {
                 Err(SiteNameError::ContainsWhitespace)?;
             }
-            let with_scheme = Zeroizing::new(
-                if input.contains("://") {
-                    input.to_string()
-                } else {
-                    format!("dummy://{}", input)
-                }
-            );
-            let url =
-                Url::parse(&with_scheme)
-                    .map_err(|err| SiteNameError::InvalidUrl(err.to_string()))?;
-            let host = url.host_str()
-                .ok_or(SiteNameError::InvalidHost)?;
+            let with_scheme = Zeroizing::new(if input.contains("://") {
+                input.to_string()
+            } else {
+                format!("dummy://{}", input)
+            });
+            let url = Url::parse(&with_scheme)
+                .map_err(|err| SiteNameError::InvalidUrl(err.to_string()))?;
+            let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
             let mut normalized = String::new();
             normalized.reserve_exact(input.trim().len());
             normalized.push_str(host);
@@ -143,10 +173,12 @@ pub mod site_name {
                 normalized.push('#');
                 normalized.push_str(f);
             }
-            Ok( Self {0: normalized} )
+            Ok(Self { 0: normalized })
         }
         pub fn from_unchecked(input: &str) -> SiteName {
-            Self {0: input.trim().to_string().to_lowercase()}
+            Self {
+                0: input.trim().to_string().to_lowercase(),
+            }
         }
     }
     impl Display for SiteNameError {
@@ -194,27 +226,33 @@ pub enum DBIOError {
     InvalidSession,
 }
 
-pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
-                    -> Result<(), DBIOError> {
-    let encryted_pw= encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
+pub fn add_password(
+    db: &mut DB,
+    site_name: SiteName,
+    user_id: UserID,
+    user_pw: UserPW,
+    wrapped_key: &WrappedUserKey,
+) -> Result<(), DBIOError> {
+    let encryted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
-    let users
-        = db.entry(site_name).or_insert_with(HashMap::new);
+    let users = db.entry(site_name).or_insert_with(HashMap::new);
 
     match users.entry(user_id) {
         std::collections::hash_map::Entry::Vacant(e) => {
             e.insert(encryted_pw);
-            Ok( () )
+            Ok(())
         }
-        std::collections::hash_map::Entry::Occupied(_) => {
-            Err(DBIOError::UserAlreadyExists)
-        }
+        std::collections::hash_map::Entry::Occupied(_) => Err(DBIOError::UserAlreadyExists),
     }
-
 }
 
-pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey, )
-    -> Result<(), DBIOError> {
+pub fn change_password(
+    db: &mut DB,
+    site_name: SiteName,
+    user_id: UserID,
+    new_pw: UserPW,
+    wrapped_key: &WrappedUserKey,
+) -> Result<(), DBIOError> {
     let encrypted = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 
     let users = match db.entry(site_name) {
@@ -232,15 +270,11 @@ pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw
             *pw = encrypted;
             Ok(())
         }
-        std::collections::hash_map::Entry::Vacant(_) => {
-            Err(DBIOError::UserNotFound)
-        }
+        std::collections::hash_map::Entry::Vacant(_) => Err(DBIOError::UserNotFound),
     }
 }
 
-pub fn remove_password(db: &mut DB, site_name: SiteName, user_id: UserID, )
-    -> Result<(), DBIOError> {
-
+pub fn remove_password(db: &mut DB, site_name: SiteName, user_id: UserID) -> Result<(), DBIOError> {
     let remove_site = {
         let users = match db.entry(site_name.clone()) {
             std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
@@ -267,32 +301,27 @@ pub fn remove_password(db: &mut DB, site_name: SiteName, user_id: UserID, )
     Ok(())
 }
 
-pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey,
+pub fn get_password(
+    db: &DB,
+    site_name: &SiteName,
+    user_id: &UserID,
+    wrapped_key: &WrappedUserKey,
 ) -> Result<UserPW, DBIOError> {
+    let users = db.get(site_name).ok_or(DBIOError::SiteNotFound)?;
 
-    let users = db
-        .get(site_name)
-        .ok_or(DBIOError::SiteNotFound)?;
+    let encrypted_pw = users.get(user_id).ok_or(DBIOError::UserNotFound)?;
 
-    let encrypted_pw = users
-        .get(user_id)
-        .ok_or(DBIOError::UserNotFound)?;
-
-    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key, )
+    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key)
         .map_or(Err(DBIOError::UserPWEncryptionFailed), Ok)?;
-    Ok( pw )
+    Ok(pw)
 }
 
-
-pub fn prefix_range(db: &DB, prefix: String, )
-                    -> impl Iterator<Item=(&SiteName, &HashMap<UserID, EncryptdUsrPW>)> {
-    let prefix_bytes = prefix.into_bytes();
-
-    db.range::<[u8], _>((
-        Bound::Included(prefix_bytes.clone()),
-        Bound::Unbounded,
-    ))
-        .take_while(move |(k, _)| k.0.as_bytes().starts_with(&*prefix_bytes))
+pub fn prefix_range(
+    db: &DB,
+    prefix: String,
+) -> impl Iterator<Item=(&SiteName, &HashMap<UserID, EncryptdUsrPW>)> {
+    let site_name = SiteName(prefix.clone());
+    db.range(site_name..).filter(move |(name, _)| name.0.starts_with(&prefix))
 }
 
 
@@ -301,7 +330,35 @@ pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) 
     for (site, credentials) in range {
         println!("Site: {}\n", site.0.as_str());
         for cred in credentials {
-            println!("  user_id: {:?}\n  password: {:?}\n", &cred.0, get_password(db, &site, &cred.0, &wrapped_key).ok());
+            println!(
+                "  user_id: {:?}\n  password: {:?}\n",
+                &cred.0,
+                get_password(db, &site, &cred.0, &wrapped_key).ok()
+            );
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use crate::data_base::{prefix_range, SiteName, DB};
+
+    #[test]
+    fn test_range() {
+        let mut db = DB::new();
+        db.insert(SiteName::new("naver.com").unwrap(), HashMap::new());
+        db.insert(SiteName::new("daum.net").unwrap(), HashMap::new());
+        db.insert(SiteName::new("google.com").unwrap(), HashMap::new());
+        db.insert(SiteName::new("youtube.com").unwrap(), HashMap::new());
+
+        let mut detected = vec![];
+
+        prefix_range(&db, "g".to_string()).for_each(|(name, _)| {
+            detected.push(name.clone());
+        });
+
+        assert_eq!(detected.len(), 1);
+        assert_eq!(detected.drain(..).next().unwrap(), SiteName::new("google.com").unwrap());
     }
 }
