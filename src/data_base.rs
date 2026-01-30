@@ -191,7 +191,7 @@ pub enum DBIOError {
     UserAlreadyExists,
     UserPWEncryptionFailed,
     UserPWDecryptionFailed,
-    InvalidSession, // 호출될 시 DB 저장 후 프로그램 종료
+    InvalidSession,
 }
 
 pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
@@ -301,7 +301,7 @@ pub fn explor_db(db: &mut DB, input_site: &str, wrapped_key: &WrappedUserKey) {
     for (site, credentials) in range {
         println!("Site: {}", site.0.as_str());
         for cred in credentials {
-            println!("  user_id: {:?}, password: {:?}", cred, get_password(db, &site, &cred.0, &wrapped_key).expect_err("Error when getting password"));
+            println!("  user_id: {:?}\n  password: {:?}\n", &cred.0, get_password(db, &site, &cred.0, &wrapped_key).ok());
         }
     }
 }

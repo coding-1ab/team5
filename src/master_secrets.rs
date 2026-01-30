@@ -149,9 +149,7 @@ pub fn check_master_pw_and_login(mut raw_pw: String, mut salt: Salt)
     let mut kdf_out = MasterKdfKey::default();
     master_pw_kdf(&master_pw, salt, &mut kdf_out);
     let ecies_key_pair = get_ecies_keypair(&kdf_out)?;
-    let user_key = get_user_key(&master_pw, &kdf_out);
-    let wrapped_user_key = unsafe{ wrap_user_key(user_key)
-        .map_err(|_| MasterPWError::IncorrectPW)? };
+    let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
     kdf_out.zeroize();
     master_pw.zeroize();
     salt.zeroize();
@@ -171,8 +169,7 @@ pub fn set_master_pw_and_1st_login(mut raw_new_pw: String)
         }
     }
     let ecies_key_pair = get_ecies_keypair(&kdf_out).ok().unwrap();
-    let user_key = get_user_key(&master_pw, &kdf_out);
-    let wrapped_user_key = unsafe{ wrap_user_key(user_key).unwrap() };
+    let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
     kdf_out.zeroize();
     master_pw.zeroize();
     Ok( (ecies_key_pair, salt, wrapped_user_key) )
@@ -191,13 +188,12 @@ pub fn set_master_pw_and_1st_login(mut raw_new_pw: String)
 //         }
 //     }
 //     let ecies_key_pair = get_ecies_keypair(&kdf_out).ok().unwrap();
-//     let user_key = get_user_key(&master_pw, &kdf_out);
-//     let wrapped_user_key = unsafe{ wrap_user_key(user_key).unwrap() };
+//     let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
 //     kdf_out.zeroize();
 //     master_pw.zeroize();
 //     Ok( (ecies_key_pair, salt, wrapped_user_key) )
 // }
-pub fn get_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> UserKey {
+pub fn get_wrapped_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> WrappedUserKey {
     let mut hasher1 = Sha256::new();
     hasher1.update(master_pw.as_bytes());
     let mut hasher2 = hasher1.clone();
@@ -206,10 +202,11 @@ pub fn get_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> UserKey {
     hasher2.update(&kdf_key);
     hasher2.update(&tmp);
     hasher2.update(&tmp);
-    let mut result = UserKey::default();
-    hasher2.finalize_into(GenericArray::from_mut_slice(result.as_mut_slice()));
+    let mut user_key = UserKey::default();
+    hasher2.finalize_into(GenericArray::from_mut_slice(user_key.as_mut_slice()));
     tmp.zeroize();
-    result
+    let wrapped_user_key = wrap_user_key(user_key).unwrap();
+    wrapped_user_key
 }
 
 pub type EncryptedDB = Vec<u8>;

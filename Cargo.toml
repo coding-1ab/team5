@@ -17,8 +17,8 @@ ecies = "*"
 sha2 = "0.10"
 zeroize = { version = "*", features = ["derive"] }
 memlock = "*"
-#openssl = { version = "0.10", features = ["vendored"] }
-
+#reqwest = "*"
+openssl = { version = "*", features = ["vendored"] }
 eframe = { version = "0.33.3", optional = true }
 log = "0.4.29"
 url = "2.5.8"
