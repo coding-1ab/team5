@@ -26,7 +26,8 @@ pub mod user_pw {
         PartialOrd,
     )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
-    pub struct UserPW(pub String);
+    pub struct UserPW(String);
+
     #[derive(Debug)]
     pub enum UserPWError {
         Empty,
@@ -42,8 +43,14 @@ pub mod user_pw {
                 0: trimmed.to_string(),
             })
         }
-        pub(crate) fn void() -> Self {
+        pub fn from_uncheched(input: String) -> Self {
+            Self {0: input}
+        }
+        pub fn void() -> Self {
             Self { 0: String::new() }
+        }
+        pub fn as_str(&self) -> &str {
+            self.0.as_str()
         }
     }
     impl Display for UserPWError {
@@ -77,7 +84,7 @@ pub mod user_id {
     )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
     #[derive(Hash)]
-    pub struct UserID(pub String);
+    pub struct UserID(String);
 
     #[derive(Debug)]
     pub enum UserIDError {
@@ -97,6 +104,9 @@ pub mod user_id {
             Ok(Self {
                 0: trimmed.to_string(),
             })
+        }
+        pub fn as_str(&self) -> &str {
+            self.0.as_str()
         }
     }
     impl Display for UserIDError {
@@ -131,7 +141,7 @@ pub mod site_name {
         Clone,
     )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
-    pub struct SiteName(pub String);
+    pub struct SiteName(String);
     #[derive(Debug)]
     pub enum SiteNameError {
         Empty,
@@ -180,6 +190,9 @@ pub mod site_name {
                 0: input.trim().to_string().to_lowercase(),
             }
         }
+        pub fn as_str(&self) -> &str {
+            self.0.as_str()
+        }
     }
     impl Display for SiteNameError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -204,13 +217,13 @@ pub mod site_name {
 impl Borrow<[u8]> for SiteName {
     #[inline]
     fn borrow(&self) -> &[u8] {
-        self.0.as_bytes()
+        self.as_str().as_bytes()
     }
 }
 impl Borrow<str> for SiteName {
     #[inline]
     fn borrow(&self) -> &str {
-        &self.0
+        &self.as_str()
     }
 }
 
@@ -226,13 +239,18 @@ pub enum DBIOError {
     InvalidSession,
 }
 
-pub fn add_password(
-    db: &mut DB,
-    site_name: SiteName,
-    user_id: UserID,
-    user_pw: UserPW,
-    wrapped_key: &WrappedUserKey,
-) -> Result<(), DBIOError> {
+pub fn zeroize_db(db: &mut DB) {
+    for (_site, users) in db.iter_mut() {
+        for (_id, pw) in users.iter_mut() {
+            pw.zeroize();
+        }
+        users.clear();
+    }
+    db.clear();
+}
+
+pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
+    -> Result<(), DBIOError> {
     let encryted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
     let users = db.entry(site_name).or_insert_with(HashMap::new);
@@ -246,13 +264,8 @@ pub fn add_password(
     }
 }
 
-pub fn change_password(
-    db: &mut DB,
-    site_name: SiteName,
-    user_id: UserID,
-    new_pw: UserPW,
-    wrapped_key: &WrappedUserKey,
-) -> Result<(), DBIOError> {
+pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey) 
+    -> Result<(), DBIOError> {
     let encrypted = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 
     let users = match db.entry(site_name) {
@@ -301,12 +314,8 @@ pub fn remove_password(db: &mut DB, site_name: SiteName, user_id: UserID) -> Res
     Ok(())
 }
 
-pub fn get_password(
-    db: &DB,
-    site_name: &SiteName,
-    user_id: &UserID,
-    wrapped_key: &WrappedUserKey,
-) -> Result<UserPW, DBIOError> {
+pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey)
+    -> Result<UserPW, DBIOError> {
     let users = db.get(site_name).ok_or(DBIOError::SiteNotFound)?;
 
     let encrypted_pw = users.get(user_id).ok_or(DBIOError::UserNotFound)?;
@@ -320,15 +329,15 @@ pub fn prefix_range(
     db: &DB,
     prefix: String,
 ) -> impl Iterator<Item=(&SiteName, &HashMap<UserID, EncryptdUsrPW>)> {
-    let site_name = SiteName(prefix.clone());
-    db.range(site_name..).take_while(move |(name, _)| name.0.starts_with(&prefix))
+    let site_name = SiteName::from_unchecked(prefix.as_str());
+    db.range(site_name..).take_while(move |(name, _)| name.as_str().starts_with(&prefix))
 }
 
 
 pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) {
     let range =  prefix_range(db, input_site);
     for (site, credentials) in range {
-        println!("Site: {}\n", site.0.as_str());
+        println!("Site: {}\n", site.as_str());
         for cred in credentials {
             println!(
                 "  user_id: {:?}\n  password: {:?}\n",

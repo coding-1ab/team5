@@ -26,12 +26,12 @@ fn main() {
 // #[cfg(test)]
 pub mod tests {
     use std::collections::{HashMap, VecDeque};
-    use eframe::egui::accesskit::Role::Marquee;
-    use eframe::egui::CursorIcon::Default;
+    // use eframe::egui::accesskit::Role::Marquee;
+    // use eframe::egui::CursorIcon::Default;
     use rkyv::rancor::ResultExt;
     use zeroize::Zeroize;
     use team5::master_secrets::{_manual_zeroize, decrypt_db, encrypt_db, set_master_pw_and_1st_login};
-    use team5::data_base::{add_password, explor_db, prefix_range, DBIOError, SiteName, UserID, UserPW, DB};
+    use team5::data_base::{add_password, explor_db, prefix_range, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
     use team5::file_io::{load_db, save_db, FileIOWarn};
     use team5::header::Salt;
     use team5::manual_zeroize;
@@ -101,18 +101,7 @@ pub mod tests {
                 break;
             }
         }
-        ///////////////////
-        // add_password(&mut db,
-        //              SiteName::new("www.123.com").unwrap(),
-        //              UserID::new("id1111").unwrap(), UserPW::new("pw123").unwrap(),
-        //              &wrapped_user_key).unwrap();
-        // add_password(&mut db,
-        //              SiteName::new("www.123.com").unwrap(),
-        //              UserID::new("id2222").unwrap(), UserPW::new("pw456").unwrap(),
-        //              &wrapped_user_key).unwrap();
-        // loop {
-        //     explor_db(&mut db, "www.123.com", &wrapped_user_key);
-        // }
+        
         loop {
             let resuest = UserRequst::ExitAppWithSave; // 버튼 입력 대기, Exit는 임시값
             let result: _ =  match resuest {
@@ -166,12 +155,14 @@ pub mod tests {
                         // 에러 e 표시
                         continue;
                     }
-                    // db.zeroize(); //todo zeroize_db() 구현하기
+                    zeroize_db(&mut db);
+                    drop(db);
                     break;
                 }
-                UserRequst::ExitAppNotSave => {
+                UserRequst::ExitAppWithoutSave => {
                     manual_zeroize!(ecies_key_salt, wrapped_user_key);
-                    // db.zeroize();
+                    zeroize_db(&mut db);
+                    drop(db);
                     break;
                 }
             };
@@ -187,5 +178,5 @@ pub enum UserRequst {
     PrefixSearch(String),
     SaveDB,
     ExitAppWithSave,
-    ExitAppNotSave,
+    ExitAppWithoutSave,
 }

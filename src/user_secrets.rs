@@ -61,11 +61,11 @@ fn get_wrapper() -> UserKeyWrapper {
 }
 fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
     let mut hasher1 = Sha256::new();
-    hasher1.update(format!("`*!^{}{}",id.0, site.0).as_bytes());
+    hasher1.update(format!("`*!^{}{}",id.as_str(), site.as_str()).as_bytes());
     let mut hasher2 = hasher1.clone();
     let mut salt= [0u8; 32];
     hasher1.finalize_into(GenericArray::from_mut_slice(salt.as_mut_slice()));
-    hasher2.update(format!("{}\\@#{}", id.0, site.0).as_bytes());
+    hasher2.update(format!("{}\\@#{}", id.as_str(), site.as_str()).as_bytes());
     let mut source = [0u8; 32];
     hasher2.finalize_into(GenericArray::from_mut_slice(source.as_mut_slice()));
     let params = ParamsBuilder::new()
@@ -155,7 +155,7 @@ pub fn encryt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key
     debug!("\n1\n");
     let ciphertext =
         cipher
-            .encrypt(aes_gcm::Nonce::from_slice(nonce.as_slice()), user_pw.0.as_bytes())
+            .encrypt(aes_gcm::Nonce::from_slice(nonce.as_slice()), user_pw.as_str().as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
     debug!("\n2\n");
     user_key.zeroize();
@@ -175,7 +175,7 @@ pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptdUsrP
         .map_err(|_| DBIOError::InvalidSession)?;
     user_key.zeroize();
     nonce.zeroize();
-    let user_pw = UserPW(
+    let user_pw = UserPW::from_uncheched(
         String::from_utf8(plaintext)
             .map_err(|_| DBIOError::InvalidSession)?
     );
