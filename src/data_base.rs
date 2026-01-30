@@ -284,22 +284,22 @@ pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key
 }
 
 
-pub fn prefix_range<'d>(db: &'d DB, prefix: &str, )
-    -> impl Iterator<Item = (&'d SiteName, &'d HashMap<UserID, EncryptdUsrPW>)> {
-    let prefix_bytes = prefix.as_bytes();
+pub fn prefix_range(db: &DB, prefix: String, )
+                    -> impl Iterator<Item=(&SiteName, &HashMap<UserID, EncryptdUsrPW>)> {
+    let prefix_bytes = prefix.into_bytes();
 
     db.range::<[u8], _>((
-        Bound::Included(prefix_bytes),
+        Bound::Included(prefix_bytes.clone()),
         Bound::Unbounded,
     ))
-        .take_while(move |(k, _)| k.0.as_bytes().starts_with(prefix_bytes))
+        .take_while(move |(k, _)| k.0.as_bytes().starts_with(&*prefix_bytes))
 }
 
 
-pub fn explor_db(db: &mut DB, input_site: &str, wrapped_key: &WrappedUserKey) {
+pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) {
     let range =  prefix_range(db, input_site);
     for (site, credentials) in range {
-        println!("Site: {}", site.0.as_str());
+        println!("Site: {}\n", site.0.as_str());
         for cred in credentials {
             println!("  user_id: {:?}\n  password: {:?}\n", &cred.0, get_password(db, &site, &cred.0, &wrapped_key).ok());
         }

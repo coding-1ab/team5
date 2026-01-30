@@ -132,7 +132,7 @@ pub fn load_db() ->
 }
 
 
-pub(crate) fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), FileIOError> {
+pub fn save_db(header: &mut DBHeader, mut ciphertext: EncryptedDB) -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
 

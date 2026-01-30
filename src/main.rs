@@ -1,5 +1,6 @@
 use log::error;
 use single_instance::SingleInstance;
+use team5::data_base::{SiteName, UserID, UserPW};
 
 fn main() {
     // let instance = SingleInstance::new("team-5").unwrap();
@@ -24,10 +25,14 @@ fn main() {
 
 // #[cfg(test)]
 pub mod tests {
+    use std::collections::{HashMap, VecDeque};
+    use eframe::egui::accesskit::Role::Marquee;
+    use eframe::egui::CursorIcon::Default;
     use rkyv::rancor::ResultExt;
-    use team5::master_secrets::{_manual_zeroize, decrypt_db, set_master_pw_and_1st_login};
-    use team5::data_base::{add_password, explor_db, SiteName, UserID, UserPW, DB};
-    use team5::file_io::{load_db, FileIOWarn};
+    use zeroize::Zeroize;
+    use team5::master_secrets::{_manual_zeroize, decrypt_db, encrypt_db, set_master_pw_and_1st_login};
+    use team5::data_base::{add_password, explor_db, prefix_range, DBIOError, SiteName, UserID, UserPW, DB};
+    use team5::file_io::{load_db, save_db, FileIOWarn};
     use team5::header::Salt;
     use team5::manual_zeroize;
     use team5::master_secrets::{check_master_pw_and_login, EciesKeyPair};
@@ -97,16 +102,90 @@ pub mod tests {
             }
         }
         ///////////////////
-        add_password(&mut db,
-                     SiteName::new("www.123.com").unwrap(),
-                     UserID::new("id1111").unwrap(), UserPW::new("pw123").unwrap(),
-                     &wrapped_user_key).unwrap();
-        add_password(&mut db,
-                     SiteName::new("www.123.com").unwrap(),
-                     UserID::new("id2222").unwrap(), UserPW::new("pw456").unwrap(),
-                     &wrapped_user_key).unwrap();
+        // add_password(&mut db,
+        //              SiteName::new("www.123.com").unwrap(),
+        //              UserID::new("id1111").unwrap(), UserPW::new("pw123").unwrap(),
+        //              &wrapped_user_key).unwrap();
+        // add_password(&mut db,
+        //              SiteName::new("www.123.com").unwrap(),
+        //              UserID::new("id2222").unwrap(), UserPW::new("pw456").unwrap(),
+        //              &wrapped_user_key).unwrap();
+        // loop {
+        //     explor_db(&mut db, "www.123.com", &wrapped_user_key);
+        // }
         loop {
-            explor_db(&mut db, "www.123.com", &wrapped_user_key);
+            let resuest = UserRequst::ExitAppWithSave; // 버튼 입력 대기, Exit는 임시값
+            let result: _ =  match resuest {
+                UserRequst::AddUserPW(site, id, pw) => {
+                    if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
+                        // 에러 e 표시
+                        continue;
+                    } else {continue}
+                }
+                UserRequst::ChangeUserPW(_, _) => {
+
+                    continue;
+                }
+                UserRequst::RemoveUserPW(_, _) => {
+
+                    continue;
+                }
+                UserRequst::GetUserPW(_, _) => {
+
+                    continue;
+                }
+                UserRequst::PrefixSearch(input) => {
+                    prefix_range(&db, input)
+                    // continue;
+                }
+                UserRequst::SaveDB => {
+                    let encryted_db  = match encrypt_db(&db, &ecies_keys.pk) {
+                        Ok(v) => {v}
+                        Err(e) => {
+                            // 에러 e 표시
+                            continue;
+                        }
+                    };
+                    if let Err(e) = save_db(&mut db_header, encryted_db) {
+                        // 에러 e 표시
+                        continue;
+                    }
+                    continue;
+                }
+                UserRequst::ExitAppWithSave => {
+                    manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                    let encryted_db  = match encrypt_db(&db, &ecies_keys.pk) {
+                        Ok(v) => {v}
+                        Err(e) => {
+                        // 에러 e 표시
+                            continue;
+                        }
+                    };
+                    manual_zeroize!(ecies_keys.pk);
+                    if let Err(e) = save_db(&mut db_header, encryted_db) {
+                        // 에러 e 표시
+                        continue;
+                    }
+                    // db.zeroize(); //todo zeroize_db() 구현하기
+                    break;
+                }
+                UserRequst::ExitAppNotSave => {
+                    manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                    // db.zeroize();
+                    break;
+                }
+            };
         }
     }
+}
+
+pub enum UserRequst {
+    AddUserPW(SiteName, UserID, UserPW),
+    ChangeUserPW(SiteName, UserID),
+    RemoveUserPW(SiteName, UserID),
+    GetUserPW(SiteName, UserID),
+    PrefixSearch(String),
+    SaveDB,
+    ExitAppWithSave,
+    ExitAppNotSave,
 }
