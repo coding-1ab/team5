@@ -86,27 +86,27 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
     manual_zeroize!(source, salt);
     nonce
 }
-fn is_valid_nonce(nonce: &Nonce<Aes256Gcm>) -> bool {
-    let first_byte = nonce[0];
-    let is_printable_ascii = first_byte >= 0x20 && first_byte <= 0x7E;
-    let is_safe_control = first_byte == 0x09;
-    is_printable_ascii || is_safe_control
-}
-fn gen_valid_nonce() -> Nonce<Aes256Gcm> {
-    let mut candidate;
-    loop {
-        candidate = Aes256Gcm::generate_nonce(&mut OsRng);
-        if is_valid_nonce(&candidate) {
-            return candidate;
-        }
-    }
-}
+// fn is_valid_nonce(nonce: &Nonce<Aes256Gcm>) -> bool {
+//     let first_byte = nonce[0];
+//     let is_printable_ascii = first_byte >= 0x20 && first_byte <= 0x7E;
+//     let is_safe_control = first_byte == 0x09;
+//     is_printable_ascii || is_safe_control
+// }
+// fn gen_valid_nonce() -> Nonce<Aes256Gcm> {
+//     let mut candidate;
+//     loop {
+//         candidate = Aes256Gcm::generate_nonce(&mut OsRng);
+//         if is_valid_nonce(&candidate) {
+//             return candidate;
+//         }
+//     }
+// }
 static USER_KEY_NONCE: OnceLock<Nonce<Aes256Gcm>> = OnceLock::new();
 pub fn wrap_user_key(mut user_key: UserKey)
                      -> Result<WrappedUserKey, DBIOError> {
     let mut wrapper = get_wrapper();
     let nonce = USER_KEY_NONCE
-        .get_or_init(|| gen_valid_nonce());
+        .get_or_init(|| Aes256Gcm::generate_nonce(OsRng));
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())
         .map_err(|_| DBIOError::InvalidSession)?;
     let ciphertext =
@@ -124,7 +124,7 @@ pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())
         .map_err(|_| DBIOError::InvalidSession)?;
     let nonce = USER_KEY_NONCE
-        .get_or_init(|| gen_valid_nonce());
+        .get_or_init(|| Aes256Gcm::generate_nonce(OsRng));
     let plaintext =
         cipher
         .decrypt(nonce, wrapped_key.as_slice())
