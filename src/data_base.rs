@@ -11,6 +11,7 @@ pub mod user_pw {
     use rkyv::{Archive, Deserialize, Serialize};
     use std::error::Error;
     use std::fmt::{Display, Formatter};
+    use std::str::FromStr;
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[derive(
@@ -24,6 +25,7 @@ pub mod user_pw {
         Debug,
         Ord,
         PartialOrd,
+        Clone
     )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
     pub struct UserPW(String);
@@ -53,6 +55,10 @@ pub mod user_pw {
             self.0.as_str()
         }
     }
+    impl FromStr for UserPW {
+        type Err = UserPWError;
+        fn from_str(s: &str) -> Result<Self, UserPWError> { Ok(UserPW::new(s)?) }
+    }
     impl Display for UserPWError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -67,7 +73,10 @@ pub mod user_id {
     use rkyv::{Archive, Deserialize, Serialize};
     use std::error::Error;
     use std::fmt::{Display, Formatter};
+    use std::str::FromStr;
+    use clap::ValueEnum;
     use zeroize::{Zeroize, ZeroizeOnDrop};
+    use crate::data_base::{SiteName, SiteNameError, UserPW, UserPWError};
 
     const MAX_USER_ID_LEN: usize = 32;
     #[derive(
@@ -84,7 +93,8 @@ pub mod user_id {
     )]
     #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
     #[derive(Hash)]
-    pub struct UserID(String);
+    #[derive(Clone)]
+pub struct UserID(String);
 
     #[derive(Debug)]
     pub enum UserIDError {
@@ -109,6 +119,10 @@ pub mod user_id {
             self.0.as_str()
         }
     }
+    impl FromStr for UserID {
+        type Err = UserIDError;
+        fn from_str(s: &str) -> Result<Self, UserIDError> { Ok(UserID::new(s)?) }
+    }
     impl Display for UserIDError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -124,8 +138,10 @@ pub mod site_name {
     use rkyv::{Archive, Deserialize, Serialize};
     use std::error::Error;
     use std::fmt::{Display, Formatter};
+    use std::str::FromStr;
     use url::Url;
     use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+    use crate::data_base::UserID;
 
     #[derive(
         Zeroize,
@@ -193,6 +209,10 @@ pub mod site_name {
         pub fn as_str(&self) -> &str {
             self.0.as_str()
         }
+    }
+    impl FromStr for SiteName {
+        type Err = SiteNameError;
+        fn from_str(s: &str) -> Result<Self, SiteNameError> { Ok(SiteName::new(s)?) }
     }
     impl Display for SiteNameError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -264,7 +284,7 @@ pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: 
     }
 }
 
-pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey) 
+pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
     -> Result<(), DBIOError> {
     let encrypted = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 

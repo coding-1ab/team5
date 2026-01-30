@@ -21,10 +21,8 @@ memlock = "*"
 openssl = { version = "*" }
 eframe = { version = "0.33.3", optional = true }
 log = "0.4.29"
-strum = "0.26"
-strum_macros = "0.26"
+clap = { version = "*", features = ["derive"] }
 
-[patch.crates-io]
 url = { path = "./libs/url-2.5.8" }
 
 [features]

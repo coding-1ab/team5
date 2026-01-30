@@ -26,12 +26,15 @@ fn main() {
 // #[cfg(test)]
 pub mod tests {
     use std::collections::{HashMap, VecDeque};
+    use std::io;
+    use std::io::{stdin, Write};
+    use std::str::FromStr;
     // use eframe::egui::accesskit::Role::Marquee;
     // use eframe::egui::CursorIcon::Default;
     use rkyv::rancor::ResultExt;
     use zeroize::Zeroize;
     use team5::master_secrets::{_manual_zeroize, decrypt_db, encrypt_db, set_master_pw_and_1st_login};
-    use team5::data_base::{add_password, explor_db, prefix_range, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
+    use team5::data_base::{add_password, change_password, explor_db, get_password, prefix_range, remove_password, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
     use team5::file_io::{load_db, save_db, FileIOWarn};
     use team5::header::Salt;
     use team5::manual_zeroize;
@@ -101,31 +104,54 @@ pub mod tests {
                 break;
             }
         }
-        
+
         loop {
-            let resuest = UserRequst::ExitAppWithSave; // 버튼 입력 대기, Exit는 임시값
-            let result: _ =  match resuest {
-                UserRequst::AddUserPW(site, id, pw) => {
+            let mut input = String::new();
+            print!("> ");
+            io::stdout().flush().unwrap();
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).unwrap();
+            let words = input.split_whitespace();
+            let args = std::iter::once("app_name").chain(words);
+            let result: _ =  match UserRequst::try_parse_from(args).unwrap() {
+                UserRequst::AddUserPW{site, id, pw} => {
                     if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
                         // 에러 e 표시
-                        continue;
                     } else {continue}
+                    continue
                 }
-                UserRequst::ChangeUserPW(_, _) => {
-
+                UserRequst::ChangeUserPW {site, id, pw} => {
+                    if let Err(e) =  change_password(&mut db, site, id, pw, &wrapped_user_key) {
+                        // 에러 e 표시
+                    }
                     continue;
                 }
-                UserRequst::RemoveUserPW(_, _) => {
-
+                UserRequst::RemoveUserPW { site, id} => {
+                    if let Err(e) = remove_password(&mut db, site, id) {
+                        // 에러 e 표시
+                    }
                     continue;
                 }
-                UserRequst::GetUserPW(_, _) => {
-
-                    continue;
+                UserRequst::GetUserPW { site, id } => {
+                    // match get_password(&mut db, &site, &id) {
+                    //     Ok(v) => {v}
+                    //     Err(e) => {
+                    //         // 에러 표시
+                    //         continue;
+                    //     }
+                    // }
+                    println!("{:?}", get_password(&db, &site, &id, &wrapped_user_key))
                 }
-                UserRequst::PrefixSearch(input) => {
-                    prefix_range(&db, input)
+                UserRequst::PrefixSearch { site } => {
+                    // prefix_range(&db, site)
                     // continue;
+                    // explor_db(&mut db, site, &wrapped_user_key);
+                    for site in prefix_range(&db, site) {
+                        println!("{:?}", site);
+                        for user in site.1.iter() {
+                            println!("{:?}", &user);
+                        }
+                    }
                 }
                 UserRequst::SaveDB => {
                     let encryted_db  = match encrypt_db(&db, &ecies_keys.pk) {
@@ -170,12 +196,14 @@ pub mod tests {
     }
 }
 
+use clap::{Parser};
+#[derive(Parser)]
 pub enum UserRequst {
-    AddUserPW(SiteName, UserID, UserPW),
-    ChangeUserPW(SiteName, UserID),
-    RemoveUserPW(SiteName, UserID),
-    GetUserPW(SiteName, UserID),
-    PrefixSearch(String),
+    AddUserPW{site: SiteName, id: UserID, pw: UserPW},
+    ChangeUserPW{site: SiteName, id: UserID, pw: UserPW},
+    RemoveUserPW{site: SiteName, id: UserID},
+    GetUserPW{site: SiteName, id: UserID},
+    PrefixSearch{site: String},
     SaveDB,
     ExitAppWithSave,
     ExitAppWithoutSave,
