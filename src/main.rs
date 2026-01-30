@@ -113,90 +113,96 @@ pub mod tests {
             io::stdin().read_line(&mut input).unwrap();
             let words = input.split_whitespace();
             let args = std::iter::once("app_name").chain(words);
-            let result: _ =  match UserRequst::try_parse_from(args).unwrap() {
-                UserRequst::AddUserPW{site, id, pw} => {
-                    if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
-                        // 에러 e 표시
-                    } else {continue}
-                    continue
-                }
-                UserRequst::ChangeUserPW {site, id, pw} => {
-                    if let Err(e) =  change_password(&mut db, site, id, pw, &wrapped_user_key) {
-                        // 에러 e 표시
-                    }
-                    continue;
-                }
-                UserRequst::RemoveUserPW { site, id} => {
-                    if let Err(e) = remove_password(&mut db, site, id) {
-                        // 에러 e 표시
-                    }
-                    continue;
-                }
-                UserRequst::GetUserPW { site, id } => {
-                    // match get_password(&mut db, &site, &id) {
-                    //     Ok(v) => {v}
-                    //     Err(e) => {
-                    //         // 에러 표시
-                    //         continue;
-                    //     }
-                    // }
-                    println!("{:?}", get_password(&db, &site, &id, &wrapped_user_key))
-                }
-                UserRequst::PrefixSearch { site } => {
-                    // prefix_range(&db, site)
-                    // continue;
-                    // explor_db(&mut db, site, &wrapped_user_key);
-                    for site in prefix_range(&db, site) {
-                        println!("{:?}", site);
-                        for user in site.1.iter() {
-                            println!("{:?}", &user);
+            match UserRequst::try_parse_from(args) {
+                Ok(request) =>
+                    match request {
+                        UserRequst::AddUserPW { site, id, pw } => {
+                            if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
+                                // 에러 e 표시
+                            } else { continue }
+                            continue
                         }
-                    }
-                }
-                UserRequst::SaveDB => {
-                    let encryted_db  = match encrypt_db(&db, &ecies_keys.pk) {
-                        Ok(v) => {v}
-                        Err(e) => {
-                            // 에러 e 표시
+                        UserRequst::ChangeUserPW { site, id, pw } => {
+                            if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
+                                // 에러 e 표시
+                            }
                             continue;
                         }
-                    };
-                    if let Err(e) = save_db(&mut db_header, encryted_db) {
-                        // 에러 e 표시
-                        continue;
-                    }
-                    continue;
-                }
-                UserRequst::ExitAppWithSave => {
-                    manual_zeroize!(ecies_key_salt, wrapped_user_key);
-                    let encryted_db  = match encrypt_db(&db, &ecies_keys.pk) {
-                        Ok(v) => {v}
-                        Err(e) => {
-                        // 에러 e 표시
+                        UserRequst::RemoveUserPW { site, id } => {
+                            if let Err(e) = remove_password(&mut db, site, id) {
+                                // 에러 e 표시
+                            }
                             continue;
                         }
-                    };
-                    manual_zeroize!(ecies_keys.pk);
-                    if let Err(e) = save_db(&mut db_header, encryted_db) {
-                        // 에러 e 표시
-                        continue;
-                    }
-                    zeroize_db(&mut db);
-                    drop(db);
-                    break;
+                        UserRequst::GetUserPW { site, id } => {
+                            // match get_password(&mut db, &site, &id) {
+                            //     Ok(v) => {v}
+                            //     Err(e) => {
+                            //         // 에러 표시
+                            //         continue;
+                            //     }
+                            // }
+                            println!("{:?}", get_password(&db, &site, &id, &wrapped_user_key))
+                        }
+                        UserRequst::PrefixSearch { site } => {
+                            // prefix_range(&db, site)
+                            // continue;
+                            // explor_db(&mut db, site, &wrapped_user_key);
+                            for site in prefix_range(&db, site) {
+                                println!("{:?}", site);
+                                for user in site.1.iter() {
+                                    println!("{:?}", &user);
+                                }
+                            }
+                        }
+                        UserRequst::SaveDB => {
+                            let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                                Ok(v) => { v }
+                                Err(e) => {
+                                    // 에러 e 표시
+                                    continue;
+                                }
+                            };
+                            if let Err(e) = save_db(&mut db_header, encryted_db) {
+                                // 에러 e 표시
+                                continue;
+                            }
+                            continue;
+                        }
+                        UserRequst::ExitAppWithSave => {
+                            manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                            let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                                Ok(v) => { v }
+                                Err(e) => {
+                                    // 에러 e 표시
+                                    continue;
+                                }
+                            };
+                            manual_zeroize!(ecies_keys.pk);
+                            if let Err(e) = save_db(&mut db_header, encryted_db) {
+                                // 에러 e 표시
+                                continue;
+                            }
+                            zeroize_db(&mut db);
+                            drop(db);
+                            break;
+                        }
+                        UserRequst::ExitAppWithoutSave => {
+                            manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                            zeroize_db(&mut db);
+                            drop(db);
+                            break;
+                        }
+                    },
+                Err(e) => {
+                    println!("입력이 잘못되었습니다: {}", e);
                 }
-                UserRequst::ExitAppWithoutSave => {
-                    manual_zeroize!(ecies_key_salt, wrapped_user_key);
-                    zeroize_db(&mut db);
-                    drop(db);
-                    break;
-                }
-            };
+            }
         }
     }
 }
 
-use clap::{Parser};
+use clap::{Error, Parser};
 #[derive(Parser)]
 pub enum UserRequst {
     AddUserPW{site: SiteName, id: UserID, pw: UserPW},
