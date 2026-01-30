@@ -321,7 +321,7 @@ pub fn prefix_range(
     prefix: String,
 ) -> impl Iterator<Item=(&SiteName, &HashMap<UserID, EncryptdUsrPW>)> {
     let site_name = SiteName(prefix.clone());
-    db.range(site_name..).filter(move |(name, _)| name.0.starts_with(&prefix))
+    db.range(site_name..).take_while(move |(name, _)| name.0.starts_with(&prefix))
 }
 
 
