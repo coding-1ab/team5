@@ -76,50 +76,54 @@ pub fn load_db() ->
 
     let mut user_warn: Option<FileIOWarn> = None;
 
+    let db_exist = match fs::exists(db_path) {
+        Ok(true) => true,
+        Ok(false) => false,
+        Err(err) => {
+            return Err(FileIOError::FileOpenFailed(err));
+        }
+    };
     let db_file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .open(db_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    match db_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
+    }
 
-    if db_file.try_lock_exclusive().is_err() {
-        return Err(FileIOError::LockUnavailable);
+    let bak_exist = match fs::exists(bak_path) {
+        Ok(true) => true,
+        Ok(false) => false,
+        Err(err) => {
+            return Err(FileIOError::FileOpenFailed(err));
+        }
     };
-
     let bak_file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .open(bak_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
-
-    if bak_file.try_lock_exclusive().is_err() {
-        return Err(FileIOError::LockUnavailable);
-    };
-
-    let db_exists = db_file.metadata()
-        .map(|v| v.len() > 0)
-        .map_err(FileIOError::FileReadFailed)?;
-    let bak_exists = bak_file.metadata()
-        .map(|v| v.len() > 0)
-        .map_err(FileIOError::FileReadFailed)?;
-
-    if bak_exists {
-        user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
-    } else {
-        fs::remove_file(bak_path).ok();
-        // if db_exists {
-            fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
-                .map_err(|err| FileIOError::FileRenameFailed(err))?;
-        // }
+    match bak_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
     }
 
-    if bak_file.metadata()
-        .map_err(|err| FileIOError::FileReadFailed(err))?
-        .len() == 0 { // db, bak 둘다 없음
-        println!("[1]");
-        return Ok( (true, user_warn, DBHeader::empty_valid(), None) )
+    if bak_exist {
+        user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
+    }
+    else {
+        fs::remove_file(bak_path).ok();
+        fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
+            .map_err(|err| FileIOError::FileRenameFailed(err))?;
+        if !db_exist {
+            return Ok( (true, None, DBHeader::empty_valid(), None) )
+        }
     }
 
     let read_triales = 3;
