@@ -60,7 +60,7 @@ pub mod master_pw {
             self.0.as_bytes()
         }
     }
-    
+
     impl Display for MasterPWError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -236,8 +236,9 @@ pub type EncryptedDB = Vec<u8>;
 
 pub fn encrypt_db(db: &DB, pk: &Box<PublicKey>,)
                   -> Result<EncryptedDB, MasterPWError> {
-    let serialized = rkyv::to_bytes::<Error>(db).unwrap();
-    let encrypted = ecies::encrypt(&pk.serialize(), &serialized).unwrap();
+    let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
+    let encrypted = ecies::encrypt(&pk.serialize(), &serialized.as_slice()).unwrap();
+    serialized.zeroize();
 
     Ok( encrypted )
 }
