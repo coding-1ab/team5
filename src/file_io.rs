@@ -118,6 +118,7 @@ pub fn load_db() ->
     if bak_file.metadata()
         .map_err(|err| FileIOError::FileReadFailed(err))?
         .len() == 0 {
+        println!("[1]");
         return Ok( (true, user_warn, DBHeader::empty_valid(), None) )
     }
 
@@ -130,6 +131,7 @@ pub fn load_db() ->
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
+                println!("[2]");
                 return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
             }
             Err(e) => return Err(e)
@@ -138,9 +140,10 @@ pub fn load_db() ->
         if header.ciphertext_checksum != hash.as_slice() {
             continue;
         }
-
+        println!("[3]");
         return Ok( (false, user_warn, header, Some(ciphertext) ) )
     }
+    println!("[4]");
     Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
 }
 
