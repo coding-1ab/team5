@@ -138,7 +138,6 @@ pub fn load_db() ->
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
                 print!("~{}~", data.len());
-                println!("[2]");
                 return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
             }
             Err(e) => return Err(e)
@@ -147,10 +146,10 @@ pub fn load_db() ->
         if header.ciphertext_checksum != hash.as_slice() {
             continue;
         }
-        println!("[3]");
+
         return Ok( (false, user_warn, header, Some(ciphertext) ) )
     }
-    println!("[4]");
+
     Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
 }
 
