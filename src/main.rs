@@ -72,7 +72,6 @@ pub mod tests {
 
         let mut db: DB;
         let mut ecies_keys;
-        let mut ecies_key_salt= Salt::default();
         let mut wrapped_user_key;
         if is_first_login {
             loop {
@@ -96,10 +95,9 @@ pub mod tests {
                     println!("password is missmatch");
                     continue;
                 }
-                (ecies_keys, ecies_key_salt, wrapped_user_key) = tmp;
+                (ecies_keys, db_header.db_salt, wrapped_user_key) = tmp;
                 break;
             }
-            db_header.db_salt = ecies_key_salt;
             manual_zeroize!(ecies_keys.sk);
             drop(ecies_keys.sk);
             db = DB::new();
@@ -189,7 +187,7 @@ pub mod tests {
                                     continue;
                                 }
                             };
-                            if let Err(e) = save_db(&mut db_header, encryted_db) {
+                            if let Err(e) = save_db(db_header, encryted_db) {
                                 println!("Error saving db: {}", e);
                                 continue;
                             }
@@ -203,18 +201,18 @@ pub mod tests {
                                     continue;
                                 }
                             };
-                            if let Err(e) = save_db(&mut db_header, encryted_db) {
+                            if let Err(e) = save_db(db_header, encryted_db) {
                                 println!("Error saving db: {}", e);
                                 continue;
                             }
-                            manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                            manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
                             drop(db);
                             return;
                         }
                         UserRequst::ExitAppWithoutSave => {
-                            manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                            manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
                             drop(db);
