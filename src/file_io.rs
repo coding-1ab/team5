@@ -115,9 +115,9 @@ pub fn load_db() ->
         // }
     }
 
-    if bak_file.metadata()
+    if bak_path.metadata()
         .map_err(|err| FileIOError::FileReadFailed(err))?
-        .len() == 0 {
+        .len() == 0 { // db, bak 둘다 없음
         println!("[1]");
         return Ok( (true, user_warn, DBHeader::empty_valid(), None) )
     }
