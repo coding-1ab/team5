@@ -109,10 +109,10 @@ pub fn load_db() ->
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
     } else {
         fs::remove_file(bak_path).ok();
-        if db_exists {
+        // if db_exists {
             fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
                 .map_err(|err| FileIOError::FileRenameFailed(err))?;
-        }
+        // }
     }
 
     if bak_file.metadata()
@@ -127,19 +127,19 @@ pub fn load_db() ->
         (&bak_file).take(u64::MAX).read_to_end(&mut data)
             .map_err(|err| FileIOError::FileReadFailed(err))?;
         (&bak_file).seek(SeekFrom::Start(0));
-        let parsed = match DBHeader::parse_header(data.as_slice()) {
+        let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
                 return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
             }
             Err(e) => return Err(e)
         };
-        let hash = Sha256::digest(parsed.1.as_slice());
-        if parsed.0.ciphertext_checksum != hash.as_slice() {
+        let hash = Sha256::digest(ciphertext.as_slice());
+        if header.ciphertext_checksum != hash.as_slice() {
             continue;
         }
 
-        return Ok( (false, user_warn, parsed.0, Some(parsed.1)) )
+        return Ok( (false, user_warn, header, Some(ciphertext) ) )
     }
     Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
 }
