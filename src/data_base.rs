@@ -190,7 +190,6 @@ pub mod site_name {
             let domain = PSL
                 .domain(host.as_bytes())
                 .ok_or(SiteNameError::InvalidDomain)?;
-
             let reg = std::str::from_utf8(domain.as_bytes())
                 .map_err(|_| SiteNameError::InvalidDomain)?
                 .to_ascii_lowercase();
