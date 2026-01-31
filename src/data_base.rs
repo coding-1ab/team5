@@ -2,6 +2,7 @@ use crate::user_secrets::{EncryptdUsrPW, WrappedUserKey, decrypt_user_pw, encryt
 pub use site_name::{SiteName, SiteNameError};
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::{Display, Formatter};
 use std::ops::{Bound, RangeFrom};
 pub use user_id::{UserID, UserIDError};
 pub use user_pw::{UserPW, UserPWError};
@@ -282,6 +283,31 @@ pub enum DBIOError {
     UserPWEncryptionFailed,
     UserPWDecryptionFailed,
     InvalidSession,
+}
+
+impl Display for DBIOError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DBIOError::UserNotFound => {
+                write!(f, "User not found")
+            }
+            DBIOError::SiteNotFound => {
+                write!(f, "Site not found")
+            }
+            DBIOError::UserAlreadyExists => {
+                write!(f, "User already exists")
+            }
+            DBIOError::UserPWEncryptionFailed => {
+                write!(f, "User PW encryption failed")
+            }
+            DBIOError::UserPWDecryptionFailed => {
+                write!(f, "User PW decryption failed")
+            }
+            DBIOError::InvalidSession => {
+                write!(f, "Invalid session")
+            }
+        }
+    }
 }
 
 pub fn zeroize_db(db: &mut DB) {

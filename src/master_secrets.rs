@@ -20,6 +20,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::data_base::DB;
 
 pub mod master_pw {
+    use std::fmt::{Display, Formatter};
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[derive(Debug, Clone, Eq, PartialEq)]
@@ -57,6 +58,28 @@ pub mod master_pw {
         }
         pub fn as_bytes(&self) -> &[u8] {
             self.0.as_bytes()
+        }
+    }
+    
+    impl Display for MasterPWError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            match self {
+                MasterPWError::Empty => {
+                    write!(f, "MasterPWError: Empty")
+                }
+                MasterPWError::TooShort => {
+                    write!(f, "MasterPWError: TooShort")
+                }
+                MasterPWError::TooLong => {
+                    write!(f, "MasterPWError: TooLong")
+                }
+                MasterPWError::NonAscii => {
+                    write!(f, "MasterPWError: NonAscii")
+                }
+                MasterPWError::IncorrectPW => {
+                    write!(f, "MasterPWError: IncorrectPW")
+                }
+            }
         }
     }
 }

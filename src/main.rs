@@ -58,7 +58,7 @@ pub mod tests {
             = match load_db() {
             Ok(v) => {v}
             Err(e) => {
-                // 에러 e 표시
+                error!("Error loading db: {}", e);
                 return;
             }
         };
@@ -74,7 +74,7 @@ pub mod tests {
                 (ecies_keys, ecies_key_salt, wrapped_user_key) = match set_master_pw_and_1st_login(raw_master_pw) {
                     Ok(v) => {v}
                     Err(e) => {
-                        // 에러 e 표시
+                        error!("Error setting master pw: {}", e);
                         continue;
                     }
                 };
@@ -90,14 +90,14 @@ pub mod tests {
                 (ecies_keys, wrapped_user_key) = match check_master_pw_and_login(raw_pw, db_header.db_salt.clone()) {
                     Ok(v) => { v }
                     Err(e) => {
-                        // 에러 e 표시
+                        error!("Error checking master pw: {}", e);
                         continue;
                     }
                 };
                 db = match decrypt_db(&encrypted_db.as_ref().unwrap(), ecies_keys.sk) {
                     Ok(v) => { v }
                     Err(e) => {
-                        // 에러 e 표시
+                        error!("Error decrypting db: {}", e);
                         continue;
                     }
                 };
@@ -107,7 +107,6 @@ pub mod tests {
         }
 
         loop {
-            let mut input = String::new();
             print!("> ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
@@ -119,19 +118,19 @@ pub mod tests {
                     match request {
                         UserRequst::AddUserPW { site, id, pw } => {
                             if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
-                                // 에러 e 표시
+                                error!("Error adding password: {}", e);
                             } else { continue }
                             continue
                         }
                         UserRequst::ChangeUserPW { site, id, pw } => {
                             if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
-                                // 에러 e 표시
+                                error!("Error changing password: {}", e);
                             }
                             continue;
                         }
                         UserRequst::RemoveUserPW { site, id } => {
                             if let Err(e) = remove_password(&mut db, site, id) {
-                                // 에러 e 표시
+                                error!("Error removing password: {}", e);
                             }
                             continue;
                         }
@@ -139,7 +138,7 @@ pub mod tests {
                             // match get_password(&mut db, &site, &id) {
                             //     Ok(v) => {v}
                             //     Err(e) => {
-                            //         // 에러 표시
+                            //         // error!("Error getting password: {}", e)
                             //         continue;
                             //     }
                             // }
@@ -160,12 +159,12 @@ pub mod tests {
                             let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                 Ok(v) => { v }
                                 Err(e) => {
-                                    // 에러 e 표시
+                                    error!("Error encrypting db: {}", e);
                                     continue;
                                 }
                             };
                             if let Err(e) = save_db(&mut db_header, encryted_db) {
-                                // 에러 e 표시
+                                error!("Error saving db: {}", e);
                                 continue;
                             }
                             continue;
@@ -175,13 +174,13 @@ pub mod tests {
                             let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                 Ok(v) => { v }
                                 Err(e) => {
-                                    // 에러 e 표시
+                                    error!("Error encrypting db: {}", e);
                                     continue;
                                 }
                             };
                             manual_zeroize!(ecies_keys.pk);
                             if let Err(e) = save_db(&mut db_header, encryted_db) {
-                                // 에러 e 표시
+                                error!("Error saving db: {}", e);
                                 continue;
                             }
                             zeroize_db(&mut db);
@@ -196,7 +195,7 @@ pub mod tests {
                         }
                     },
                 Err(e) => {
-                    println!("입력이 잘못되었습니다: {}", e);
+                    println!("Invalid input: {}", e);
                 }
             }
         }
