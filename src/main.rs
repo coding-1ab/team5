@@ -67,7 +67,7 @@ pub mod tests {
         let mut db: DB;
         let mut ecies_keys;
         let mut ecies_key_salt= Salt::default();
-        let mut wrapped_user_key = WrappedUserKey::default();
+        let mut wrapped_user_key;
         if is_first_login {
             loop {
                 let raw_master_pw = String::from("12341234"); // 입력창 통해 마스터 비번 입력
