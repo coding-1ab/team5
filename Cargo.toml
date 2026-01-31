@@ -17,12 +17,13 @@ ecies = "*"
 sha2 = "0.10"
 zeroize = { version = "*", features = ["derive"] }
 memlock = "*"
-#reqwest = "*"
+reqwest = { version = "*", features = ["blocking"] }
 openssl = { version = "*" }
 eframe = { version = "0.33.3", optional = true }
 log = "0.4.29"
 clap = { version = "*", features = ["derive"] }
-
+publicsuffix = "*"
+once_cell = "*"
 url = { path = "./libs/url-2.5.8" }
 
 [features]

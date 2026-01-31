@@ -142,16 +142,16 @@ pub mod tests {
                             //         continue;
                             //     }
                             // }
-                            println!("{:?}", get_password(&db, &site, &id, &wrapped_user_key))
+                            println!("{}", get_password(&db, &site, &id, &wrapped_user_key).unwrap().as_str())
                         }
                         UserRequst::PrefixSearch { site } => {
                             // prefix_range(&db, site)
                             // continue;
                             // explor_db(&mut db, site, &wrapped_user_key);
-                            for site in prefix_range(&db, site) {
-                                println!("{:?}", site);
+                            for site in prefix_range(&db, &*site) {
+                                println!("{}", site.0.as_str());
                                 for user in site.1.iter() {
-                                    println!("{:?}", &user);
+                                    println!("  {}", user.0.as_str());
                                 }
                             }
                         }
