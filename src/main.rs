@@ -171,7 +171,6 @@ pub mod tests {
                             continue;
                         }
                         UserRequst::ExitAppWithSave => {
-                            manual_zeroize!(ecies_key_salt, wrapped_user_key);
                             let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                 Ok(v) => { v }
                                 Err(e) => {
@@ -179,17 +178,19 @@ pub mod tests {
                                     continue;
                                 }
                             };
-                            manual_zeroize!(ecies_keys.pk);
                             if let Err(e) = save_db(&mut db_header, encryted_db) {
                                 error!("Error saving db: {}", e);
                                 continue;
                             }
+                            manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                            manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
                             drop(db);
                             return;
                         }
                         UserRequst::ExitAppWithoutSave => {
                             manual_zeroize!(ecies_key_salt, wrapped_user_key);
+                            manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
                             drop(db);
                             return;

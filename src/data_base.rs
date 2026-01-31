@@ -322,7 +322,7 @@ pub fn zeroize_db(db: &mut DB) {
 }
 
 pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
-    -> Result<(), DBIOError> {
+    -> Result<(), DBIOError> { //todo 중복 처리
     let encryted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
     let users = db.entry(site_name).or_insert_with(HashMap::new);
