@@ -106,7 +106,7 @@ pub mod tests {
         } else {
             loop {
                 println!("[ Default Login ]");
-                println!("Please enter master password: ");
+                print!("Please enter master password: ");
                 io::stdout().flush().unwrap();
                 let mut raw_master_pw = String::new();
                 stdin().read_line(&mut raw_master_pw).unwrap();

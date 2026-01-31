@@ -108,6 +108,7 @@ pub fn load_db() ->
     if bak_exists {
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
     } else {
+        fs::remove_file(bak_path).ok();
         if db_exists {
             fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
                 .map_err(|err| FileIOError::FileRenameFailed(err))?;
