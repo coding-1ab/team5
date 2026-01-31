@@ -83,18 +83,6 @@ pub fn load_db() ->
             return Err(FileIOError::FileOpenFailed(err));
         }
     };
-    let db_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(db_path)
-        .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    match db_file.try_lock_exclusive() {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
-        Err(err) => { return Err(FileIOError::LockUnavailable) }
-    }
-
     let bak_exist = match fs::exists(bak_path) {
         Ok(true) => true,
         Ok(false) => false,
@@ -102,6 +90,18 @@ pub fn load_db() ->
             return Err(FileIOError::FileOpenFailed(err));
         }
     };
+
+    if bak_exist {
+        user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
+    }
+    else {
+        fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
+            .map_err(|err| FileIOError::FileRenameFailed(err))?;
+        if !db_exist {
+            return Ok( (true, None, DBHeader::empty_valid(), None) )
+        }
+    }
+
     let bak_file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -114,21 +114,10 @@ pub fn load_db() ->
         Err(err) => { return Err(FileIOError::LockUnavailable) }
     }
 
-    if bak_exist {
-        user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
-    }
-    else {
-        fs::remove_file(bak_path).ok();
-        fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
-            .map_err(|err| FileIOError::FileRenameFailed(err))?;
-        if !db_exist {
-            return Ok( (true, None, DBHeader::empty_valid(), None) )
-        }
-    }
-
     let read_triales = 3;
     for _ in 0..read_triales {
         let mut data = Vec::new();
+        (&bak_file).seek(SeekFrom::Start(0));
         (&bak_file).take(u64::MAX).read_to_end(&mut data)
             .map_err(|err| FileIOError::FileReadFailed(err))?;
         (&bak_file).seek(SeekFrom::Start(0));
