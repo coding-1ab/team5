@@ -98,10 +98,10 @@ pub fn load_db() ->
         return Err(FileIOError::LockUnavailable);
     };
 
-    let db_exists = db_path.metadata()
+    let db_exists = db_file.metadata()
         .map(|v| v.len() > 0)
         .map_err(FileIOError::FileReadFailed)?;
-    let bak_exists = bak_path.metadata()
+    let bak_exists = bak_file.metadata()
         .map(|v| v.len() > 0)
         .map_err(FileIOError::FileReadFailed)?;
 
@@ -115,7 +115,7 @@ pub fn load_db() ->
         // }
     }
 
-    if bak_path.metadata()
+    if bak_file.metadata()
         .map_err(|err| FileIOError::FileReadFailed(err))?
         .len() == 0 { // db, bak 둘다 없음
         println!("[1]");
@@ -131,6 +131,7 @@ pub fn load_db() ->
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
+                print!("~{}~", data.len());
                 println!("[2]");
                 return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
             }
