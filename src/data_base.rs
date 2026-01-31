@@ -180,15 +180,16 @@ pub mod site_name {
             if input.chars().any(|c| c.is_whitespace()) {
                 return Err(SiteNameError::ContainsWhitespace);
             }
-            let with_scheme = if input.contains("://") {
+            let mut with_scheme = if input.contains("://") {
                 input.to_owned()
             } else {
                 format!("dummy://{}", input)
             };
             let url = Url::parse(&with_scheme)
                 .map_err(|e| SiteNameError::InvalidUrl(e.to_string()))?;
+            with_scheme.zeroize();
             let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
-            let (canonical_full, _had_www) 
+            let (canonical_full, _had_www)
                 = if let Some(rest) = host.strip_prefix("www.") {
                 (rest, true)
                 } else {

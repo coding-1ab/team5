@@ -237,7 +237,7 @@ pub type EncryptedDB = Vec<u8>;
 pub fn encrypt_db(db: &DB, pk: &Box<PublicKey>,)
                   -> Result<EncryptedDB, MasterPWError> {
     let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
-    let encrypted = ecies::encrypt(&pk.serialize(), &serialized.as_slice()).unwrap();
+    let encrypted = ecies::encrypt(&pk.serialize(), &serialized).unwrap();
     serialized.zeroize();
 
     Ok( encrypted )
