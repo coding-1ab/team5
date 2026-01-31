@@ -135,14 +135,14 @@ pub mod tests {
                             continue;
                         }
                         UserRequst::GetUserPW { site, id } => {
-                            // match get_password(&mut db, &site, &id) {
-                            //     Ok(v) => {v}
-                            //     Err(e) => {
-                            //         // error!("Error getting password: {}", e)
-                            //         continue;
-                            //     }
-                            // }
-                            println!("{}", get_password(&db, &site, &id, &wrapped_user_key).unwrap().as_str())
+                            let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
+                                Ok(v) => {v}
+                                Err(e) => {
+                                    error!("Error getting password: {}", e)
+                                    continue;
+                                }
+                            }
+                            println!("{}", pw.as_str())
                         }
                         UserRequst::PrefixSearch { site } => {
                             // prefix_range(&db, site)
