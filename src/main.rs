@@ -138,11 +138,12 @@ pub mod tests {
                             let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
                                 Ok(v) => {v}
                                 Err(e) => {
-                                    error!("Error getting password: {}", e)
+                                    error!("Error getting password: {}", e);
                                     continue;
                                 }
-                            }
-                            println!("{}", pw.as_str())
+                            };
+                            println!("{}", pw.as_str());
+                            continue;
                         }
                         UserRequst::PrefixSearch { site } => {
                             // prefix_range(&db, site)
@@ -185,13 +186,13 @@ pub mod tests {
                             }
                             zeroize_db(&mut db);
                             drop(db);
-                            exit(0);
+                            return;
                         }
                         UserRequst::ExitAppWithoutSave => {
                             manual_zeroize!(ecies_key_salt, wrapped_user_key);
                             zeroize_db(&mut db);
                             drop(db);
-                            exit(0);
+                            return;
                         }
                     },
                 Err(e) => {
