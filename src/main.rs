@@ -28,6 +28,7 @@ pub mod tests {
     use std::collections::{HashMap, VecDeque};
     use std::io;
     use std::io::{stdin, Write};
+    use std::process::exit;
     use std::str::FromStr;
     // use eframe::egui::accesskit::Role::Marquee;
     // use eframe::egui::CursorIcon::Default;
@@ -185,13 +186,13 @@ pub mod tests {
                             }
                             zeroize_db(&mut db);
                             drop(db);
-                            break;
+                            exit(0);
                         }
                         UserRequst::ExitAppWithoutSave => {
                             manual_zeroize!(ecies_key_salt, wrapped_user_key);
                             zeroize_db(&mut db);
                             drop(db);
-                            break;
+                            exit(0);
                         }
                     },
                 Err(e) => {

@@ -78,7 +78,7 @@ pub mod user_id {
     use zeroize::{Zeroize, ZeroizeOnDrop};
     use crate::data_base::{SiteName, SiteNameError, UserPW, UserPWError};
 
-    const MAX_USER_ID_LEN: usize = 32;
+    // const MAX_USER_ID_LEN: usize = 32;
     #[derive(
         Zeroize,
         ZeroizeOnDrop,
@@ -187,6 +187,12 @@ pub mod site_name {
             let url = Url::parse(&with_scheme)
                 .map_err(|e| SiteNameError::InvalidUrl(e.to_string()))?;
             let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
+            let (canonical_full, _had_www) 
+                = if let Some(rest) = host.strip_prefix("www.") {
+                (rest, true)
+                } else {
+                (host, false)
+                };
             let domain = PSL
                 .domain(host.as_bytes())
                 .ok_or(SiteNameError::InvalidDomain)?;
@@ -194,7 +200,7 @@ pub mod site_name {
                 .map_err(|_| SiteNameError::InvalidDomain)?
                 .to_ascii_lowercase();
             Ok(Self {
-                full: host.to_ascii_lowercase(),
+                full: canonical_full.to_ascii_lowercase(),
                 reg
             })
         }
