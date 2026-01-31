@@ -30,6 +30,7 @@ pub mod tests {
     use std::io::{stdin, Write};
     use std::process::exit;
     use std::str::FromStr;
+    use log::warn;
     // use eframe::egui::accesskit::Role::Marquee;
     // use eframe::egui::CursorIcon::Default;
     use rkyv::rancor::ResultExt;
@@ -47,10 +48,10 @@ pub mod tests {
     // #[test]
     pub(crate) fn without_gui() -> () {
         let instance = SingleInstance::new("team-5").unwrap();
-        if size_of::<usize>() != 64 { error!("Unsupported Architecture") };
+        assert_eq!(size_of::<usize>(), 8, "Unsupported Architecture");
 
         if !instance.is_single() {
-            error!("This instance is not a single.");
+            println!("This instance is not a single.");
             return ();
         }
 
@@ -58,11 +59,16 @@ pub mod tests {
             = match load_db() {
             Ok(v) => {v}
             Err(e) => {
-                error!("Error loading db: {}", e);
+                println!("Error loading db: {}", e);
                 return;
             }
         };
-        // user_warn 표시
+        match user_wran {
+            Some(w) => {
+                println!("Warn loading db: {}", w)
+            }
+            None => {}
+        }
 
         let mut db: DB;
         let mut ecies_keys;
@@ -70,14 +76,27 @@ pub mod tests {
         let mut wrapped_user_key;
         if is_first_login {
             loop {
-                let raw_master_pw = String::from("12341234"); // 입력창 통해 마스터 비번 입력
-                (ecies_keys, ecies_key_salt, wrapped_user_key) = match set_master_pw_and_1st_login(raw_master_pw) {
+                println!("[ First Login ]");
+                print!("Please enter new master password: ");
+                io::stdout().flush().unwrap();
+                let mut raw_master_pw = String::new();
+                stdin().read_line(&mut raw_master_pw).unwrap();
+                let tmp = match set_master_pw_and_1st_login(raw_master_pw.clone()) {
                     Ok(v) => {v}
                     Err(e) => {
-                        error!("Error setting master pw: {}", e);
+                        println!("Error setting master pw: {}", e);
                         continue;
                     }
                 };
+                print!("Please confirm master password: ");
+                io::stdout().flush().unwrap();
+                let mut master_pw_confirm = String::new();
+                stdin().read_line(&mut master_pw_confirm).unwrap();
+                if raw_master_pw != master_pw_confirm {
+                    println!("password is missmatch");
+                    continue;
+                }
+                (ecies_keys, ecies_key_salt, wrapped_user_key) = tmp;
                 break;
             }
             db_header.db_salt = ecies_key_salt;
@@ -86,18 +105,24 @@ pub mod tests {
             db = DB::new();
         } else {
             loop {
-                let raw_pw = String::from("12341234"); // 입력창 통해 마스터 비번 입력
-                (ecies_keys, wrapped_user_key) = match check_master_pw_and_login(raw_pw, db_header.db_salt.clone()) {
+                println!("[ Default Login ]");
+                println!("Please enter master password: ");
+                io::stdout().flush().unwrap();
+                let mut raw_master_pw = String::new();
+                stdin().read_line(&mut raw_master_pw).unwrap();
+                print!("\r\x1B[2K");
+                io::stdout().flush().unwrap();
+                (ecies_keys, wrapped_user_key) = match check_master_pw_and_login(raw_master_pw, db_header.db_salt.clone()) {
                     Ok(v) => { v }
                     Err(e) => {
-                        error!("Error checking master pw: {}", e);
+                        println!("Error checking master pw: {}", e);
                         continue;
                     }
                 };
                 db = match decrypt_db(&encrypted_db.as_ref().unwrap(), ecies_keys.sk) {
                     Ok(v) => { v }
                     Err(e) => {
-                        error!("Error decrypting db: {}", e);
+                        println!("Error decrypting db: {}", e);
                         continue;
                     }
                 };
@@ -118,19 +143,19 @@ pub mod tests {
                     match request {
                         UserRequst::AddUserPW { site, id, pw } => {
                             if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
-                                error!("Error adding password: {}", e);
+                                println!("Error adding password: {}", e);
                             } else { continue }
                             continue
                         }
                         UserRequst::ChangeUserPW { site, id, pw } => {
                             if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
-                                error!("Error changing password: {}", e);
+                                println!("Error changing password: {}", e);
                             }
                             continue;
                         }
                         UserRequst::RemoveUserPW { site, id } => {
                             if let Err(e) = remove_password(&mut db, site, id) {
-                                error!("Error removing password: {}", e);
+                                println!("Error removing password: {}", e);
                             }
                             continue;
                         }
@@ -138,7 +163,7 @@ pub mod tests {
                             let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
                                 Ok(v) => {v}
                                 Err(e) => {
-                                    error!("Error getting password: {}", e);
+                                    println!("Error getting password: {}", e);
                                     continue;
                                 }
                             };
@@ -160,12 +185,12 @@ pub mod tests {
                             let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                 Ok(v) => { v }
                                 Err(e) => {
-                                    error!("Error encrypting db: {}", e);
+                                    println!("Error encrypting db: {}", e);
                                     continue;
                                 }
                             };
                             if let Err(e) = save_db(&mut db_header, encryted_db) {
-                                error!("Error saving db: {}", e);
+                                println!("Error saving db: {}", e);
                                 continue;
                             }
                             continue;
@@ -174,12 +199,12 @@ pub mod tests {
                             let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                 Ok(v) => { v }
                                 Err(e) => {
-                                    error!("Error encrypting db: {}", e);
+                                    println!("Error encrypting db: {}", e);
                                     continue;
                                 }
                             };
                             if let Err(e) = save_db(&mut db_header, encryted_db) {
-                                error!("Error saving db: {}", e);
+                                println!("Error saving db: {}", e);
                                 continue;
                             }
                             manual_zeroize!(ecies_key_salt, wrapped_user_key);

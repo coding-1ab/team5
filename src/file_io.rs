@@ -15,7 +15,18 @@ pub enum FileIOWarn {
     RevertedForUngracefulExited,
     RevertedForCorruptedFile
 }
-
+impl Display for FileIOWarn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileIOWarn::RevertedForUngracefulExited => {
+                write!(f, "RevertedForUngracefulExited")
+            }
+            FileIOWarn::RevertedForCorruptedFile => {
+                write!(f, "RevertedForCorruptedFile")
+            }
+        }
+    }
+}
 #[derive(Debug)]
 pub enum FileIOError {
     // Lock 관련
