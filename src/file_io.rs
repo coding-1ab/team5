@@ -185,6 +185,8 @@ pub fn save_db(header: &mut DBHeader, mut ciphertext: EncryptedDB) -> Result<(),
     let check_counters = 3;
     let mut write_success= false;
     for _ in 0..write_triales {
+        db_file.set_len(0)
+            .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.write_all(bytes.as_slice())
             .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.seek(SeekFrom::Start(0));
