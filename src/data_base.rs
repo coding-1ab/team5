@@ -189,7 +189,7 @@ pub mod site_name {
             let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
             let domain = PSL
                 .domain(host.as_bytes())
-                .ok_or(SiteNameError::InvalidDomain)?; // ← 여기
+                .ok_or(SiteNameError::InvalidDomain)?;
 
             let reg = std::str::from_utf8(domain.as_bytes())
                 .map_err(|_| SiteNameError::InvalidDomain)?
@@ -199,7 +199,6 @@ pub mod site_name {
                 reg
             })
         }
-
         pub fn from_unchecked(full: &str, reg: &str) -> Self {
             Self {
                 full: full.trim().to_ascii_lowercase(),
