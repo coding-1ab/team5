@@ -98,10 +98,10 @@ pub fn load_db() ->
         return Err(FileIOError::LockUnavailable);
     };
 
-    let db_exists = db_file.metadata()
+    let db_exists = db_path.metadata()
         .map(|v| v.len() > 0)
         .map_err(FileIOError::FileReadFailed)?;
-    let bak_exists = bak_file.metadata()
+    let bak_exists = bak_path.metadata()
         .map(|v| v.len() > 0)
         .map_err(FileIOError::FileReadFailed)?;
 
