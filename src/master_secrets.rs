@@ -245,7 +245,7 @@ pub fn encrypt_db(db: &DB, pk: &Box<PublicKey>,)
 
 pub fn decrypt_db(bytes: &[u8], mut sk: Box<SecretKey>,
 ) -> Result<DB, MasterPWError> {
-    let mut decrypted = ecies::decrypt(&bytes, &sk.serialize())
+    let mut decrypted = ecies::decrypt(&sk.serialize(), &bytes)
         .map_err(|_| MasterPWError::IncorrectPW)?;
     manual_zeroize!(*sk);
     let db = rkyv::from_bytes::<DB, Error>(&decrypted).unwrap();
@@ -253,3 +253,14 @@ pub fn decrypt_db(bytes: &[u8], mut sk: Box<SecretKey>,
 
     Ok( db )
 }
+
+
+
+
+
+
+
+
+
+
+
