@@ -91,12 +91,25 @@ pub fn load_db() ->
         }
     };
 
+    let db_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(db_path)
+        .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    match db_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
+    }
+
     if bak_exist {
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
     }
     else {
         fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
             .map_err(|err| FileIOError::FileRenameFailed(err))?;
+        db_file.unlock();
         if !db_exist {
             return Ok( (true, None, DBHeader::empty_valid(), None) )
         }
