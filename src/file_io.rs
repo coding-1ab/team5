@@ -2,7 +2,7 @@ use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};
 
@@ -125,6 +125,7 @@ pub fn load_db() ->
         let mut data = Vec::new();
         (&bak_file).take(u64::MAX).read_to_end(&mut data)
             .map_err(|err| FileIOError::FileReadFailed(err))?;
+        (&bak_file).seek(SeekFrom::Start(0));
         let parsed = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
@@ -180,12 +181,13 @@ pub fn save_db(header: &mut DBHeader, mut ciphertext: EncryptedDB) -> Result<(),
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
     header.write_header(&mut bytes);
     bytes.append(&mut ciphertext);
-    let write_triales = 3;
+    let write_triales = 2;
     let check_counters = 3;
     let mut write_success= false;
     for _ in 0..write_triales {
         db_file.write_all(bytes.as_slice())
             .map_err(|err| FileIOError::FileWriteFailed(err))?;
+        db_file.seek(SeekFrom::Start(0));
         db_file.sync_all()
             .map_err(|err| FileIOError::FileSyncFailed(err))?;
 
@@ -194,16 +196,21 @@ pub fn save_db(header: &mut DBHeader, mut ciphertext: EncryptedDB) -> Result<(),
                 .map_err(|err| FileIOError::FileReadFailed(err))?
                 .len();
             if file_len as usize == bytes.len() {
-                let mut file_like = Vec::with_capacity(bytes.len());
-                (&db_file).take(u64::MAX).read_to_end(&mut file_like)
+                let mut file_reading = Vec::with_capacity(bytes.len());
+                (&db_file).take(u64::MAX).read_to_end(&mut file_reading)
                     .map_err(|err| FileIOError::FileReadFailed(err))?;
-                if bytes == file_like {
+                db_file.seek(SeekFrom::Start(0));
+                if bytes == file_reading {
                     write_success = true;
+                    continue;
                 } else {
                     write_success = false;
                     break;
                 }
             }
+        }
+        if write_success {
+            break;
         }
     }
     if write_success == false {

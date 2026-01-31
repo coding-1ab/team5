@@ -235,7 +235,7 @@ pub struct Url {
     ///   authority = "//" userinfo? host [ ":" port ]?
     ///   userinfo = username [ ":" password ]? "@"
     ///   hierarchical-path = [ "/" path-segment ]+
-    serialization: String,
+    pub serialization: String,
 
     // Components
     scheme_end: u32,   // Before ':'

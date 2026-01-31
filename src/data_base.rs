@@ -185,7 +185,7 @@ pub mod site_name {
             } else {
                 format!("dummy://{}", input)
             };
-            let url = Url::parse(&with_scheme)
+            let mut url = Url::parse(&with_scheme)
                 .map_err(|e| SiteNameError::InvalidUrl(e.to_string()))?;
             with_scheme.zeroize();
             let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
