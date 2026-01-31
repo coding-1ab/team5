@@ -103,7 +103,7 @@ pub mod tests {
             db = DB::new();
         } else {
             loop {
-                println!("[ Default Login ]");
+                println!("[ General Login ]");
                 print!("Please enter master password: ");
                 io::stdout().flush().unwrap();
                 let mut raw_master_pw = String::new();
