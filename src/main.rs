@@ -34,10 +34,10 @@ pub mod tests {
     // use eframe::egui::accesskit::Role::Marquee;
     // use eframe::egui::CursorIcon::Default;
     use rkyv::rancor::ResultExt;
-    use zeroize::Zeroize;
+    use zeroize::{Zeroize, Zeroizing};
     use team5::master_secrets::{_manual_zeroize, decrypt_db, encrypt_db, set_master_pw_and_1st_login};
     use team5::data_base::{add_password, change_password, explor_db, get_password, prefix_range, remove_password, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
-    use team5::file_io::{load_db, save_db, FileIOWarn};
+    use team5::file_io::{load_db, mark_as_graceful_exited_to_file, save_db, FileIOWarn};
     use team5::header::Salt;
     use team5::manual_zeroize;
     use team5::master_secrets::{check_master_pw_and_login, EciesKeyPair};
@@ -80,8 +80,8 @@ pub mod tests {
                 io::stdout().flush().unwrap();
                 let mut raw_master_pw = String::new();
                 stdin().read_line(&mut raw_master_pw).unwrap();
-                let tmp = match set_master_pw_and_1st_login(raw_master_pw.clone()) {
-                    Ok(v) => {v}
+                let mut tmp = match set_master_pw_and_1st_login(raw_master_pw.clone()) {
+                    Ok(v) => { v }
                     Err(e) => {
                         println!("Error setting master pw: {}", e);
                         continue;
@@ -93,6 +93,7 @@ pub mod tests {
                 stdin().read_line(&mut master_pw_confirm).unwrap();
                 if raw_master_pw != master_pw_confirm {
                     println!("password is missmatch");
+                    tmp.zeroize();
                     continue;
                 }
                 (ecies_keys, db_header.db_salt, wrapped_user_key) = tmp;
@@ -129,6 +130,7 @@ pub mod tests {
             }
         }
 
+        let mut should_save_db = false;
         loop {
             print!("> ");
             io::stdout().flush().unwrap();
@@ -142,19 +144,22 @@ pub mod tests {
                         UserRequst::AddUserPW { site, id, pw } => {
                             if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error adding password: {}", e);
-                            } else { continue }
+                            }
+                            should_save_db = true;
                             continue
                         }
                         UserRequst::ChangeUserPW { site, id, pw } => {
                             if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error changing password: {}", e);
                             }
+                            should_save_db = true;
                             continue;
                         }
                         UserRequst::RemoveUserPW { site, id } => {
                             if let Err(e) = remove_password(&mut db, site, id) {
                                 println!("Error removing password: {}", e);
                             }
+                            should_save_db = true;
                             continue;
                         }
                         UserRequst::GetUserPW { site, id } => {
@@ -180,43 +185,51 @@ pub mod tests {
                             }
                         }
                         UserRequst::SaveDB => {
-                            let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
-                                Ok(v) => { v }
-                                Err(e) => {
-                                    println!("Error encrypting db: {}", e);
+                            if should_save_db {
+                                let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                                    Ok(v) => { v }
+                                    Err(e) => {
+                                        println!("Error encrypting db: {}", e);
+                                        continue;
+                                    }
+                                };
+                                if let Err(e) = save_db(db_header, encryted_db) {
+                                    println!("Error saving db: {}", e);
                                     continue;
                                 }
-                            };
-                            if let Err(e) = save_db(db_header, encryted_db) {
-                                println!("Error saving db: {}", e);
-                                continue;
+                                should_save_db = false;
                             }
                             continue;
                         }
                         UserRequst::ExitAppWithSave => {
-                            let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
-                                Ok(v) => { v }
-                                Err(e) => {
-                                    println!("Error encrypting db: {}", e);
+                            if should_save_db {
+                                let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                                    Ok(v) => { v }
+                                    Err(e) => {
+                                        println!("Error encrypting db: {}", e);
+                                        continue;
+                                    }
+                                };
+                                if let Err(e) = save_db(db_header, encryted_db) {
+                                    println!("Error saving db: {}", e);
                                     continue;
                                 }
-                            };
-                            if let Err(e) = save_db(db_header, encryted_db) {
-                                println!("Error saving db: {}", e);
-                                continue;
                             }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
                             drop(db);
-                            return;
+                            exit(0);
                         }
                         UserRequst::ExitAppWithoutSave => {
+                            if !should_save_db {
+                                mark_as_graceful_exited_to_file();
+                            }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
                             drop(db);
-                            return;
+                            exit(0);
                         }
                     },
                 Err(e) => {

@@ -4,6 +4,7 @@ use std::borrow::Borrow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
 use std::ops::{Bound, RangeFrom};
+use std::pin::Pin;
 pub use user_id::{UserID, UserIDError};
 pub use user_pw::{UserPW, UserPWError};
 use zeroize::Zeroize;
@@ -338,7 +339,7 @@ pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: 
 
 pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
     -> Result<(), DBIOError> {
-    let encrypted = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
+    let encrypted_pw = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 
     let users = match db.entry(site_name) {
         std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
@@ -350,9 +351,9 @@ pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw
     match users.entry(user_id) {
         std::collections::hash_map::Entry::Occupied(mut e) => {
             let pw = e.get_mut();
-            pw.zeroize();
 
-            *pw = encrypted;
+            pw.zeroize();
+            *pw = encrypted_pw;
             Ok(())
         }
         std::collections::hash_map::Entry::Vacant(_) => Err(DBIOError::UserNotFound),

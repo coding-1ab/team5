@@ -155,9 +155,21 @@ fn master_pw_kdf(master_pw: &MasterPW, mut salt: Salt, kdf_out: &mut [u8]) -> ()
 pub struct EciesKeyPair {pub pk: Box<PublicKey>, pub sk: Box<SecretKey>}
 impl EciesKeyPair {
     pub fn new(pk: PublicKey, sk: SecretKey) -> EciesKeyPair {
-        EciesKeyPair{ pk: Box::new(pk), sk: Box::new(sk) }
+        EciesKeyPair { pk: Box::new(pk), sk: Box::new(sk) }
     }
 }
+impl Zeroize for EciesKeyPair {
+    fn zeroize(&mut self) {
+        manual_zeroize!(*(self.pk));
+        manual_zeroize!(*(self.sk));
+    }
+}
+// impl Drop for EciesKeyPair {
+//     fn drop(&mut self) {
+//         self.zeroize();
+//     }
+// }
+impl ZeroizeOnDrop for EciesKeyPair {}
 pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterPWError> {
     let sk = SecretKey::parse(&kdf_key)
         .map_err(|_| MasterPWError::IncorrectPW)?;
@@ -253,14 +265,4 @@ pub fn decrypt_db(bytes: &[u8], mut sk: Box<SecretKey>,
 
     Ok( db )
 }
-
-
-
-
-
-
-
-
-
-
 

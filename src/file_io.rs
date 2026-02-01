@@ -235,5 +235,11 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     Ok( () )
 }
 
+pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
+    let bak_path = Path::new(DB_BAK_FILE);
 
+    let _ = fs::remove_file(bak_path)
+        .map_err(|err| FileIOError::DBBackupDeleteFailed(err));
+    Ok( () )
+}
 
