@@ -106,34 +106,34 @@ pub fn load_db() ->
     if bak_exist {
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
     }
-    else {
-        fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
-            .map_err(|err| FileIOError::FileRenameFailed(err))?;
-        db_file.unlock();
-        if !db_exist {
-            return Ok( (true, None, DBHeader::empty_valid(), None) )
-        }
-    }
-
-    let bak_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(bak_path)
-        .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    match bak_file.try_lock_exclusive() {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
-        Err(err) => { return Err(FileIOError::LockUnavailable) }
-    }
+    // else {
+    //     fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
+    //         .map_err(|err| FileIOError::FileRenameFailed(err))?;
+    //     db_file.unlock();
+    //     if !db_exist {
+    //         return Ok( (true, None, DBHeader::empty_valid(), None) )
+    //     }
+    // }
+    //
+    // let bak_file = OpenOptions::new()
+    //     .read(true)
+    //     .write(true)
+    //     .create(true)
+    //     .open(bak_path)
+    //     .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    // match bak_file.try_lock_exclusive() {
+    //     Ok(()) => {}
+    //     Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+    //     Err(err) => { return Err(FileIOError::LockUnavailable) }
+    // }
 
     let read_triales = 3;
     for _ in 0..read_triales {
         let mut data = Vec::new();
-        (&bak_file).seek(SeekFrom::Start(0));
-        (&bak_file).take(u64::MAX).read_to_end(&mut data)
+        (&db_file).seek(SeekFrom::Start(0));
+        (&db_file).take(u64::MAX).read_to_end(&mut data)
             .map_err(|err| FileIOError::FileReadFailed(err))?;
-        (&bak_file).seek(SeekFrom::Start(0));
+        (&db_file).seek(SeekFrom::Start(0));
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
