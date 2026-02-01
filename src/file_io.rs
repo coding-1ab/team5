@@ -240,7 +240,7 @@ pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
 pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
-
+    println!("[-1]");
     match fs::exists(db_path) {
         Ok(true) => {
             println!("[0]");
