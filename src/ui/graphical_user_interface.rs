@@ -11,7 +11,7 @@ use eframe::{
     epaint::text::{FontInsert, FontPriority, InsertFontFamily},
 };
 use std::{collections::HashMap, fs, io};
-//use crate::data_base::{prefix_range, DB};
+use crate::data_base::{prefix_range, DB};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
@@ -49,17 +49,16 @@ pub struct GraphicalUserInterface {
     id: String,
     password: String,
     re_check_password: String,
-    //data_base: DB,
+    data_base: Option<DB>,
+    search_data_base: String,
     window_open_list: WindowOpenList,
     output: String,
 }
 
 impl GraphicalUserInterface {
-    /*
     pub fn setting_database(&mut self, data_base: DB) {
-        self.data_base = data_base;
+        self.data_base = Some(data_base);
     }
-    */
 
     fn font_load(&mut self, context: &Context, name: &'static str, font_data: FontData, insert_font_family: InsertFontFamily, ) -> Result<(), io::Error> {
         let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
@@ -135,7 +134,8 @@ impl Default for GraphicalUserInterface {
             id: String::new(),
             password: String::new(),
             re_check_password: String::new(),
-            //data_base: Default::default(),
+            search_data_base: String::new(),
+            data_base: Default::default(),
             window_open_list: Default::default(),
             output: String::new(),
         }
@@ -225,8 +225,22 @@ impl eframe::App for GraphicalUserInterface {
 
         if self.login {
             egui::CentralPanel::default().show(ctx, |ui| {
+                ui.label("search");
+                ui.add(egui::TextEdit::singleline(&mut self.search_data_base));
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    //prefix_range(&self.data_base, todo!())
+                    let Some(data_base) = &self.data_base else {
+                        ui.label("invalided data base!");
+                        return;
+                    };
+                    for user_data in prefix_range(data_base, &self.search_data_base) {
+                        egui::Grid::new("user_data").show(ui, |ui| {
+                            let (site_name, user_data) = user_data;
+                            ui.label(&site_name.0);
+                            if ui.button("asdf").clicked() {
+
+                            }
+                        });
+                    }
                 });
 
                 if ui.button("Submit").clicked() {
