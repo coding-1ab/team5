@@ -245,8 +245,9 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
         Ok(true) => {
             match fs::exists(bak_path) {
                 Ok(false) => {
-                    let _ = fs::rename(db_path, bak_path)
-                        .map_err(|err| FileIOError::FileRenameFailed(err));
+                    if let Err(err) = fs::rename(db_path, bak_path) {
+                        return Err(FileIOError::FileRenameFailed(err));
+                    }
                 }
                 Err(err) => {
                     return Err(FileIOError::FileReadFailed(err));

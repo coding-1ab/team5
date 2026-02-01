@@ -47,6 +47,7 @@ pub mod tests {
 
     // #[test]
     pub(crate) fn without_gui() -> () {
+        let _ = mark_as_ungraceful_exited_to_file();
         let instance = SingleInstance::new("team-5").unwrap();
         assert_eq!(size_of::<usize>(), 8, "Unsupported Architecture");
 
