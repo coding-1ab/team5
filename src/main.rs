@@ -197,7 +197,9 @@ pub mod tests {
                                     println!("Error saving db: {}", e);
                                     continue;
                                 }
-                                mark_as_graceful_exited_to_file();
+                                if let Err(err) = mark_as_graceful_exited_to_file() {
+                                    println!("Error saving db: {}", err);
+                                }
                                 should_save_db = false;
                             }
                             continue;
