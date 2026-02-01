@@ -243,6 +243,7 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
 
     match fs::exists(db_path) {
         Ok(true) => {
+            println!("[0]");
             match fs::exists(bak_path) {
                 Ok(false) => {
                     println!("[1]");
