@@ -197,6 +197,7 @@ pub mod tests {
                                     println!("Error saving db: {}", e);
                                     continue;
                                 }
+                                mark_as_graceful_exited_to_file();
                                 should_save_db = false;
                             }
                             continue;
@@ -214,6 +215,8 @@ pub mod tests {
                                     println!("Error saving db: {}", e);
                                     continue;
                                 }
+                            } else {
+                                mark_as_graceful_exited_to_file().ok();
                             }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
@@ -223,7 +226,7 @@ pub mod tests {
                         }
                         UserRequst::ExitAppWithoutSave => {
                             if !should_save_db {
-                                mark_as_graceful_exited_to_file();
+                                mark_as_graceful_exited_to_file().ok();
                             }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
@@ -235,6 +238,9 @@ pub mod tests {
                 Err(e) => {
                     println!("Invalid input: {}", e);
                 }
+            }
+            if should_save_db {
+                mark_as_graceful_exited_to_file().ok();
             }
         }
     }

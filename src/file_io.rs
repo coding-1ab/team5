@@ -1,7 +1,7 @@
 use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};
@@ -238,8 +238,40 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
 pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
 
-    let _ = fs::remove_file(bak_path)
-        .map_err(|err| FileIOError::DBBackupDeleteFailed(err));
+    match fs::exists(bak_path) {
+        Ok(true) => {
+            let _ = fs::remove_file(bak_path)
+                .map_err(|err| FileIOError::DBBackupDeleteFailed(err));
+        }
+        Ok(false) => {}
+        Err(err) => {}
+    }
     Ok( () )
 }
 
+pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
+    let db_path = Path::new(DB_FILE);
+    let bak_path = Path::new(DB_BAK_FILE);
+
+    match fs::exists(db_path) {
+        Ok(true) => {
+            match fs::exists(bak_path) {
+                Ok(false) => {
+                    let _ = fs::rename(db_path, bak_path)
+                        .map_err(|err| FileIOError::FileRenameFailed(err));
+                }
+                Err(err) => {
+                    return Err(FileIOError::FileReadFailed(err));
+                }
+                Ok(true) => {}
+            }
+        }
+        Ok(false) => {
+            File::create_new(bak_path).ok();
+        }
+        Err(err) => {
+            return Err(FileIOError::FileReadFailed(err));
+        }
+    }
+    Ok( () )
+}
