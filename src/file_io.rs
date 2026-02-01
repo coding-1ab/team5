@@ -226,6 +226,18 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
 pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
 
+    let bak_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(bak_path)
+        .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    match bak_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
+    }
+
     match fs::exists(bak_path) {
         Ok(true) => {
             let _ = fs::remove_file(bak_path)
@@ -241,6 +253,29 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
 
+    let db_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(db_path)
+        .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    match db_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
+    }
+    let bak_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(bak_path)
+        .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    match bak_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
+    }
+
     match fs::exists(db_path) {
         Ok(true) => {
             match fs::exists(bak_path) {
@@ -255,7 +290,9 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
             }
         }
         Ok(false) => {
-            File::create_new(bak_path).ok();
+            if let Err(err) = File::create_new(bak_path) {
+                return Err(FileIOError::FileWriteFailed(err));
+            }
         }
         Err(err) => {
             return Err(FileIOError::FileReadFailed(err));
