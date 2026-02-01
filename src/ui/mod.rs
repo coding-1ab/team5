@@ -4,6 +4,7 @@
 
 // 흠 뭐부터 하지
 
+use std::marker::PhantomData;
 use crate::data_base::DB;
 
 #[cfg(feature = "gui")]
@@ -21,6 +22,7 @@ struct UserInterface {
     #[cfg(feature = "gui")]
     graphical_user_interface: graphical_user_interface::GraphicalUserInterface,
     #[cfg(feature = "cui")]
-    character_user_interface: CharacterUserInterface
+    character_user_interface: CharacterUserInterface,
+    //_phantom_data: PhantomData<()>
 }
 
