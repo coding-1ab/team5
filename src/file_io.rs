@@ -240,15 +240,12 @@ pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
 pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
-    println!("[-1]");
+
     match fs::exists(db_path) {
         Ok(true) => {
-            println!("[0]");
             match fs::exists(bak_path) {
                 Ok(false) => {
-                    println!("[1]");
                     if let Err(err) = fs::rename(db_path, bak_path) {
-                        println!("[2]");
                         return Err(FileIOError::FileRenameFailed(err));
                     }
                 }

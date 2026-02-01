@@ -242,7 +242,7 @@ pub mod tests {
                     println!("Invalid input: {}", e);
                 }
             }
-            if  should_save_db {
+            if !written_save_status && should_save_db {
                 if let Err(err) = mark_as_ungraceful_exited_to_file() {
                     println!("Error saving status: {}", err);
                 } else {
