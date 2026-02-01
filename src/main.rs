@@ -37,7 +37,7 @@ pub mod tests {
     use zeroize::{Zeroize, Zeroizing};
     use team5::master_secrets::{_manual_zeroize, decrypt_db, encrypt_db, set_master_pw_and_1st_login};
     use team5::data_base::{add_password, change_password, explor_db, get_password, prefix_range, remove_password, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
-    use team5::file_io::{load_db, mark_as_graceful_exited_to_file, save_db, FileIOWarn};
+    use team5::file_io::{load_db, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, save_db, FileIOWarn};
     use team5::header::Salt;
     use team5::manual_zeroize;
     use team5::master_secrets::{check_master_pw_and_login, EciesKeyPair};
@@ -242,7 +242,7 @@ pub mod tests {
                 }
             }
             if should_save_db {
-                mark_as_graceful_exited_to_file().ok();
+                mark_as_ungraceful_exited_to_file().ok();
             }
         }
     }
