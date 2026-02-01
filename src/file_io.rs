@@ -38,13 +38,14 @@ pub enum FileIOError {
     FileWriteFailed(io::Error),
     FileSyncFailed(io::Error),
     FileRenameFailed(io::Error),
+    FileDeleteFailed(io::Error),
 
     // 헤더/포맷 관련
     InvalidHeader,
     DBVersionMissMatch,
 
     // 백업 관련
-    DBBackupDeleteFailed(io::Error),
+    // DBBackupDeleteFailed(io::Error),
 
     // 무결성(재시도 이후에도 복원 불가)
     PersistentIntegrityFailure,
@@ -60,7 +61,7 @@ impl Display for FileIOError {
             FileWriteFailed(e) => write!(f, "Failed to write file: {}", e),
             FileSyncFailed(e) => write!(f, "Failed to sync file: {}", e),
             FileRenameFailed(e) => write!(f, "Failed to rename file: {}", e),
-            DBBackupDeleteFailed(e) => write!(f, "Failed to delete DB backup: {}", e),
+            FileDeleteFailed(e) => write!(f, "Failed to delete file: {}", e),
             PersistentIntegrityFailure => write!(f, "Failed to write valid DB after retries"),
             InvalidHeader => write!(f, "Invalid DB header"),
             DBVersionMissMatch => write!(f, "Unsupported DB version"),
@@ -105,27 +106,14 @@ pub fn load_db() ->
 
     if bak_exist {
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
+        if db_exist {
+            fs::remove_file(db_path)
+                .map_err(|err| FileIOError::FileDeleteFailed(err))?;
+        }
+        fs::rename(bak_path, db_path).map_err(|err| FileIOError::FileRenameFailed(err))?;
+    } else if !db_exist {
+        return Ok( (true, None, DBHeader::empty_valid(), None) )
     }
-    // else {
-    //     fs::rename(db_path, bak_path) // 비정상 종료 대비용 마킹
-    //         .map_err(|err| FileIOError::FileRenameFailed(err))?;
-    //     db_file.unlock();
-    //     if !db_exist {
-    //         return Ok( (true, None, DBHeader::empty_valid(), None) )
-    //     }
-    // }
-    //
-    // let bak_file = OpenOptions::new()
-    //     .read(true)
-    //     .write(true)
-    //     .create(true)
-    //     .open(bak_path)
-    //     .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    // match bak_file.try_lock_exclusive() {
-    //     Ok(()) => {}
-    //     Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
-    //     Err(err) => { return Err(FileIOError::LockUnavailable) }
-    // }
 
     let read_triales = 3;
     for _ in 0..read_triales {
@@ -230,7 +218,7 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     }
 
     let _ = fs::remove_file(bak_path)
-        .map_err(|err| FileIOError::DBBackupDeleteFailed(err));
+        .map_err(|err| FileIOError::FileDeleteFailed(err));
 
     Ok( () )
 }
@@ -241,7 +229,7 @@ pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
     match fs::exists(bak_path) {
         Ok(true) => {
             let _ = fs::remove_file(bak_path)
-                .map_err(|err| FileIOError::DBBackupDeleteFailed(err));
+                .map_err(|err| FileIOError::FileDeleteFailed(err));
         }
         Ok(false) => {}
         Err(err) => {}
