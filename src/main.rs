@@ -253,7 +253,10 @@ pub mod tests {
     }
 }
 
+
 use clap::{Error, Parser};
+use crate::UserRequst::ExitAppWithoutSave;
+
 #[derive(Parser)]
 pub enum UserRequst {
     AddUserPW{site: SiteName, id: UserID, pw: UserPW},
