@@ -110,7 +110,8 @@ pub fn load_db() ->
             fs::remove_file(db_path)
                 .map_err(|err| FileIOError::FileDeleteFailed(err))?;
         }
-        fs::rename(bak_path, db_path).map_err(|err| FileIOError::FileRenameFailed(err))?;
+        fs::rename(bak_path, db_path)
+            .map_err(|err| FileIOError::FileRenameFailed(err))?;
     } else if !db_exist {
         return Ok( (true, None, DBHeader::empty_valid(), None) )
     }
@@ -125,7 +126,6 @@ pub fn load_db() ->
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
-                print!("~{}~", data.len());
                 return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
             }
             Err(e) => return Err(e)
@@ -183,8 +183,8 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     let check_counters = 3;
     let mut write_success= false;
     for _ in 0..write_triales {
-        db_file.set_len(0)
-            .map_err(|err| FileIOError::FileWriteFailed(err))?;
+        // db_file.set_len(0)
+        //     .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.write_all(bytes.as_slice())
             .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.seek(SeekFrom::Start(0));
@@ -244,6 +244,7 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     match fs::exists(db_path) {
         Ok(true) => {
             match fs::exists(bak_path) {
+                Ok(true) => {}
                 Ok(false) => {
                     if let Err(err) = fs::rename(db_path, bak_path) {
                         return Err(FileIOError::FileRenameFailed(err));
@@ -252,7 +253,6 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
                 Err(err) => {
                     return Err(FileIOError::FileReadFailed(err));
                 }
-                Ok(true) => {}
             }
         }
         Ok(false) => {

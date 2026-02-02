@@ -131,7 +131,7 @@ pub mod tests {
         }
 
         let mut should_save_db = false;
-        let mut written_save_status = false;
+        let mut previous_save_status = false;
         loop {
             print!("> ");
             io::stdout().flush().unwrap();
@@ -242,12 +242,12 @@ pub mod tests {
                     println!("Invalid input: {}", e);
                 }
             }
-            if !written_save_status && should_save_db {
+            if !previous_save_status && should_save_db {
                 if let Err(err) = mark_as_ungraceful_exited_to_file() {
                     println!("Error saving status: {}", err);
-                } else {
-                    written_save_status = should_save_db;
+                    continue;
                 }
+                previous_save_status = should_save_db;
             }
         }
     }
