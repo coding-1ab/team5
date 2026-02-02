@@ -70,8 +70,7 @@ impl Display for FileIOError {
 }
 
 impl Error for FileIOError {}
-pub fn load_db() ->
-                 Result<(bool, Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), FileIOError> {
+pub fn load_db() -> Result<(bool, Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
 
@@ -92,18 +91,6 @@ pub fn load_db() ->
         }
     };
 
-    let db_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(db_path)
-        .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    match db_file.try_lock_exclusive() {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
-        Err(err) => { return Err(FileIOError::LockUnavailable) }
-    }
-
     if bak_exist {
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
         if db_exist {
@@ -116,6 +103,18 @@ pub fn load_db() ->
         return Ok( (true, None, DBHeader::empty_valid(), None) )
     }
 
+    let db_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(db_path)
+        .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    match db_file.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) => { return Err(FileIOError::LockUnavailable) }
+    }
+
     let read_triales = 3;
     for _ in 0..read_triales {
         let mut data = Vec::new();
@@ -126,12 +125,12 @@ pub fn load_db() ->
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
-                return Ok((true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None))
+                return Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
             }
-            Err(e) => return Err(e)
+            Err(err) => return Err(err)
         };
         let hash = Sha256::digest(ciphertext.as_slice());
-        if header.ciphertext_checksum != hash.as_slice() {
+        if header.ciphertext_checksum.as_slice() != hash.as_slice() {
             continue;
         }
 
