@@ -161,17 +161,17 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     };
     // }
 
-    let bak_file = OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .open(bak_path)
-        .map_err(|err| FileIOError::FileOpenFailed(err))?;
-
-    let _ = bak_file.unlock().ok();
-    if bak_file.try_lock_exclusive().is_err() {
-        return Err(FileIOError::LockUnavailable);
-    };
+    // let bak_file = OpenOptions::new()
+    //     .create(true)
+    //     .read(true)
+    //     .write(true)
+    //     .open(bak_path)
+    //     .map_err(|err| FileIOError::FileOpenFailed(err))?;
+    //
+    // let _ = bak_file.unlock().ok();
+    // if bak_file.try_lock_exclusive().is_err() {
+    //     return Err(FileIOError::LockUnavailable);
+    // };
 
     header.ciphertext_checksum = Sha256::digest(&ciphertext).into();
     header.ciphertext_len = ciphertext.len();
@@ -223,15 +223,6 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
         return Err(FileIOError::PersistentIntegrityFailure);
     }
 
-    let _ = fs::remove_file(bak_path)
-        .map_err(|err| FileIOError::FileDeleteFailed(err));
-
-    Ok( () )
-}
-
-pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
-    let bak_path = Path::new(DB_BAK_FILE);
-
     match fs::exists(bak_path) {
         Ok(true) => {
             let _ = fs::remove_file(bak_path)
@@ -240,8 +231,10 @@ pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
         Ok(false) => {}
         Err(err) => {}
     }
+
     Ok( () )
 }
+
 
 pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
@@ -262,8 +255,14 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
             }
         }
         Ok(false) => {
-            if let Err(err) = File::create_new(bak_path) {
-                return Err(FileIOError::FileWriteFailed(err));
+            match fs::exists(bak_path) {
+                Ok(true) => {}
+                Ok(false) => {
+                    if let Err(err) = File::create_new(bak_path) {
+                        return Err(FileIOError::FileWriteFailed(err));
+                    }
+                }
+                Err(err) => {}
             }
         }
         Err(err) => {
@@ -272,3 +271,18 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     }
     Ok( () )
 }
+
+pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
+    let bak_path = Path::new(DB_BAK_FILE);
+
+    match fs::exists(bak_path) {
+        Ok(true) => {
+            let _ = fs::remove_file(bak_path)
+                .map_err(|err| FileIOError::FileDeleteFailed(err));
+        }
+        Ok(false) => {}
+        Err(err) => {}
+    }
+    Ok( () )
+}
+

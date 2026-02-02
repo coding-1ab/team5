@@ -56,7 +56,7 @@ pub mod tests {
         }
 
         let mut should_save_db = true;
-        
+
         let (is_first_login, user_wran, mut db_header, encrypted_db)
             = match load_db() {
             Ok(v) => {v}
@@ -146,23 +146,23 @@ pub mod tests {
                         UserRequst::AddUserPW { site, id, pw } => {
                             if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error adding password: {}", e);
+                                continue
                             }
                             should_save_db = true;
-                            continue
                         }
                         UserRequst::ChangeUserPW { site, id, pw } => {
                             if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error changing password: {}", e);
+                                continue;
                             }
                             should_save_db = true;
-                            continue;
                         }
                         UserRequst::RemoveUserPW { site, id } => {
                             if let Err(e) = remove_password(&mut db, site, id) {
                                 println!("Error removing password: {}", e);
+                                continue;
                             }
                             should_save_db = true;
-                            continue;
                         }
                         UserRequst::GetUserPW { site, id } => {
                             let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
@@ -173,7 +173,6 @@ pub mod tests {
                                 }
                             };
                             println!("{}", pw.as_str());
-                            continue;
                         }
                         UserRequst::PrefixSearch { site } => {
                             // prefix_range(&db, site)
@@ -201,10 +200,10 @@ pub mod tests {
                                 }
                                 if let Err(err) = mark_as_graceful_exited_to_file() {
                                     println!("Error saving db: {}", err);
+                                    continue;
                                 }
                                 should_save_db = false;
                             }
-                            continue;
                         }
                         UserRequst::ExitAppWithSave => {
                             if should_save_db {
