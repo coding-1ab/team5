@@ -104,6 +104,22 @@ pub mod tests {
             manual_zeroize!(ecies_keys.sk);
             drop(ecies_keys.sk);
             db = DB::new();
+
+            let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                Ok(v) => { v }
+                Err(e) => {
+                    println!("Error encrypting db: {}", e);
+                    exit(0);
+                }
+            };
+            if let Err(e) = save_db(db_header, encryted_db) {
+                println!("Error saving db: {}", e);
+                exit(0);
+            }
+            if let Err(err) = mark_as_graceful_exited_to_file() {
+                println!("Error saving db: {}", err);
+                exit(0);
+            }
         } else {
             loop {
                 println!("[ General Login ]");
