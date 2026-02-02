@@ -55,6 +55,8 @@ pub mod tests {
             return ();
         }
 
+        let mut should_save_db = true;
+        
         let (is_first_login, user_wran, mut db_header, encrypted_db)
             = match load_db() {
             Ok(v) => {v}
@@ -130,7 +132,6 @@ pub mod tests {
             }
         }
 
-        let mut should_save_db = false;
         let mut previous_save_status = false;
         loop {
             print!("> ");
