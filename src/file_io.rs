@@ -179,6 +179,8 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
     header.write_header(&mut bytes);
     bytes.append(&mut ciphertext);
+    ////////////
+    println!("[[ {} ]]", bytes.len());
     let write_triales = 2;
     let check_counters = 3;
     let mut write_success= false;
@@ -187,9 +189,12 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
         //     .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.write_all(bytes.as_slice())
             .map_err(|err| FileIOError::FileWriteFailed(err))?;
-        db_file.seek(SeekFrom::Start(0));
+        db_file.seek(SeekFrom::Start(0))
+            .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.sync_all()
             .map_err(|err| FileIOError::FileSyncFailed(err))?;
+        db_file.seek(SeekFrom::Start(0))
+            .map_err(|err| FileIOError::FileWriteFailed(err))?;
 
         for _ in 0..check_counters {
             let file_len = db_file.metadata()
@@ -199,7 +204,8 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
                 let mut file_reading = Vec::with_capacity(bytes.len());
                 (&db_file).take(u64::MAX).read_to_end(&mut file_reading)
                     .map_err(|err| FileIOError::FileReadFailed(err))?;
-                db_file.seek(SeekFrom::Start(0));
+                db_file.seek(SeekFrom::Start(0))
+                    .map_err(|err| FileIOError::FileReadFailed(err))?;
                 if bytes == file_reading {
                     write_success = true;
                     continue;
