@@ -55,7 +55,7 @@ pub mod tests {
             return ();
         }
 
-        let mut should_save_db = true;
+        // let mut should_save_db = true;
 
         let (is_first_login, user_wran, mut db_header, encrypted_db)
             = match load_db() {
@@ -132,7 +132,7 @@ pub mod tests {
             }
         }
 
-        let mut previous_save_status = false;
+        // let mut previous_save_status = false;
         loop {
             print!("> ");
             io::stdout().flush().unwrap();
@@ -148,21 +148,30 @@ pub mod tests {
                                 println!("Error adding password: {}", e);
                                 continue
                             }
-                            should_save_db = true;
+                            if let Err(err) = mark_as_ungraceful_exited_to_file() {
+                                println!("Error saving status: {}", err);
+                                continue;
+                            }
                         }
                         UserRequst::ChangeUserPW { site, id, pw } => {
                             if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error changing password: {}", e);
                                 continue;
                             }
-                            should_save_db = true;
+                            if let Err(err) = mark_as_ungraceful_exited_to_file() {
+                                println!("Error saving status: {}", err);
+                                continue;
+                            }
                         }
                         UserRequst::RemoveUserPW { site, id } => {
                             if let Err(e) = remove_password(&mut db, site, id) {
                                 println!("Error removing password: {}", e);
                                 continue;
                             }
-                            should_save_db = true;
+                            if let Err(err) = mark_as_ungraceful_exited_to_file() {
+                                println!("Error saving status: {}", err);
+                                continue;
+                            }
                         }
                         UserRequst::GetUserPW { site, id } => {
                             let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
@@ -186,7 +195,7 @@ pub mod tests {
                             }
                         }
                         UserRequst::SaveDB => {
-                            if should_save_db {
+                            // if should_save_db {
                                 let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                     Ok(v) => { v }
                                     Err(e) => {
@@ -202,11 +211,10 @@ pub mod tests {
                                     println!("Error saving db: {}", err);
                                     continue;
                                 }
-                                should_save_db = false;
-                            }
+                            // }
                         }
                         UserRequst::ExitAppWithSave => {
-                            if should_save_db {
+                            // if should_save_db {
                                 let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                     Ok(v) => { v }
                                     Err(e) => {
@@ -218,9 +226,9 @@ pub mod tests {
                                     println!("Error saving db: {}", e);
                                     continue;
                                 }
-                            } else {
-                                mark_as_graceful_exited_to_file().ok();
-                            }
+                            // } else {
+                            //     mark_as_graceful_exited_to_file().ok();
+                            // }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
@@ -228,9 +236,9 @@ pub mod tests {
                             exit(0);
                         }
                         UserRequst::ExitAppWithoutSave => {
-                            if !should_save_db {
+                            // if !should_save_db {
                                 mark_as_graceful_exited_to_file().ok();
-                            }
+                            // }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
@@ -238,17 +246,18 @@ pub mod tests {
                             exit(0);
                         }
                     },
+
                 Err(e) => {
                     println!("Invalid input: {}", e);
                 }
             }
-            if !previous_save_status && should_save_db {
-                if let Err(err) = mark_as_ungraceful_exited_to_file() {
-                    println!("Error saving status: {}", err);
-                    continue;
-                }
-                previous_save_status = should_save_db;
-            }
+            // if !previous_save_status && should_save_db {
+            //     if let Err(err) = mark_as_ungraceful_exited_to_file() {
+            //         println!("Error saving status: {}", err);
+            //         continue;
+            //     }
+            //     previous_save_status = should_save_db;
+            // }
         }
     }
 }
