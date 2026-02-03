@@ -151,7 +151,7 @@ pub(crate) fn without_gui() -> () {
             let mut raw_master_pw = Zeroizing::new(String::new());
             stdin().read_line(&mut raw_master_pw).unwrap();
             io::stdout().flush().unwrap();
-            let mut master_pw = match MasterPW::new(raw_master_pw) {
+            let master_pw = match MasterPW::new(raw_master_pw) {
                 Ok(v) => v,
                 Err(e) => {
                     println!("MasterPW checking master pw: {}", e);
