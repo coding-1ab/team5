@@ -55,7 +55,7 @@ impl DBHeader {
         Ok( (header, body.to_vec()) )
     }
 
-    pub fn write_header(&self, out: &mut Vec<u8>) {
+    pub fn write_to(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(bytemuck::bytes_of(self));
     }
     pub fn empty_valid() -> Self {

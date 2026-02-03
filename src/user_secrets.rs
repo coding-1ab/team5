@@ -25,7 +25,7 @@ pub type UserKey = Box<[u8; 32]>;
 pub fn get_system_identity() -> Box<[u8; 32]> {
     let mut sys = System::new();
     sys.refresh_processes();
-
+//todo 여기 중에 윈도우에서 문제되는 변수 찾기
     let mut pid_u32 = process::id();
     let mut s_pid = Pid::from(pid_u32 as usize);
     let ppid = sys.process(s_pid)

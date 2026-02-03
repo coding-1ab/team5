@@ -176,10 +176,9 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     header.ciphertext_len = ciphertext.len();
 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
-    header.write_header(&mut bytes);
+    header.write_to(&mut bytes);
     bytes.append(&mut ciphertext);
-    ////////////
-    println!("[[ {} ]]", bytes.len());
+    
     let write_triales = 2;
     let check_counters = 3;
     let mut write_success= false;
