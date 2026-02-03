@@ -8,28 +8,17 @@ opt-level = 3
 debug = true
 panic = "abort"
 
-[dependencies]
-rkyv = { version = "0.8"}
-fs2 = "*"
-single-instance = "*"
-bytemuck = "*"
+[workspace]
+members = ["./core", "./app", "./cli", "./ui", "ui"]
 
-aes-gcm = { version = "*", features = ["zeroize"] }
-argon2 = "*"
-rand = "0.8"
-sysinfo = "0.30"
-ecies = "*"
-sha2 = "0.10"
-zeroize = { version = "*", features = ["derive"] }
+[dependencies]
+single-instance = "*"
 memlock = "*"
-reqwest = { version = "*", features = ["blocking"] }
-openssl = { version = "*" }
 eframe = { version = "0.33.3", optional = true }
-log = "0.4.29"
-clap = { version = "*", features = ["derive"] }
-publicsuffix = "*"
-once_cell = "*"
-url = { path = "./libs/url-2.5.8" }
+
+[workspace.dependencies]
+zeroize = { version = "*", features = ["derive"] }
+
 
 [features]
 gui = ["eframe"]

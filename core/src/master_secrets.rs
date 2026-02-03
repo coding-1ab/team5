@@ -22,78 +22,73 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use zeroize::__internal::AssertZeroize;
 use crate::data_base::{change_user_pw, get_password, DB};
 
-pub mod master_pw {
-    use std::fmt::{Display, Formatter};
-    use std::str::FromStr;
-    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-    use crate::data_base::{UserPW, UserPWError};
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use crate::data_base::{UserPW, UserPWError};
 
-    #[derive(Debug, Clone, Eq, PartialEq)]
-    pub enum MasterPWError {
-        // 생성
-        Empty,
-        TooShort,
-        NonAscii,
-        ContainsWitespace,
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum MasterPWError {
+    // 생성
+    Empty,
+    TooShort,
+    NonAscii,
+    ContainsWitespace,
 
-        // 로그인
-        IncorrectPW,
+    // 로그인
+    IncorrectPW,
 
-        // 프로세스 유효성
-        InvalidSession
+    // 프로세스 유효성
+    InvalidSession
+}
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct MasterPW (String);
+impl MasterPW {
+    pub fn new(mut raw_pw: Zeroizing<String>) -> Result<MasterPW, MasterPWError> {
+        let trimmed = raw_pw.trim().to_owned();
+        raw_pw.zeroize();
+        if trimmed.is_empty() {
+            return Err(MasterPWError::Empty);
+        }
+        if trimmed.len() < 8 {
+            return Err(MasterPWError::TooShort);
+        }
+        if trimmed.chars().any(|c| c.is_whitespace()) {
+        }
+        if !trimmed.is_ascii() {
+            return Err(MasterPWError::NonAscii);
+        }
+        Ok( Self{ 0: trimmed } )
     }
-
-
-    #[derive(Zeroize, ZeroizeOnDrop)]
-    pub struct MasterPW (String);
-
-    impl MasterPW {
-        pub fn new(mut raw_pw: Zeroizing<String>) -> Result<MasterPW, MasterPWError> {
-            let trimmed = raw_pw.trim().to_owned();
-            raw_pw.zeroize();
-            if trimmed.is_empty() {
-                return Err(MasterPWError::Empty);
-            }
-            if trimmed.len() < 8 {
-                return Err(MasterPWError::TooShort);
-            }
-            if trimmed.chars().any(|c| c.is_whitespace()) {
-            }
-            if !trimmed.is_ascii() {
-                return Err(MasterPWError::NonAscii);
-            }
-            Ok( Self{ 0: trimmed } )
-        }
-        pub fn from_unchecked(mut raw_pw: Zeroizing<String>) -> MasterPW {
-            let trimmed = raw_pw.trim().to_owned();
-            raw_pw.zeroize();
-            Self { 0: trimmed }
-        }
-        pub fn as_bytes(&self) -> &[u8] {
-            self.0.as_bytes()
-        }
+    pub fn from_unchecked(mut raw_pw: Zeroizing<String>) -> MasterPW {
+        let trimmed = raw_pw.trim().to_owned();
+        raw_pw.zeroize();
+        Self { 0: trimmed }
     }
-    impl Display for MasterPWError {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            match self {
-                MasterPWError::Empty => {
-                    write!(f, "Empty")
-                }
-                MasterPWError::TooShort => {
-                    write!(f, "TooShort")
-                }
-                MasterPWError::ContainsWitespace => {
-                    write!(f, "ContainsWhitespace")
-                }
-                MasterPWError::NonAscii => {
-                    write!(f, "NonAscii")
-                }
-                MasterPWError::IncorrectPW => {
-                    write!(f, "IncorrectPW")
-                }
-                MasterPWError::InvalidSession => {
-                    write!(f, "InvalidSession")
-                }
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+impl Display for MasterPWError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MasterPWError::Empty => {
+                write!(f, "Empty")
+            }
+            MasterPWError::TooShort => {
+                write!(f, "TooShort")
+            }
+            MasterPWError::ContainsWitespace => {
+                write!(f, "ContainsWhitespace")
+            }
+            MasterPWError::NonAscii => {
+                write!(f, "NonAscii")
+            }
+            MasterPWError::IncorrectPW => {
+                write!(f, "IncorrectPW")
+            }
+            MasterPWError::InvalidSession => {
+                write!(f, "InvalidSession")
             }
         }
     }
@@ -101,9 +96,6 @@ pub mod master_pw {
 
 pub type MasterKdfKey = [u8; 32];
 pub type AesKey = aes_gcm::Key<Aes256Gcm>;
-pub fn gen_aes_key() {
-
-}
 
 // secp256k1 곡선의 유효 범위 (N)
 const SECP256K1_ORDER: [u8; 32] = [

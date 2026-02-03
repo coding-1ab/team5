@@ -4,62 +4,9 @@ use std::io::{stdin, Write};
 use std::process::exit;
 use log::error;
 use single_instance::SingleInstance;
-use team5::data_base::{add_user_pw, change_user_pw, get_password, prefix_range, remove_user_pw, zeroize_db, SiteName, UserID, UserPW, DB};
+use team5::data_base::{add_user_pw, change_user_pw, get_password, prefix_range, remove_user_pw, SiteName, UserID, UserPW, DB};
 
-fn main() {
-    // let instance = SingleInstance::new("team-5").unwrap();
-    // if size_of::<usize>() != 64 { error!("Unsupported Architecture") };
-    //
-    // if !instance.is_single() {
-    //     // error!("This instance is not a single.");
-    //     // return Ok(());
-    // }
-
-    without_gui();
-    // #[cfg(feature = "gui")]
-    // {
-    //     use team5::ui::graphical_user_interface::GraphicalUserInterface;
-    //     let options = eframe::NativeOptions::default();
-    //     eframe::run_native(
-    //         "eframe example",
-    //         options,
-    //         Box::new(|_cc| Ok(Box::new(GraphicalUserInterface::default()))),
-    //     ).unwrap()
-    // }
-}
-
-// #[cfg(test)]
-pub mod tests {
-    use std::collections::{HashMap, VecDeque};
-    use std::io;
-    use std::io::{stdin, Write};
-    use std::process::exit;
-    use std::str::FromStr;
-    use log::warn;
-    // use eframe::egui::accesskit::Role::Marquee;
-    // use eframe::egui::CursorIcon::Default;
-    use rkyv::rancor::ResultExt;
-    use sha2::{Digest, Sha256};
-    use sha2::digest::FixedOutputReset;
-    use sha2::digest::generic_array::GenericArray;
-    use zeroize::{Zeroize, Zeroizing};
-    use team5::master_secrets::{__manual_zeroize, change_master_pw, decrypt_db, encrypt_db, get_master_pw_hash, set_master_pw_and_1st_login};
-    use team5::data_base::{add_user_pw, change_user_pw, explor_db, get_password, prefix_range, remove_user_pw, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
-    use team5::file_io::{load_db, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, save_db, FileIOWarn};
-    use team5::header::Salt;
-    use team5::manual_zeroize;
-    use team5::master_secrets::{check_master_pw_and_login, EciesKeyPair};
-    use team5::master_secrets::master_pw::MasterPW;
-    use team5::user_secrets::{get_system_identity, UserKey, WrappedUserKey};
-
-    use super::*;
-
-    // #[test]
-
-}
-
-
-pub(crate) fn without_gui() -> () {
+pub(crate) fn cli() -> () {
     let instance = SingleInstance::new("team-5").unwrap();
     assert_eq!(size_of::<usize>(), 8, "Unsupported Architecture");
 
@@ -151,7 +98,7 @@ pub(crate) fn without_gui() -> () {
             let mut raw_master_pw = Zeroizing::new(String::new());
             stdin().read_line(&mut raw_master_pw).unwrap();
             io::stdout().flush().unwrap();
-            let mut master_pw = match MasterPW::new(raw_master_pw) {
+            let master_pw = match MasterPW::new(raw_master_pw) {
                 Ok(v) => v,
                 Err(e) => {
                     println!("MasterPW checking master pw: {}", e);
@@ -325,7 +272,7 @@ pub(crate) fn without_gui() -> () {
                         // }
                         manual_zeroize!(wrapped_user_key);
                         manual_zeroize!(ecies_keys.pk);
-                        zeroize_db(&mut db);
+                        drop(db);
                         exit(0);
                     }
                     UserRequest::ExitAppWithoutSave => {
@@ -334,7 +281,7 @@ pub(crate) fn without_gui() -> () {
                         // }
                         manual_zeroize!(wrapped_user_key);
                         manual_zeroize!(ecies_keys.pk);
-                        zeroize_db(&mut db);
+                        drop(db);
                         exit(0);
                     }
                 },
