@@ -89,8 +89,8 @@ pub(crate) fn without_gui() -> () {
     let mut ecies_keys;
     let mut wrapped_user_key;
     if is_first_login {
+        println!("[ First Login ]");
         loop {
-            println!("[ First Login ]");
             print!("Please enter new master password: ");
             io::stdout().flush().unwrap();
             let mut raw_master_pw = Zeroizing::new(String::new());
@@ -144,8 +144,8 @@ pub(crate) fn without_gui() -> () {
             exit(0);
         }
     } else {
+        println!("[ General Login ]");
         loop {
-            println!("[ General Login ]");
             print!("Please enter master password: ");
             io::stdout().flush().unwrap();
             let mut raw_master_pw = Zeroizing::new(String::new());
