@@ -1,5 +1,5 @@
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
-use crate::master_secrets::{AesKey, _manual_zeroize};
+use crate::master_secrets::{AesKey, __manual_zeroize};
 use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
@@ -22,7 +22,7 @@ pub type UserPWNonce = Box<[u8; 12]>;
 pub type UserKeyWrapper = Box<[u8; 32]>;
 pub type WrappedUserKey = Vec<u8>;
 pub type UserKey = Box<[u8; 32]>;
-fn get_wrapper() -> UserKeyWrapper {
+pub fn get_system_identity() -> Box<[u8; 32]> {
     let mut sys = System::new();
     sys.refresh_processes();
 
@@ -52,7 +52,7 @@ fn get_wrapper() -> UserKeyWrapper {
     hasher.update(&total_processors.unwrap_or(4).to_le_bytes());
 
     let mut result = UserKeyWrapper::default();
-    hasher.finalize_into(GenericArray::from_mut_slice(result.as_mut_slice()));
+    hasher.finalize_into_reset(GenericArray::from_mut_slice(result.as_mut_slice()));
     hostname.zeroize();
     kernel_version.zeroize();
     manual_zeroize!(pid_u32, s_pid, boot_time, start_time,
@@ -64,10 +64,10 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
     hasher1.update(format!("`*!^{}{}",id.as_str(), site.as_str()).as_bytes());
     let mut hasher2 = hasher1.clone();
     let mut salt= [0u8; 32];
-    hasher1.finalize_into(GenericArray::from_mut_slice(salt.as_mut_slice()));
+    hasher1.finalize_into_reset(GenericArray::from_mut_slice(salt.as_mut_slice()));
     hasher2.update(format!("{}\\@#{}", id.as_str(), site.as_str()).as_bytes());
     let mut source = [0u8; 32];
-    hasher2.finalize_into(GenericArray::from_mut_slice(source.as_mut_slice()));
+    hasher2.finalize_into_reset(GenericArray::from_mut_slice(source.as_mut_slice()));
     let params = ParamsBuilder::new()
         .m_cost(16384) // 16MB 지정 (KB 단위)
         .t_cost(3)     // 반복 횟수
@@ -104,7 +104,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
 static USER_KEY_NONCE: OnceLock<Nonce<Aes256Gcm>> = OnceLock::new();
 pub fn wrap_user_key(mut user_key: UserKey)
                      -> Result<WrappedUserKey, DBIOError> {
-    let mut wrapper = get_wrapper();
+    let mut wrapper = get_system_identity();
     let nonce = USER_KEY_NONCE
         .get_or_init(|| Aes256Gcm::generate_nonce(OsRng));
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())
@@ -120,7 +120,7 @@ pub fn wrap_user_key(mut user_key: UserKey)
 
 pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
                           -> Result<UserKey, DBIOError> {
-    let mut wrapper = get_wrapper();
+    let mut wrapper = get_system_identity();
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_slice())
         .map_err(|_| DBIOError::InvalidSession)?;
     let nonce = USER_KEY_NONCE

@@ -34,14 +34,18 @@ pub mod tests {
     // use eframe::egui::accesskit::Role::Marquee;
     // use eframe::egui::CursorIcon::Default;
     use rkyv::rancor::ResultExt;
+    use sha2::{Digest, Sha256};
+    use sha2::digest::FixedOutputReset;
+    use sha2::digest::generic_array::GenericArray;
     use zeroize::{Zeroize, Zeroizing};
-    use team5::master_secrets::{_manual_zeroize, decrypt_db, encrypt_db, set_master_pw_and_1st_login};
+    use team5::master_secrets::{__manual_zeroize, change_master_pw, decrypt_db, encrypt_db, get_master_pw_hash, set_master_pw_and_1st_login};
     use team5::data_base::{add_password, change_password, explor_db, get_password, prefix_range, remove_password, zeroize_db, DBIOError, SiteName, UserID, UserPW, DB};
     use team5::file_io::{load_db, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, save_db, FileIOWarn};
     use team5::header::Salt;
     use team5::manual_zeroize;
     use team5::master_secrets::{check_master_pw_and_login, EciesKeyPair};
-    use team5::user_secrets::{UserKey, WrappedUserKey};
+    use team5::master_secrets::master_pw::MasterPW;
+    use team5::user_secrets::{get_system_identity, UserKey, WrappedUserKey};
 
     use super::*;
 
@@ -80,25 +84,35 @@ pub mod tests {
                 println!("[ First Login ]");
                 print!("Please enter new master password: ");
                 io::stdout().flush().unwrap();
-                let mut raw_master_pw = String::new();
+                let mut raw_master_pw = Zeroizing::new(String::new());
                 stdin().read_line(&mut raw_master_pw).unwrap();
-                let mut tmp = match set_master_pw_and_1st_login(raw_master_pw.clone()) {
-                    Ok(v) => { v }
+                let mut master_pw = match MasterPW::new(raw_master_pw) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        println!("MasterPW creation error: {}", err);
+                        continue;
+                    }
+                };
+                let master_pw_hash = get_master_pw_hash(&master_pw);
+                master_pw.zeroize();
+                print!("Please confirm master password: ");
+                io::stdout().flush().unwrap();
+                let mut raw_master_pw_confirm = Zeroizing::new(String::new());
+                stdin().read_line(&mut raw_master_pw_confirm).unwrap();
+                let mut master_pw_confirm = MasterPW::from_unchecked(raw_master_pw_confirm);
+                let master_pw_confirm_hash = get_master_pw_hash(&master_pw_confirm);
+                if master_pw_hash != master_pw_confirm_hash {
+                    println!("password is missmatch");
+                    master_pw_confirm.zeroize();
+                    continue;
+                }
+                (ecies_keys, db_header.db_salt, wrapped_user_key) = match set_master_pw_and_1st_login(master_pw_confirm) {
+                    Ok(v) => v,
                     Err(e) => {
                         println!("Error setting master pw: {}", e);
                         continue;
                     }
                 };
-                print!("Please confirm master password: ");
-                io::stdout().flush().unwrap();
-                let mut master_pw_confirm = String::new();
-                stdin().read_line(&mut master_pw_confirm).unwrap();
-                if raw_master_pw != master_pw_confirm {
-                    println!("password is missmatch");
-                    tmp.zeroize();
-                    continue;
-                }
-                (ecies_keys, db_header.db_salt, wrapped_user_key) = tmp;
                 break;
             }
             manual_zeroize!(ecies_keys.sk);
@@ -125,11 +139,17 @@ pub mod tests {
                 println!("[ General Login ]");
                 print!("Please enter master password: ");
                 io::stdout().flush().unwrap();
-                let mut raw_master_pw = String::new();
+                let mut raw_master_pw = Zeroizing::new(String::new());
                 stdin().read_line(&mut raw_master_pw).unwrap();
-                print!("\r\x1B[2K");
                 io::stdout().flush().unwrap();
-                (ecies_keys, wrapped_user_key) = match check_master_pw_and_login(raw_master_pw, db_header.db_salt.clone()) {
+                let mut master_pw = match MasterPW::new(raw_master_pw) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        println!("MasterPW checking master pw: {}", e);
+                        continue;
+                    }
+                };
+                (ecies_keys, wrapped_user_key) = match check_master_pw_and_login(master_pw, db_header.db_salt.clone()) {
                     Ok(v) => { v }
                     Err(e) => {
                         println!("Error checking master pw: {}", e);
@@ -156,10 +176,10 @@ pub mod tests {
             io::stdin().read_line(&mut input).unwrap();
             let words = input.split_whitespace();
             let args = std::iter::once("app_name").chain(words);
-            match UserRequst::try_parse_from(args) {
+            match UserRequest::try_parse_from(args) {
                 Ok(request) =>
                     match request {
-                        UserRequst::AddUserPW { site, id, pw } => {
+                        UserRequest::AddUserPW { site, id, pw } => {
                             if let Err(e) = add_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error adding password: {}", e);
                                 continue
@@ -169,7 +189,7 @@ pub mod tests {
                                 continue;
                             }
                         }
-                        UserRequst::ChangeUserPW { site, id, pw } => {
+                        UserRequest::ChangeUserPW { site, id, pw } => {
                             if let Err(e) = change_password(&mut db, site, id, pw, &wrapped_user_key) {
                                 println!("Error changing password: {}", e);
                                 continue;
@@ -179,7 +199,7 @@ pub mod tests {
                                 continue;
                             }
                         }
-                        UserRequst::RemoveUserPW { site, id } => {
+                        UserRequest::RemoveUserPW { site, id } => {
                             if let Err(e) = remove_password(&mut db, site, id) {
                                 println!("Error removing password: {}", e);
                                 continue;
@@ -189,7 +209,7 @@ pub mod tests {
                                 continue;
                             }
                         }
-                        UserRequst::GetUserPW { site, id } => {
+                        UserRequest::GetUserPW { site, id } => {
                             let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
                                 Ok(v) => {v}
                                 Err(e) => {
@@ -199,7 +219,7 @@ pub mod tests {
                             };
                             println!("{}", pw.as_str());
                         }
-                        UserRequst::PrefixSearch { site } => {
+                        UserRequest::PrefixSearch { site } => {
                             // prefix_range(&db, site)
                             // continue;
                             // explor_db(&mut db, site, &wrapped_user_key);
@@ -210,7 +230,56 @@ pub mod tests {
                                 }
                             }
                         }
-                        UserRequst::SaveDB => {
+                        UserRequest::ChangeMasterPW => {
+                            print!("Please enter new master password: ");
+                            io::stdout().flush().unwrap();
+                            let mut raw_master_pw = Zeroizing::new(String::new());
+                            stdin().read_line(&mut raw_master_pw).unwrap();
+                            let mut master_pw = match MasterPW::new(raw_master_pw) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    println!("MasterPW creation error: {}", err);
+                                    continue;
+                                }
+                            };
+                            let master_pw_hash = get_master_pw_hash(&master_pw);
+                            master_pw.zeroize();
+                            print!("Please confirm master password: ");
+                            io::stdout().flush().unwrap();
+                            let mut raw_master_pw_confirm = Zeroizing::new(String::new());
+                            stdin().read_line(&mut raw_master_pw_confirm).unwrap();
+                            let mut master_pw_confirm = MasterPW::from_unchecked(raw_master_pw_confirm);
+                            let master_pw_confirm_hash = get_master_pw_hash(&master_pw_confirm);
+                            if master_pw_hash != master_pw_confirm_hash {
+                                println!("password is missmatch");
+                                master_pw_confirm.zeroize();
+                                continue;
+                            }
+                            (ecies_keys.pk, db_header.db_salt, wrapped_user_key) = match change_master_pw(&mut db, master_pw_confirm, wrapped_user_key.clone()) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    println!("Error setting master pw: {}", e);
+                                    continue;
+                                }
+                            };
+
+                            let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                                Ok(v) => { v }
+                                Err(e) => {
+                                    println!("Error encrypting db: {}", e);
+                                    continue;
+                                }
+                            };
+                            if let Err(e) = save_db(db_header, encryted_db) {
+                                println!("Error saving db: {}", e);
+                                continue;
+                            }
+                            if let Err(err) = mark_as_graceful_exited_to_file() {
+                                println!("Error saving db: {}", err);
+                                continue;
+                            }
+                        }
+                        UserRequest::SaveDB => {
                             // if should_save_db {
                                 let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                     Ok(v) => { v }
@@ -229,7 +298,7 @@ pub mod tests {
                                 }
                             // }
                         }
-                        UserRequst::ExitAppWithSave => {
+                        UserRequest::ExitAppWithSave => {
                             // if should_save_db {
                                 let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
                                     Ok(v) => { v }
@@ -248,17 +317,15 @@ pub mod tests {
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
-                            drop(db);
                             exit(0);
                         }
-                        UserRequst::ExitAppWithoutSave => {
+                        UserRequest::ExitAppWithoutSave => {
                             // if !should_save_db {
                                 mark_as_graceful_exited_to_file().ok();
                             // }
                             manual_zeroize!(wrapped_user_key);
                             manual_zeroize!(ecies_keys.pk);
                             zeroize_db(&mut db);
-                            drop(db);
                             exit(0);
                         }
                     },
@@ -280,15 +347,17 @@ pub mod tests {
 
 
 use clap::{Error, Parser};
-use crate::UserRequst::ExitAppWithoutSave;
+use team5::master_secrets::master_pw::MasterPW;
+use crate::UserRequest::ExitAppWithoutSave;
 
 #[derive(Parser)]
-pub enum UserRequst {
-    AddUserPW{site: SiteName, id: UserID, pw: UserPW},
-    ChangeUserPW{site: SiteName, id: UserID, pw: UserPW},
-    RemoveUserPW{site: SiteName, id: UserID},
-    GetUserPW{site: SiteName, id: UserID},
-    PrefixSearch{site: String},
+pub enum UserRequest {
+    AddUserPW {site: SiteName, id: UserID, pw: UserPW},
+    ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
+    RemoveUserPW {site: SiteName, id: UserID},
+    GetUserPW {site: SiteName, id: UserID},
+    PrefixSearch {site: String},
+    ChangeMasterPW,
     SaveDB,
     ExitAppWithSave,
     ExitAppWithoutSave,

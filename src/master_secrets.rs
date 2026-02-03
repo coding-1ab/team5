@@ -1,5 +1,5 @@
 use crate::header::{EncryptedDB as OtherEncryptedDB, Salt};
-use crate::user_secrets::{wrap_user_key, UserKey, WrappedUserKey};
+use crate::user_secrets::{decrypt_user_pw, get_system_identity, wrap_user_key, UserKey, WrappedUserKey};
 use aes_gcm::Aes256Gcm;
 use argon2::password_hash::rand_core;
 use argon2::{Argon2, ParamsBuilder};
@@ -15,77 +15,88 @@ use sha2::digest::generic_array::GenericArray;
 use sha2::Digest;
 use sha2::Sha256;
 use std::ptr;
+use rand::prelude::{IteratorRandom, ThreadRng};
 use rkyv::rancor::Error;
+use sha2::digest::FixedOutputReset;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::data_base::DB;
+use zeroize::__internal::AssertZeroize;
+use crate::data_base::{change_password, get_password, DB};
 
 pub mod master_pw {
     use std::fmt::{Display, Formatter};
-    use zeroize::{Zeroize, ZeroizeOnDrop};
+    use std::str::FromStr;
+    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+    use crate::data_base::{UserPW, UserPWError};
 
     #[derive(Debug, Clone, Eq, PartialEq)]
     pub enum MasterPWError {
         // 생성
         Empty,
         TooShort,
-        TooLong,
         NonAscii,
+        ContainsWitespace,
 
         // 로그인
-        IncorrectPW
+        IncorrectPW,
+
+        // 프로세스 유효성
+        InvalidSession
     }
 
-    // const MAX_MASTER_PW_LEN: usize = 32;
 
     #[derive(Zeroize, ZeroizeOnDrop)]
     pub struct MasterPW (String);
 
     impl MasterPW {
-        pub fn new(raw_pw: &str) -> Result<MasterPW, MasterPWError> {
-            if raw_pw.is_empty() {
+        pub fn new(mut raw_pw: Zeroizing<String>) -> Result<MasterPW, MasterPWError> {
+            let trimmed = raw_pw.trim().to_owned();
+            raw_pw.zeroize();
+            if trimmed.is_empty() {
                 return Err(MasterPWError::Empty);
             }
-            if raw_pw.len() < 8 {
+            if trimmed.len() < 8 {
                 return Err(MasterPWError::TooShort);
             }
-            // if raw_pw.len() > MAX_MASTER_PW_LEN {
-            //     return Err(MasterPWError::TooLong);
-            // }
-            if !raw_pw.is_ascii() {
+            if trimmed.chars().any(|c| c.is_whitespace()) {
+            }
+            if !trimmed.is_ascii() {
                 return Err(MasterPWError::NonAscii);
             }
-            Ok( Self{ 0: raw_pw.to_owned() } )
+            Ok( Self{ 0: trimmed } )
+        }
+        pub fn from_unchecked(mut raw_pw: Zeroizing<String>) -> MasterPW {
+            let trimmed = raw_pw.trim().to_owned();
+            raw_pw.zeroize();
+            Self { 0: trimmed }
         }
         pub fn as_bytes(&self) -> &[u8] {
             self.0.as_bytes()
         }
     }
-
     impl Display for MasterPWError {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             match self {
                 MasterPWError::Empty => {
-                    write!(f, "MasterPWError: Empty")
+                    write!(f, "Empty")
                 }
                 MasterPWError::TooShort => {
-                    write!(f, "MasterPWError: TooShort")
+                    write!(f, "TooShort")
                 }
-                MasterPWError::TooLong => {
-                    write!(f, "MasterPWError: TooLong")
+                MasterPWError::ContainsWitespace => {
+                    write!(f, "ContainsWhitespace")
                 }
                 MasterPWError::NonAscii => {
-                    write!(f, "MasterPWError: NonAscii")
+                    write!(f, "NonAscii")
                 }
                 MasterPWError::IncorrectPW => {
-                    write!(f, "MasterPWError: IncorrectPW")
+                    write!(f, "IncorrectPW")
+                }
+                MasterPWError::InvalidSession => {
+                    write!(f, "InvalidSession")
                 }
             }
         }
     }
-}
-
-pub fn zeroize_slice(bytes: &mut [u8]) {
-    bytes.zeroize();
 }
 
 pub type MasterKdfKey = [u8; 32];
@@ -101,8 +112,7 @@ const SECP256K1_ORDER: [u8; 32] = [
     0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
     0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
 ];
-
-fn is_valid_ecies_key(key: &[u8]) -> bool {
+fn is_valid_ecies_key(key: &[u8; 32]) -> bool {
     let is_zero = key.iter().all(|&b| b == 0);
     if is_zero { return false; }
     for i in 0..32 {
@@ -112,7 +122,7 @@ fn is_valid_ecies_key(key: &[u8]) -> bool {
     false
 }
 
-pub fn _manual_zeroize<T>(data: &mut T) {
+pub fn __manual_zeroize<T>(data: &mut T) {
     let size = std::mem::size_of::<T>();
     let ptr = data as *mut T as *mut u8;
     unsafe {
@@ -125,7 +135,7 @@ pub fn _manual_zeroize<T>(data: &mut T) {
 macro_rules! manual_zeroize {
     ($($var:expr),+ $(,)?) => {
         $(
-            _manual_zeroize(&mut $var);
+            __manual_zeroize(&mut $var);
         )+
     };
 }
@@ -154,8 +164,10 @@ fn master_pw_kdf(master_pw: &MasterPW, mut salt: Salt, kdf_out: &mut [u8]) -> ()
 
 pub struct EciesKeyPair {pub pk: Box<PublicKey>, pub sk: Box<SecretKey>}
 impl EciesKeyPair {
-    pub fn new(pk: PublicKey, sk: SecretKey) -> EciesKeyPair {
-        EciesKeyPair { pk: Box::new(pk), sk: Box::new(sk) }
+    pub fn new(mut pk: PublicKey, mut sk: SecretKey) -> EciesKeyPair {
+        let result = EciesKeyPair { pk: Box::new(pk), sk: Box::new(sk) };
+        manual_zeroize!(pk, sk);
+        result
     }
 }
 impl Zeroize for EciesKeyPair {
@@ -177,10 +189,8 @@ pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterP
     Ok(  EciesKeyPair::new(pk, sk) )
 }
 
-pub fn check_master_pw_and_login(mut raw_pw: String, mut salt: Salt)
+pub fn check_master_pw_and_login(mut master_pw: MasterPW, mut salt: Salt)
                                  -> Result<(EciesKeyPair, WrappedUserKey), MasterPWError> {
-    let mut master_pw = MasterPW::new(&raw_pw)?;
-    raw_pw.zeroize();
     let mut kdf_out = MasterKdfKey::default();
     master_pw_kdf(&master_pw, salt, &mut kdf_out);
     let ecies_key_pair = get_ecies_keypair(&kdf_out)?;
@@ -190,16 +200,14 @@ pub fn check_master_pw_and_login(mut raw_pw: String, mut salt: Salt)
     salt.zeroize();
     Ok( (ecies_key_pair, wrapped_user_key) )
 }
-pub fn set_master_pw_and_1st_login(mut raw_new_pw: String)
+pub fn set_master_pw_and_1st_login(mut master_pw: MasterPW)
                                    -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
     let mut salt = Salt::default();
-    let mut master_pw = MasterPW::new(&raw_new_pw)?;
-    raw_new_pw.zeroize();
     let mut kdf_out = MasterKdfKey::default();
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
         master_pw_kdf(&master_pw, salt, &mut kdf_out);
-        if is_valid_ecies_key(kdf_out.as_ref()) {
+        if is_valid_ecies_key(&kdf_out) {
             break;
         }
     }
@@ -209,39 +217,62 @@ pub fn set_master_pw_and_1st_login(mut raw_new_pw: String)
     master_pw.zeroize();
     Ok( (ecies_key_pair, salt, wrapped_user_key) )
 }
-// pub fn change_master_pw(mut raw_new_pw: String)
-//                         -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
-//     let mut salt = Salt::default();
-//     let mut master_pw = MasterPW::new(&raw_new_pw)?;
-//     raw_new_pw.zeroize();
-//     let mut kdf_out = MasterKdfKey::default();
-//     loop {
-//         OsRng.fill_bytes(salt.as_mut_slice());
-//         master_pw_kdf(&master_pw, salt, &mut kdf_out);
-//         if is_valid_ecies_key(kdf_out.as_ref()) {
-//             break;
-//         }
-//     }
-//     let ecies_key_pair = get_ecies_keypair(&kdf_out).ok().unwrap();
-//     let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
-//     kdf_out.zeroize();
-//     master_pw.zeroize();
-//     Ok( (ecies_key_pair, salt, wrapped_user_key) )
-// }
+pub fn change_master_pw(db: &mut DB, mut new_master_pw: MasterPW, wrapped_user_key: WrappedUserKey)
+                        -> Result<(Box<PublicKey>, Salt, WrappedUserKey), MasterPWError> {
+    let mut salt = Salt::default();
+    let mut kdf_out = MasterKdfKey::default();
+    loop {
+        OsRng.fill_bytes(salt.as_mut_slice());
+        master_pw_kdf(&new_master_pw, salt, &mut kdf_out);
+        if is_valid_ecies_key(&kdf_out) {
+            break;
+        }
+    }
+    let ecies_pub_key = get_ecies_keypair(&kdf_out).ok().unwrap().pk;
+    let new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &kdf_out);
+    kdf_out.zeroize();
+    new_master_pw.zeroize();
+
+    let mut users_archive = vec![];
+    for site in &mut *db {
+        for user in site.1 {
+            users_archive.push((site.0.clone(), user.0.clone()));
+        }
+    }
+    for user in users_archive.into_iter() {
+        let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key)
+            .map_err(|err| MasterPWError::InvalidSession)?;
+        change_password(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key)
+            .map_err(|err| MasterPWError::InvalidSession)?;
+    }
+    // users_archive.zeroize();
+    Ok( (ecies_pub_key, salt, new_wrapped_user_key) )
+}
 pub fn get_wrapped_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> WrappedUserKey {
     let mut hasher1 = Sha256::new();
     hasher1.update(master_pw.as_bytes());
     let mut hasher2 = hasher1.clone();
     let mut tmp = [0u8;32];
-    hasher1.finalize_into(GenericArray::from_mut_slice(tmp.as_mut_slice()));
+    FixedOutputReset::finalize_into_reset(&mut hasher1, GenericArray::from_mut_slice(tmp.as_mut_slice()));
     hasher2.update(&kdf_key);
     hasher2.update(&tmp);
     hasher2.update(&tmp);
     let mut user_key = UserKey::default();
-    hasher2.finalize_into(GenericArray::from_mut_slice(user_key.as_mut_slice()));
+    FixedOutputReset::finalize_into_reset(&mut hasher2, GenericArray::from_mut_slice(user_key.as_mut_slice()));
     tmp.zeroize();
     let wrapped_user_key = wrap_user_key(user_key).unwrap();
     wrapped_user_key
+}
+
+pub fn get_master_pw_hash(master_pw: &MasterPW) -> Box<[u8; 32]> {
+    let mut hasher = Sha256::new();
+    let mut system_info = get_system_identity();
+    hasher.update(*system_info);
+    system_info.zeroize();
+    hasher.update(master_pw.as_bytes());
+    let mut hash = Box::new([0u8; 32]);
+    FixedOutputReset::finalize_into_reset(&mut hasher, GenericArray::from_mut_slice(&mut *hash));
+    hash
 }
 
 pub type EncryptedDB = Vec<u8>;
