@@ -1,7 +1,7 @@
 use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, remove_file, rename, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};
@@ -44,9 +44,6 @@ pub enum FileIOError {
     InvalidHeader,
     DBVersionMissMatch,
 
-    // 백업 관련
-    // DBBackupDeleteFailed(io::Error),
-
     // 무결성(재시도 이후에도 복원 불가)
     PersistentIntegrityFailure,
 }
@@ -76,31 +73,23 @@ pub fn load_db() -> Result<(bool, Option<FileIOWarn>, DBHeader, Option<Encrypted
 
     let mut user_warn: Option<FileIOWarn> = None;
 
-    let db_exist = match fs::exists(db_path) {
-        Ok(true) => true,
-        Ok(false) => false,
-        Err(err) => {
-            return Err(FileIOError::FileOpenFailed(err));
-        }
-    };
-    let bak_exist = match fs::exists(bak_path) {
-        Ok(true) => true,
-        Ok(false) => false,
-        Err(err) => {
-            return Err(FileIOError::FileOpenFailed(err));
-        }
-    };
+    let db_exist = fs::exists(db_path)
+        .map_err(FileIOError::FileOpenFailed)?;
+    let bak_exist = fs::exists(bak_path)
+        .map_err(FileIOError::FileOpenFailed)?;
 
     if bak_exist {
         user_warn = Some(FileIOWarn::RevertedForUngracefulExited);
+
         if db_exist {
             fs::remove_file(db_path)
-                .map_err(|err| FileIOError::FileDeleteFailed(err))?;
+                .map_err(FileIOError::FileDeleteFailed)?;
         }
         fs::rename(bak_path, db_path)
-            .map_err(|err| FileIOError::FileRenameFailed(err))?;
+            .map_err(FileIOError::FileRenameFailed)?;
+
     } else if !db_exist {
-        return Ok( (true, None, DBHeader::empty_valid(), None) )
+        return Ok( (true, None, DBHeader::empty_valid(), None) );
     }
 
     let db_file = OpenOptions::new()
@@ -145,6 +134,21 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
 
+    let db_exists = fs::exists(db_path)
+        .map_err(FileIOError::FileReadFailed)?;
+    let bak_exists = fs::exists(bak_path)
+        .map_err(FileIOError::FileReadFailed)?;
+
+    if db_exists {
+        if bak_exists {
+            remove_file(db_path)
+                .map_err(FileIOError::FileDeleteFailed)?;
+        } else {
+            fs::rename(db_path, bak_path)
+                .map_err(FileIOError::FileRenameFailed)?;
+        }
+    }
+
     let mut db_file = OpenOptions::new()
         .create(true)
         .read(true)
@@ -158,19 +162,6 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     if db_file.try_lock_exclusive().is_err() {
         return Err(FileIOError::LockUnavailable);
     };
-    // }
-
-    // let bak_file = OpenOptions::new()
-    //     .create(true)
-    //     .read(true)
-    //     .write(true)
-    //     .open(bak_path)
-    //     .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    //
-    // let _ = bak_file.unlock().ok();
-    // if bak_file.try_lock_exclusive().is_err() {
-    //     return Err(FileIOError::LockUnavailable);
-    // };
 
     header.ciphertext_checksum = Sha256::digest(&ciphertext).into();
     header.ciphertext_len = ciphertext.len();
@@ -178,7 +169,7 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
     header.write_to(&mut bytes);
     bytes.append(&mut ciphertext);
-    
+
     let write_triales = 2;
     let check_counters = 3;
     let mut write_success= false;
@@ -223,7 +214,7 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
 
     match fs::exists(bak_path) {
         Ok(true) => {
-            let _ = fs::remove_file(bak_path)
+            fs::remove_file(bak_path)
                 .map_err(|err| FileIOError::FileDeleteFailed(err));
         }
         Ok(false) => {}
@@ -238,49 +229,46 @@ pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
 
-    match fs::exists(db_path) {
-        Ok(true) => {
-            match fs::exists(bak_path) {
-                Ok(true) => {}
-                Ok(false) => {
-                    if let Err(err) = fs::rename(db_path, bak_path) {
-                        return Err(FileIOError::FileRenameFailed(err));
-                    }
-                }
-                Err(err) => {
-                    return Err(FileIOError::FileReadFailed(err));
-                }
-            }
-        }
-        Ok(false) => {
-            match fs::exists(bak_path) {
-                Ok(true) => {}
-                Ok(false) => {
-                    if let Err(err) = File::create_new(bak_path) {
-                        return Err(FileIOError::FileWriteFailed(err));
-                    }
-                }
-                Err(err) => {}
-            }
-        }
-        Err(err) => {
-            return Err(FileIOError::FileReadFailed(err));
-        }
+    let db_exists = fs::exists(db_path)
+        .map_err(FileIOError::FileReadFailed)?;
+    let bak_exists = fs::exists(bak_path)
+        .map_err(FileIOError::FileReadFailed)?;
+
+    if bak_exists {
+        return Ok( () );
     }
+
+    if db_exists {
+        fs::rename(db_path, bak_path)
+            .map_err(FileIOError::FileRenameFailed)?;
+    } else {
+        File::create_new(bak_path)
+            .map_err(FileIOError::FileWriteFailed)?;
+    }
+
     Ok( () )
 }
 
 pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
+    let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
 
-    match fs::exists(bak_path) {
-        Ok(true) => {
-            let _ = fs::remove_file(bak_path)
-                .map_err(|err| FileIOError::FileDeleteFailed(err));
-        }
-        Ok(false) => {}
-        Err(err) => {}
+    let db_exists = fs::exists(db_path)
+        .map_err(FileIOError::FileReadFailed)?;
+    let bak_exists = fs::exists(bak_path)
+        .map_err(FileIOError::FileReadFailed)?;
+
+    if db_exists && bak_exists {
+        remove_file(db_path)
+            .map_err(FileIOError::FileDeleteFailed)?;
+
+        fs::rename(bak_path, db_path)
+            .map_err(FileIOError::FileRenameFailed)?;
+    } else if !db_exists && bak_exists {
+        fs::rename(bak_path, db_path)
+            .map_err(FileIOError::FileRenameFailed)?;
     }
-    Ok( () )
+
+    Ok(())
 }
 
