@@ -215,7 +215,7 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     match fs::exists(bak_path) {
         Ok(true) => {
             fs::remove_file(bak_path)
-                .map_err(|err| FileIOError::FileDeleteFailed(err));
+                .map_err(|err| FileIOError::FileDeleteFailed(err))?;
         }
         Ok(false) => {}
         Err(err) => {}
@@ -223,7 +223,6 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
 
     Ok( () )
 }
-
 
 pub fn mark_as_ungraceful_exited_to_file() -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
