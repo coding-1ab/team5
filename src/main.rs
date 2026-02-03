@@ -175,7 +175,7 @@ pub mod tests {
             let mut input = String::new();
             io::stdin().read_line(&mut input).unwrap();
             let words = input.split_whitespace();
-            let args = std::iter::once("app_name").chain(words);
+            let args = std::iter::once(">").chain(words);
             match UserRequest::try_parse_from(args) {
                 Ok(request) =>
                     match request {
