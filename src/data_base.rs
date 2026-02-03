@@ -315,8 +315,8 @@ pub fn zeroize_db(db: &mut DB) {
     db.clear();
 }
 
-pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
-    -> Result<(), DBIOError> { //todo 중복 처리
+pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
+                   -> Result<(), DBIOError> { //todo 중복 처리
     let encryted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
     let users = db.entry(site_name).or_insert_with(HashMap::new);
@@ -330,8 +330,8 @@ pub fn add_password(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: 
     }
 }
 
-pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
-    -> Result<(), DBIOError> {
+pub fn change_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
+                      -> Result<(), DBIOError> {
     let encrypted_pw = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
 
     let users = match db.entry(site_name) {
@@ -353,7 +353,7 @@ pub fn change_password(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw
     }
 }
 
-pub fn remove_password(db: &mut DB, site_name: SiteName, user_id: UserID) -> Result<(), DBIOError> {
+pub fn remove_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID) -> Result<(), DBIOError> {
     let remove_site = {
         let users = match db.entry(site_name.clone()) {
             std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),

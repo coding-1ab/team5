@@ -20,7 +20,7 @@ use rkyv::rancor::Error;
 use sha2::digest::FixedOutputReset;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use zeroize::__internal::AssertZeroize;
-use crate::data_base::{change_password, get_password, DB};
+use crate::data_base::{change_user_pw, get_password, DB};
 
 pub mod master_pw {
     use std::fmt::{Display, Formatter};
@@ -242,7 +242,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: MasterPW, wrapped_user_k
     for user in users_archive.into_iter() {
         let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key)
             .map_err(|err| MasterPWError::InvalidSession)?;
-        change_password(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key)
+        change_user_pw(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key)
             .map_err(|err| MasterPWError::InvalidSession)?;
     }
     // users_archive.zeroize();

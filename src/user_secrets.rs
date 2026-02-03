@@ -4,14 +4,14 @@ use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
 use argon2::{Argon2, ParamsBuilder};
-use sha2::digest::generic_array::GenericArray;
+use sha2::digest::generic_array::{arr, GenericArray};
 use sha2::{Digest, Sha256};
 use std::process;
 use std::sync::OnceLock;
 use aes_gcm::aes::Aes256;
 use log::debug;
 use sysinfo::{Pid, System};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 
 /// 명시적 zeroize로 변경하기
@@ -23,40 +23,44 @@ pub type UserKeyWrapper = Box<[u8; 32]>;
 pub type WrappedUserKey = Vec<u8>;
 pub type UserKey = Box<[u8; 32]>;
 pub fn get_system_identity() -> Box<[u8; 32]> {
+    let mut hasher = Sha256::new();
+
     let mut sys = System::new();
-    sys.refresh_processes();
-//todo 여기 중에 윈도우에서 문제되는 변수 찾기
+    sys.refresh_all();
+
     let mut pid_u32 = process::id();
     let mut s_pid = Pid::from(pid_u32 as usize);
-    let ppid = sys.process(s_pid)
+    let mut ppid = sys.process(s_pid)
         .and_then(|p| p.parent())
         .map(|p| p.as_u32())
         .unwrap_or(0);
-    let mut boot_time = System::boot_time();
+    let mut combined_pid = (pid_u32 as u64) << 32 | (ppid as u64);
+    manual_zeroize!(pid_u32, s_pid, ppid);
+    hasher.update(&combined_pid.to_le_bytes());
+    combined_pid.zeroize();
+
     let mut start_time = sys.process(s_pid)
         .map(|p| p.start_time())
         .unwrap_or(0);
-    let mut hostname = System::host_name().unwrap_or_else(|| "/\'&%unknown".into());
+    hasher.update(&start_time.to_le_bytes());
+    start_time.zeroize();
+
+    let mut host_name = System::host_name().unwrap_or_else(|| "/\'&%unknown".into());
+    hasher.update(&host_name);
+    host_name.zeroize();
     let mut kernel_version = System::kernel_version().unwrap_or_else(|| "?\"$unknown".into());
+    hasher.update(&kernel_version);
+    kernel_version.zeroize();
+
     let mut total_memory = sys.total_memory();
     let mut total_processors = sys.physical_core_count();
-    
-    let mut hasher = Sha256::new();
-    hasher.update(&s_pid.as_u32().to_le_bytes());
-    hasher.update(&ppid.to_le_bytes());
-    hasher.update(&boot_time.to_le_bytes());
-    hasher.update(&start_time.to_le_bytes());
-    hasher.update(&hostname);
-    hasher.update(&kernel_version);
-    hasher.update(&total_memory.to_le_bytes());
-    hasher.update(&total_processors.unwrap_or(4).to_le_bytes());
+    let mut combined_c = total_memory as usize + total_processors.unwrap_or(4);
+    manual_zeroize!(total_memory, total_processors);
+    hasher.update(combined_c.to_le_bytes());
+    combined_c.zeroize();
 
     let mut result = UserKeyWrapper::default();
     hasher.finalize_into_reset(GenericArray::from_mut_slice(result.as_mut_slice()));
-    hostname.zeroize();
-    kernel_version.zeroize();
-    manual_zeroize!(pid_u32, s_pid, boot_time, start_time,
-        total_memory, total_processors);
     result
 }
 fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
