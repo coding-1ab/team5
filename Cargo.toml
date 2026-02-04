@@ -9,7 +9,7 @@ debug = true
 panic = "abort"
 
 [workspace]
-members = ["./core", "./app", "./cli", "./ui", "ui"]
+members = ["./engine", "./app", "./cli", "./ui"]
 
 [dependencies]
 single-instance = "*"
