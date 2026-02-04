@@ -16,6 +16,7 @@ single-instance = "*"
 memlock = "*"
 eframe = { version = "0.33.3", optional = true }
 
+
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
 
