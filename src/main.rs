@@ -9,7 +9,7 @@ fn main() -> std::io::Result<()> {
         return Ok(())
     }
 
-    let s = core::mem::size_of::<usize>();
+    let s = core::mem::size_of::<usize>() as i64;
     let mut arr1 = [0u8];
     arr1[s-8] = 1;
 
