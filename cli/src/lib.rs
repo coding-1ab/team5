@@ -1,12 +1,16 @@
-use team5::master_secrets::__manual_zeroize;
+
 use std::io;
 use std::io::{stdin, Write};
 use std::process::exit;
-use log::error;
 use single_instance::SingleInstance;
-use team5::data_base::{add_user_pw, change_user_pw, get_password, prefix_range, remove_user_pw, SiteName, UserID, UserPW, DB};
+use zeroize::*;
+use clap::*;
+use engine::data_base::*;
+use engine::master_secrets::*;
+use engine::file_io::*;
+use engine::manual_zeroize;
 
-pub(crate) fn cli() -> () {
+pub fn cli_app() -> () {
     let instance = SingleInstance::new("team-5").unwrap();
     assert_eq!(size_of::<usize>(), 8, "Unsupported Architecture");
 
@@ -300,15 +304,6 @@ pub(crate) fn cli() -> () {
     }
 }
 
-
-use clap::{Error, Parser};
-use zeroize::{Zeroize, Zeroizing};
-use team5::file_io::{load_db, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, save_db};
-use team5::manual_zeroize;
-use team5::master_secrets::{change_master_pw, check_master_pw_and_login, decrypt_db, encrypt_db, get_master_pw_hash, set_master_pw_and_1st_login};
-use team5::master_secrets::master_pw::MasterPW;
-use team5::user_secrets::get_system_identity;
-use crate::UserRequest::ExitAppWithoutSave;
 
 #[derive(Parser)]
 pub enum UserRequest {

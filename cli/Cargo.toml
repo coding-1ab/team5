@@ -5,3 +5,8 @@ edition = "2024"
 
 [dependencies]
 engine = {path = "../engine"}
+
+clap = "*"
+
+single-instance = {workspace = true}
+zeroize = {workspace = true}

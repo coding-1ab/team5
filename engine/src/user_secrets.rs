@@ -3,13 +3,12 @@ use crate::master_secrets::{AesKey, __manual_zeroize};
 use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
-use argon2::{Argon2, ParamsBuilder};
+use argon2::{Argon2, ParamsBuilder, Params};
 use sha2::digest::generic_array::{arr, GenericArray};
 use sha2::{Digest, Sha256};
 use std::process;
 use std::sync::OnceLock;
 use aes_gcm::aes::Aes256;
-use log::debug;
 use sysinfo::{Pid, System};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -72,13 +71,12 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
     hasher2.update(format!("{}\\@#{}", id.as_str(), site.as_str()).as_bytes());
     let mut source = [0u8; 32];
     hasher2.finalize_into_reset(GenericArray::from_mut_slice(source.as_mut_slice()));
-    let params = ParamsBuilder::new()
-        .m_cost(16384) // 16MB 지정 (KB 단위)
-        .t_cost(3)     // 반복 횟수
-        .p_cost(3)     // 병렬 처리 수준
-        .output_len(12)
-        .build()
-        .unwrap();
+    let mut params = Params::new(
+        16384, // 64MB 지정 (KB 단위)
+        6,      // 반복 횟수
+        3,     // 병렬 처리 수준
+        Some(12),     // 출력 길이
+    ).unwrap();
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
@@ -156,12 +154,10 @@ pub fn encryt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key
     let mut user_key = unwrap_user_key(&wrapped_key)?;
     let cipher = Aes256Gcm::new_from_slice(user_key.as_mut_slice())
         .map_err(|_| DBIOError::InvalidSession)?;
-    debug!("\n1\n");
     let ciphertext =
         cipher
             .encrypt(aes_gcm::Nonce::from_slice(nonce.as_slice()), user_pw.as_str().as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
-    debug!("\n2\n");
     user_key.zeroize();
     nonce.zeroize();
     Ok( ciphertext )

@@ -9,16 +9,19 @@ debug = true
 panic = "abort"
 
 [workspace]
-members = ["./engine", "./app", "./cli", "./ui"]
+members = ["engine", "app", "cli", "ui"]
 
 [dependencies]
-single-instance = "*"
 memlock = "*"
 eframe = { version = "0.33.3", optional = true }
+
+cli = {path = "./cli"}
+single-instance = "*"
 
 
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
+single-instance = "*"
 
 
 [features]

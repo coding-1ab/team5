@@ -2,10 +2,9 @@ use crate::header::{EncryptedDB as OtherEncryptedDB, Salt};
 use crate::user_secrets::{decrypt_user_pw, get_system_identity, wrap_user_key, UserKey, WrappedUserKey};
 use aes_gcm::Aes256Gcm;
 use argon2::password_hash::rand_core;
-use argon2::{Argon2, ParamsBuilder};
+use argon2::{Argon2, Params, ParamsBuilder};
 use ecies::PublicKey;
 use ecies::SecretKey;
-use master_pw::*;
 use rand_core::OsRng;
 // use rand::RngCore::SeedableRng;
 // use rand::rngs::OsRng;
@@ -18,13 +17,12 @@ use std::ptr;
 use rand::prelude::{IteratorRandom, ThreadRng};
 use rkyv::rancor::Error;
 use sha2::digest::FixedOutputReset;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use zeroize::__internal::AssertZeroize;
 use crate::data_base::{change_user_pw, get_password, DB};
 
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::data_base::{UserPW, UserPWError};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -138,12 +136,12 @@ fn master_pw_kdf(master_pw: &MasterPW, mut salt: Salt, kdf_out: &mut [u8]) -> ()
     for (t, s) in salt.iter_mut().zip(master_pw.as_bytes().iter()) {
         *t ^= *s;
     }
-    let params = ParamsBuilder::new()
-        .m_cost(65536) // 64MB 지정 (KB 단위)
-        .t_cost(8)     // 반복 횟수
-        .p_cost(3)     // 병렬 처리 수준
-        .build()
-        .unwrap();
+    let mut params = Params::new(
+    65536, // 64MB 지정 (KB 단위)
+    8,      // 반복 횟수
+    3,     // 병렬 처리 수준
+    Some(32),     // 출력 길이
+    ).unwrap();
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
