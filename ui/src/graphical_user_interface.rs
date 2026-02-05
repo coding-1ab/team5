@@ -47,15 +47,14 @@ impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
 }
 
 struct DataBase {
-    is_fresh: bool,
     user_warn: Option<FileIOWarn>,
     data_base_header: DBHeader,
     decrypted_data_base: DB
 }
 
 impl DataBase {
-    fn new(is_fresh: bool, user_warn: Option<FileIOWarn>, data_base_header: DBHeader, decrypted_data_base: DB) -> Self {
-        Self { is_fresh, user_warn, data_base_header, decrypted_data_base }
+    fn new(user_warn: Option<FileIOWarn>, data_base_header: DBHeader, decrypted_data_base: DB) -> Self {
+        Self { user_warn, data_base_header, decrypted_data_base }
     }
 }
 
@@ -181,7 +180,7 @@ impl eframe::App for GraphicalUserInterface {
 
         if !self.login {
             match load_db() {
-                Ok(( mut user_warn, mut data_base_header, encrypted_data_base)) => {
+                Ok((mut user_warn, mut data_base_header, encrypted_data_base)) => {
                     if encrypted_data_base.is_none() {
                         self.window_open_list.set("first_master_login", true);
                     }
@@ -199,32 +198,33 @@ impl eframe::App for GraphicalUserInterface {
                                 }
                                 egui::CentralPanel::default().show(ctx, |ui| {
                                     ui.label("input new master password");
-                                    ui.text_edit_singleline(&mut self.password);
+                                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
                                     ui.label("recheck master password");
-                                    ui.text_edit_singleline(&mut self.recheck_password);
+                                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
                                     ui.label(format!("{}", self.error_message));
                                     if ui.button("Accept").clicked() {
 
-                                        if let Err(err) = master_pw_validation(&self.recheck_password) {
+                                        if let Err(err) = master_pw_validation(&self.password) {
                                             self.error_message = format!("Master password validation error: {}", err);
                                             self.password.zeroize();
                                             return;
                                         }
-                                        let password_match = self.password == self.recheck_password;
-                                        self.password.zeroize();
-                                        if !password_match {
-                                            self.error_message = "password is mismatch".to_string();
+                                        if self.password == self.recheck_password {
+                                            let (ecies_key_pair, data_base_header_salt, wrapped_user_key) = set_master_pw_and_1st_login(self.password);
+                                            self.password.zeroize();
                                             self.recheck_password.zeroize();
+                                            self.ecies_key_pair = Some(ecies_key_pair);
+                                            data_base_header.db_salt = data_base_header_salt;
+                                            self.wrapped_user_key = Some(wrapped_user_key);
+                                            self.data_base = Some(DataBase::new(user_warn.take(), data_base_header, DB::default()));
+                                            self.window_open_list.set("login", true);
+                                            self.login = true;
+                                        } else {
+                                            self.password.zeroize();
+                                            self.recheck_password.zeroize();
+                                            self.error_message = "password is mismatch".to_string();
                                             return;
                                         }
-                                        let (ecies_key_pair, data_base_header_salt, wrapped_user_key) = set_master_pw_and_1st_login(self.recheck_password);
-                                        self.recheck_password.zeroize();
-                                        self.ecies_key_pair = Some(ecies_key_pair);
-                                        data_base_header.db_salt = data_base_header_salt;
-                                        self.wrapped_user_key = Some(wrapped_user_key);
-                                        self.data_base = Some(DataBase::new(user_warn.take(), data_base_header, DB::default()));
-                                        self.window_open_list.set("login", true);
-                                        self.login = true;
                                     }
                                 });
                             }
@@ -259,7 +259,7 @@ impl eframe::App for GraphicalUserInterface {
                                     egui::Grid::new("master_login_grid")
                                         .num_columns(2)
                                         .show(ui, |ui| {
-                                            ui.label("마스터 로그인");
+                                            ui.label("master_login");
                                             // todo
                                             // ui.text_edit_singleline()
                                         });
@@ -269,16 +269,9 @@ impl eframe::App for GraphicalUserInterface {
                                     });
                                     ui.horizontal(|ui| {
                                         ui.label("master password");
-                                        ui.add(
-                                            egui::TextEdit::singleline(&mut self.recheck_password)
-                                                .password(true),
-                                        );
+                                        ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
                                     });
-                                    let login_button = ui.button("로그인");
-                                    if login_button.hovered() {
-                                        ui.label("asdf");
-                                    }
-                                    if login_button.clicked() {
+                                    if ui.button("login").clicked() {
                                         if self.password != self.recheck_password {
                                             ui.label("invalid password");
                                             return;
