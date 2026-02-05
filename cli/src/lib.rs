@@ -44,35 +44,27 @@ pub fn cli_app() -> () {
         loop {
             print!("Please enter new master password: ");
             io::stdout().flush().unwrap();
-            let mut raw_master_pw = Zeroizing::new(String::new());
-            stdin().read_line(&mut raw_master_pw).unwrap();
-            let mut master_pw = match MasterPW::new(raw_master_pw) {
-                Ok(v) => v,
-                Err(err) => {
-                    println!("MasterPW creation error: {}", err);
-                    continue;
-                }
+            let mut master_pw = String::new();
+            stdin().read_line(&mut master_pw).unwrap();
+            let mut master_pw;
+            if let Err(err) = master_pw_validation(&master_pw) {
+                println!("MasterPW creation error: {}", err);
+                continue;
             };
-            let master_pw_hash = get_master_pw_hash(&master_pw);
-            master_pw.zeroize();
             print!("Please confirm master password: ");
             io::stdout().flush().unwrap();
-            let mut raw_master_pw_confirm = Zeroizing::new(String::new());
-            stdin().read_line(&mut raw_master_pw_confirm).unwrap();
-            let mut master_pw_confirm = MasterPW::from_unchecked(raw_master_pw_confirm);
-            let master_pw_confirm_hash = get_master_pw_hash(&master_pw_confirm);
-            if master_pw_hash != master_pw_confirm_hash {
+            let mut master_pw_confirm = String::new();
+            stdin().read_line(&mut master_pw_confirm).unwrap();
+            let is_match = master_pw == master_pw_confirm;
+            master_pw.zeroize();
+            if !is_match {
                 println!("password is missmatch");
                 master_pw_confirm.zeroize();
                 continue;
             }
-            (ecies_keys, db_header.db_salt, wrapped_user_key) = match set_master_pw_and_1st_login(master_pw_confirm) {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error setting master pw: {}", e);
-                    continue;
-                }
-            };
+            (ecies_keys, db_header.db_salt, wrapped_user_key) = set_master_pw_and_1st_login(master_pw_confirm);
+            master_pw_confirm.zeroize();
+
             break;
         }
         manual_zeroize!(ecies_keys.sk);
