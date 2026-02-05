@@ -190,8 +190,7 @@ pub fn check_master_pw_and_login(mut master_pw: MasterPW, mut salt: Salt)
     salt.zeroize();
     Ok( (ecies_key_pair, wrapped_user_key) )
 }
-pub fn set_master_pw_and_1st_login(mut master_pw: MasterPW)
-                                   -> Result<(EciesKeyPair, Salt, WrappedUserKey), MasterPWError> {
+pub fn set_master_pw_and_1st_login(mut master_pw: MasterPW) -> (EciesKeyPair, Salt, WrappedUserKey) {
     let mut salt = Salt::default();
     let mut kdf_out = MasterKdfKey::default();
     loop {
@@ -205,7 +204,7 @@ pub fn set_master_pw_and_1st_login(mut master_pw: MasterPW)
     let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
     kdf_out.zeroize();
     master_pw.zeroize();
-    Ok( (ecies_key_pair, salt, wrapped_user_key) )
+    (ecies_key_pair, salt, wrapped_user_key)
 }
 pub fn change_master_pw(db: &mut DB, mut new_master_pw: MasterPW, wrapped_user_key: WrappedUserKey)
                         -> Result<(Box<PublicKey>, Salt, WrappedUserKey), MasterPWError> {
