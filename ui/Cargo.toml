@@ -5,9 +5,11 @@ edition = "2024"
 
 [dependencies]
 app = { path = "../app" }
-eframe = { version = "0.33.3", optional = true }
+engine = { path = "../engine" }
+eframe = { version = "0.33.3" }
+zeroize = { workspace = true }
 
 [features]
-gui = ["eframe"]
+gui = []
 cui = []
 

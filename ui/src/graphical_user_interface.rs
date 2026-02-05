@@ -5,33 +5,33 @@
 
 // 흠 뭐부터 하지
 
-use eframe::egui::{Context, ViewportCommand};
 use eframe::{
-    egui::{self, FontData},
-    epaint::text::{FontInsert, FontPriority, InsertFontFamily},
+    egui::{Context, ViewportCommand, self, FontData},
+    epaint::text::{FontInsert, FontPriority, InsertFontFamily}
 };
-use std::{collections::HashMap, fs, io};
-use std::error::Error;
-use std::process::exit;
-use crate::data_base::{prefix_range, DB};
-use crate::file_io::load_db;
+use std::{collections::HashMap, fs, io, error::Error, num::NonZeroU64};
+use eframe::egui::TextBuffer;
+use zeroize::{Zeroize, Zeroizing};
+use engine::{
+    data_base::{prefix_range},
+    file_io::{load_db, FileIOWarn},
+    header::{DBHeader, EncryptedDB}
+};
+use engine::data_base::DB;
+use engine::master_secrets::{decrypt_db, get_master_pw_hash, set_master_pw_and_1st_login, EciesKeyPair, MasterPW};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
 type FontLoadList = HashMap<&'static str, FontLoadState>;
 
-const CAN_TRY_LOAD_COUNT: i64 = 5;
+const CAN_TRY_LOAD_COUNT: NonZeroU64 = NonZeroU64::new(5).unwrap();
 
 #[derive(Default)]
 struct WindowOpenList(HashMap<&'static str, bool>);
 
 impl WindowOpenList {
-    fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    fn get(&self, key: &str, default: bool) -> bool {
-        self.0.get(key).copied().unwrap_or(default)
+    fn get<'a>(&'a self, key: &str, default: &'a bool) -> &bool {
+        self.0.get(key).unwrap_or(default)
     }
 
     fn set(&mut self, key: &'static str, value: bool) {
@@ -45,25 +45,35 @@ impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
     }
 }
 
+struct DataBase {
+    is_fresh: bool,
+    user_warn: Option<FileIOWarn>,
+    data_base_header: DBHeader,
+    decrypted_data_base: DB
+}
+
+impl DataBase {
+    fn new(is_fresh: bool, user_warn: Option<FileIOWarn>, data_base_header: DBHeader, decrypted_data_base: DB) -> Self {
+        Self { is_fresh, user_warn, data_base_header, decrypted_data_base }
+    }
+}
+
 pub struct GraphicalUserInterface {
     first_run: bool,
     font_load_list: FontLoadList,
     login: bool,
     id: String,
     password: String,
-    re_check_password: String,
-    data_base: Option<DB>,
+    recheck_password: String,
+    data_base: Option<DataBase>,
+    decrypted_data_base: Option<DB>,
     search_data_base: String,
     window_open_list: WindowOpenList,
-    first_login: bool,
     output: String,
+    ecies_key_pair: EciesKeyPair
 }
 
 impl GraphicalUserInterface {
-    pub fn setting_database(&mut self, data_base: DB) {
-        self.data_base = Some(data_base);
-    }
-
     fn font_load(&mut self, context: &Context, name: &'static str, font_data: FontData, insert_font_family: InsertFontFamily) -> Result<(), io::Error> {
         let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
         font_load(context, name, font_data, insert_font_family, is_font_load, font_try_count_ramming)
@@ -85,12 +95,8 @@ impl GraphicalUserInterface {
                 priority: FontPriority::Highest,
             },
         ) {
-            Ok(_) => {
-                Ok(())
-            },
-            Err(error) => {
-                Err(error)
-            },
+            Ok(_) => Ok(()),
+            Err(error) => Err(error),
         }
     }
 
@@ -136,28 +142,29 @@ impl Default for GraphicalUserInterface {
     fn default() -> Self {
         Self {
             first_run: true,
-            first_login: Default::default(),
             login: Default::default(),
             font_load_list: FontLoadList::default(),
             id: String::new(),
             password: String::new(),
-            re_check_password: String::new(),
+            recheck_password: String::new(),
             search_data_base: String::new(),
             data_base: Default::default(),
+            decrypted_data_base: Default::default(),
             window_open_list: Default::default(),
             output: String::new(),
+            ecies_key_pair: Default::default(),
         }
     }
 }
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        if self.window_open_list.get("root", false) {
+        if !*self.window_open_list.get("root", &true) {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
 
         if self.first_run {
-            match retry_function(|| self.font_load_malgun_gothic_font(ctx), CAN_TRY_LOAD_COUNT) {
+            match try_until(|| self.font_load_malgun_gothic_font(ctx), CAN_TRY_LOAD_COUNT) {
                 Ok(_) => (),
                 Err(error) => {
                     println!("Error loading malgun gothic");
@@ -169,15 +176,76 @@ impl eframe::App for GraphicalUserInterface {
             self.first_run = false;
         }
 
-        let (is_first_login, user_wran, mut db_header, encrypted_db) = match load_db() {
-            Ok(value) => value,
+        let data_base = match load_db() {
+            Ok((is_fresh, user_warn, data_base_header, encrypted_data_base)) => {
+                self.window_open_list.set("master_login", true);
+                if encrypted_data_base.is_none() {
+                    self.window_open_list.set("first_master_login", true);
+                }
+                if *self.window_open_list.get("first_master_login", &false) {
+                    ctx.show_viewport_immediate(
+                        egui::ViewportId::from_hash_of("first_master_login"),
+                        egui::ViewportBuilder::default().with_title("first_master_login").with_always_on_top().with_inner_size([300.0, 50.0]),
+                        |ctx, _| {
+                            if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                                self.window_open_list.set("root", false);
+                                return;
+                            }
+                            egui::CentralPanel::default().show(ctx, |ui| {
+                                ui.label("input new master password");
+                                ui.text_edit_singleline(&mut self.password);
+                                ui.label("recheck master password");
+                                ui.text_edit_singleline(&mut self.recheck_password);
+                                if ui.button("Accept").clicked() {
+                                    let mut master_password = match MasterPW::new(self.password.take().into()) {
+                                        Ok(value) => value,
+                                        Err(error) => {
+                                            ui.label(format!("Master password creation error: {}", error));
+                                            self.password.zeroize();
+                                            return;
+                                        }
+                                    };
+                                    self.password.zeroize();
+                                    let mut recheck_master_password = match MasterPW::new(self.recheck_password.take().into()) {
+                                        Ok(value) => value,
+                                        Err(error) => {
+                                            ui.label(format!("Master password creation error: {}", error));
+                                            self.password.zeroize();
+                                            return;
+                                        }
+                                    };
+                                    self.recheck_password.zeroize();
+                                    let master_password_hash = get_master_pw_hash(&master_password);
+                                    master_password.zeroize();
+                                    let recheck_master_password_hash = get_master_pw_hash(&recheck_master_password);
+                                    recheck_master_password.zeroize();
+                                    if master_password_hash != recheck_master_password_hash {
+                                        ui.label("password is mismatch");
+                                        return;
+                                    }
+                                    let (ecies_key_pair, data_base_header_salt, wrapped_user_key) = match set_master_pw_and_1st_login(master_password) {
+                                        Ok(v) => v,
+                                        Err(error) => {
+                                            ui.label(format!("Error setting master password: {:?}", error));
+                                            self.window_open_list.set("root", false);
+                                            return;
+                                        }
+                                    };
+                                    self.ecies_key_pair = ecies
+                                }
+                            });
+                        }
+                    )
+                }
+                // todo: DataBase::new(is_fresh, user_warn, data_base_header)
+            },
             Err(err) => {
                 ctx.show_viewport_immediate(
-                    egui::ViewportId::from_hash_of("first_master_login"),
+                    egui::ViewportId::from_hash_of("master_login_err"),
                     egui::ViewportBuilder::default().with_title("error").with_always_on_top().with_inner_size([350.0, 25.0]),
                     |ctx, _| {
                         if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                            self.window_open_list.set("root", true);
+                            self.window_open_list.set("root", false);
                             return;
                         }
                         egui::CentralPanel::default().show(ctx, |ui| {
@@ -189,17 +257,14 @@ impl eframe::App for GraphicalUserInterface {
             }
         };
 
-        self.window_open_list.set("master_login", true);
 
-        let master_login_viewport_id = egui::ViewportId::from_hash_of("master_login");
-
-        if self.window_open_list.get("master_login", false) {
+        if *self.window_open_list.get("master_login", &false) {
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("master_login"),
                 egui::ViewportBuilder::default().with_title("마스터 로그인"),
                 |ctx, _| {
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.window_open_list.set("root", true);
+                        self.window_open_list.set("root", false);
                     }
                     egui::CentralPanel::default().show(ctx, |ui| {
                         // todo
@@ -226,7 +291,7 @@ impl eframe::App for GraphicalUserInterface {
                         ui.horizontal(|ui| {
                             ui.label("master password");
                             ui.add(
-                                egui::TextEdit::singleline(&mut self.re_check_password)
+                                egui::TextEdit::singleline(&mut self.recheck_password)
                                     .password(true),
                             );
                         });
@@ -235,7 +300,7 @@ impl eframe::App for GraphicalUserInterface {
                             ui.label("asdf");
                         }
                         if login_button.clicked() {
-                            if self.password != self.re_check_password {
+                            if self.password != self.recheck_password {
                                 ui.label("invalid password");
                                 return;
                             }
@@ -268,7 +333,7 @@ impl eframe::App for GraphicalUserInterface {
                     if add_password_button.clicked() {
                         self.window_open_list.set("add_password", true);
                     }
-                    if self.window_open_list.get("add_password", false) {
+                    if *self.window_open_list.get("add_password", &false) {
                         ctx.show_viewport_immediate(
                             egui::ViewportId::from_hash_of("add_password"),
                             egui::ViewportBuilder::default().with_title("add password"),
@@ -308,6 +373,7 @@ impl eframe::App for GraphicalUserInterface {
                         ui.label("invalided data base!");
                         return;
                     };
+                    let data_base = &data_base.decrypted_data_base;
                     for user_data in prefix_range(data_base, &self.search_data_base) {
                         egui::Grid::new("user_data").show(ui, |ui| {
                             let (site_name, user_data) = user_data;
@@ -391,12 +457,12 @@ pub fn font_load(
     Ok(())
 }
 
-fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>) -> Result<T, E> {
-    for i in 1..=CAN_TRY_LOAD_COUNT {
+fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>, try_count: NonZeroU64) -> Result<T, E> {
+    for i in 1..=try_count.get() {
         match to_try() {
             Ok(v) => return Ok(v),
             Err(e) => {
-                if i == CAN_TRY_LOAD_COUNT {
+                if i == try_count.get() {
                     return Err(e);
                 }
             }
@@ -406,7 +472,7 @@ fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>) -> Result<T, E> {
     unreachable!()
 }
 
-fn retry_function<F, T, E>(try_function: F, try_count: i64) -> Result<T, E>
+fn retry_function<F, T, E>(mut try_function: F, try_count: NonZeroU64) -> Result<T, E>
 where
     F: FnMut() -> Result<T, E>,
     T: Sized,
@@ -414,7 +480,7 @@ where
 {
     let mut last_err = None;
 
-    for _ in 0..try_count {
+    for _ in 0..try_count.into() {
         match try_function() {
             Ok(v) => return Ok(v),
             Err(e) => last_err = Some(e),
