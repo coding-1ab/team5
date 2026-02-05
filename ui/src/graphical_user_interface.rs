@@ -18,7 +18,7 @@ use engine::{
     header::{DBHeader, EncryptedDB}
 };
 use engine::data_base::DB;
-use engine::master_secrets::{decrypt_db, master_pw_validation, set_master_pw_and_1st_login, EciesKeyPair, MasterKey};
+use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, EciesKeyPair, MasterKey, PubKey, SecKey};
 use engine::user_secrets::WrappedUserKey;
 
 type TryCountRamming = i64;
@@ -70,7 +70,8 @@ pub struct GraphicalUserInterface {
     output: String,
     error_message: String,
     data_base: Option<DataBase>,
-    ecies_key_pair: Option<EciesKeyPair>,
+    public_key: Option<PubKey>,
+    secret_key: Option<SecKey>,
     wrapped_user_key: Option<WrappedUserKey>
 }
 
@@ -153,7 +154,8 @@ impl Default for GraphicalUserInterface {
             output: String::new(),
             error_message: String::new(),
             data_base: None,
-            ecies_key_pair: None,
+            public_key: None,
+            secret_key: None,
             wrapped_user_key: None,
         }
     }
@@ -210,10 +212,10 @@ impl eframe::App for GraphicalUserInterface {
                                             return;
                                         }
                                         if self.password == self.recheck_password {
-                                            let (ecies_key_pair, data_base_header_salt, wrapped_user_key) = set_master_pw_and_1st_login(self.password);
+                                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password);
                                             self.password.zeroize();
                                             self.recheck_password.zeroize();
-                                            self.ecies_key_pair = Some(ecies_key_pair);
+                                            self.public_key = Some(public_key);
                                             data_base_header.db_salt = data_base_header_salt;
                                             self.wrapped_user_key = Some(wrapped_user_key);
                                             self.data_base = Some(DataBase::new(user_warn.take(), data_base_header, DB::default()));

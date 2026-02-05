@@ -37,7 +37,7 @@ pub fn cli_app() -> () {
     }
 
     let mut db: DB;
-    let mut ecies_keys;
+    let mut pub_key;
     let mut wrapped_user_key;
     if encrypted_db.is_none() {
         println!("[ First Login ]");
@@ -46,9 +46,9 @@ pub fn cli_app() -> () {
             io::stdout().flush().unwrap();
             let mut master_pw = String::new();
             stdin().read_line(&mut master_pw).unwrap();
-            let mut master_pw;
             if let Err(err) = master_pw_validation(&master_pw) {
                 println!("MasterPW creation error: {}", err);
+                master_pw.zeroize();
                 continue;
             };
             print!("Please confirm master password: ");
@@ -62,16 +62,13 @@ pub fn cli_app() -> () {
                 master_pw_confirm.zeroize();
                 continue;
             }
-            (ecies_keys, db_header.db_salt, wrapped_user_key) = set_master_pw_and_1st_login(master_pw_confirm);
-            master_pw_confirm.zeroize();
+            (pub_key, db_header.db_salt, wrapped_user_key) = first_login(master_pw_confirm);
 
             break;
         }
-        manual_zeroize!(ecies_keys.sk);
-        drop(ecies_keys.sk);
-        db = DB::new();
 
-        let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+        db = DB::new();
+        let encryted_db = match encrypt_db(&db, &pub_key) {
             Ok(v) => { v }
             Err(e) => {
                 println!("Error encrypting db: {}", e);
@@ -91,31 +88,30 @@ pub fn cli_app() -> () {
         loop {
             print!("Please enter master password: ");
             io::stdout().flush().unwrap();
-            let mut raw_master_pw = Zeroizing::new(String::new());
-            stdin().read_line(&mut raw_master_pw).unwrap();
+            let mut master_pw = String::new();
+            stdin().read_line(&mut master_pw).unwrap();
             io::stdout().flush().unwrap();
-            let master_pw = match MasterPW::new(raw_master_pw) {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("MasterPW checking master pw: {}", e);
-                    continue;
-                }
+            if let Err(err) = master_pw_validation(&master_pw) {
+                println!("MasterPW checking master pw: {}", err);
+                master_pw.zeroize();
+                continue;
             };
-            (ecies_keys, wrapped_user_key) = match check_master_pw_and_login(master_pw, db_header.db_salt.clone()) {
+            let mut sec_key;
+            (sec_key, pub_key, wrapped_user_key) = match general_login(master_pw, db_header.db_salt.clone()) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error checking master pw: {}", e);
                     continue;
                 }
             };
-            db = match decrypt_db(&encrypted_db.as_ref().unwrap(), ecies_keys.sk) {
+            let encrypted_db = &encrypted_db;
+            db = match decrypt_db(encrypted_db.as_ref().unwrap(), sec_key) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error decrypting db: {}", e);
                     continue;
                 }
             };
-            drop(encrypted_db);
             break;
         }
     }
@@ -185,29 +181,25 @@ pub fn cli_app() -> () {
                     UserRequest::ChangeMasterPW => {
                         print!("Please enter new master password: ");
                         io::stdout().flush().unwrap();
-                        let mut raw_master_pw = Zeroizing::new(String::new());
-                        stdin().read_line(&mut raw_master_pw).unwrap();
-                        let mut master_pw = match MasterPW::new(raw_master_pw) {
-                            Ok(v) => v,
-                            Err(err) => {
-                                println!("MasterPW creation error: {}", err);
-                                continue;
-                            }
+                        let mut master_pw = String::new();
+                        stdin().read_line(&mut master_pw).unwrap();
+                        if let Err(err) = master_pw_validation(&master_pw) {
+                            println!("MasterPW creation error: {}", err);
+                            master_pw.zeroize();
+                            continue;
                         };
-                        let master_pw_hash = get_master_pw_hash(&master_pw);
-                        master_pw.zeroize();
                         print!("Please confirm master password: ");
                         io::stdout().flush().unwrap();
-                        let mut raw_master_pw_confirm = Zeroizing::new(String::new());
-                        stdin().read_line(&mut raw_master_pw_confirm).unwrap();
-                        let mut master_pw_confirm = MasterPW::from_unchecked(raw_master_pw_confirm);
-                        let master_pw_confirm_hash = get_master_pw_hash(&master_pw_confirm);
-                        if master_pw_hash != master_pw_confirm_hash {
+                        let mut master_pw_confirm = String::new();
+                        stdin().read_line(&mut master_pw_confirm).unwrap();
+                        let is_match = master_pw == master_pw_confirm;
+                        master_pw.zeroize();
+                        if is_match {
                             println!("password is missmatch");
                             master_pw_confirm.zeroize();
                             continue;
                         }
-                        (ecies_keys.pk, db_header.db_salt, wrapped_user_key) = match change_master_pw(&mut db, master_pw_confirm, wrapped_user_key.clone()) {
+                        (pub_key, db_header.db_salt, wrapped_user_key) = match change_master_pw(&mut db, master_pw_confirm, wrapped_user_key.clone()) {
                             Ok(v) => v,
                             Err(e) => {
                                 println!("Error setting master pw: {}", e);
@@ -215,7 +207,7 @@ pub fn cli_app() -> () {
                             }
                         };
 
-                        let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                        let encryted_db = match encrypt_db(&db, &pub_key) {
                             Ok(v) => { v }
                             Err(e) => {
                                 println!("Error encrypting db: {}", e);
@@ -233,7 +225,7 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::SaveDB => {
                         // if should_save_db {
-                        let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                        let encryted_db = match encrypt_db(&db, &pub_key) {
                             Ok(v) => { v }
                             Err(e) => {
                                 println!("Error encrypting db: {}", e);
@@ -252,7 +244,7 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::ExitAppWithSave => {
                         // if should_save_db {
-                        let encryted_db = match encrypt_db(&db, &ecies_keys.pk) {
+                        let encryted_db = match encrypt_db(&db, &pub_key) {
                             Ok(v) => { v }
                             Err(e) => {
                                 println!("Error encrypting db: {}", e);
@@ -266,8 +258,8 @@ pub fn cli_app() -> () {
                         // } else {
                         //     mark_as_graceful_exited_to_file().ok();
                         // }
-                        manual_zeroize!(wrapped_user_key);
-                        manual_zeroize!(ecies_keys.pk);
+                        wrapped_user_key.zeroize();
+                        pub_key.zeroize();
                         drop(db);
                         exit(0);
                     }
@@ -275,8 +267,8 @@ pub fn cli_app() -> () {
                         // if !should_save_db {
                         mark_as_graceful_exited_to_file().ok();
                         // }
-                        manual_zeroize!(wrapped_user_key);
-                        manual_zeroize!(ecies_keys.pk);
+                        wrapped_user_key.zeroize();
+                        pub_key.zeroize();
                         drop(db);
                         exit(0);
                     }

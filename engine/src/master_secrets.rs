@@ -111,7 +111,7 @@ macro_rules! manual_zeroize {
 }
 
 #[inline]
-fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> MasterKey {
+fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> SecKey {
     salt[5]=5; salt[10]=10; salt[15]=15; salt[20]=20; salt[25]=25; salt[30]=30;
     for (t, s) in salt.iter_mut().zip(master_pw.as_bytes().iter()) {
         *t ^= *s;
@@ -127,81 +127,96 @@ fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> MasterKey {
         argon2::Version::V0x13,
         params
     );
-    let mut kdf_out = MasterKey::default();
+    let mut kdf_out = [0u8; 32];
     argon2.hash_password_into(master_pw.as_bytes(), salt.as_slice(), kdf_out.as_mut())
         .unwrap();
-    salt.zeroize();
-    kdf_out
+    let sec_key = SecKey::from_array(kdf_out);
+    kdf_out.zeroize();
+    sec_key
 }
 
-pub struct EciesKeyPair {pub pk: Box<PublicKey>, pub sk: Box<SecretKey>}
-impl EciesKeyPair {
-    pub fn new(mut pk: PublicKey, mut sk: SecretKey) -> EciesKeyPair {
-        let result = EciesKeyPair { pk: Box::new(pk), sk: Box::new(sk) };
-        manual_zeroize!(pk, sk);
-        result
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct PubKey(Box<[u8; 65]>);
+impl PubKey {
+    pub fn from_sec_key(sk: &SecKey) -> Self {
+        let mut sk_obj = SecretKey::parse(sk.as_array()).unwrap();
+        let mut pk_obj = PublicKey::from_secret_key(&sk_obj);
+        manual_zeroize!(sk_obj);
+        let pk = Box::new(pk_obj.serialize());
+        manual_zeroize!(pk_obj);
+        Self ( pk )
     }
-}
-impl Zeroize for EciesKeyPair {
-    fn zeroize(&mut self) {
-        manual_zeroize!(*(self.pk));
-        manual_zeroize!(*(self.sk));
+    pub fn from_array(mut pk: [u8; 65]) -> PubKey {
+        let boxed = Box::new(pk);
+        pk.zeroize();
+        Self(boxed)
     }
-}
-// impl Drop for EciesKeyPair {
-//     fn drop(&mut self) {
-//         self.zeroize();
-//     }
-// }
-impl ZeroizeOnDrop for EciesKeyPair {}
-pub fn get_ecies_keypair(kdf_key: &MasterKey) -> Result<EciesKeyPair, MasterPWError> {
-    let sk = SecretKey::parse(&kdf_key)
-        .map_err(|_| MasterPWError::IncorrectPW)?;
-    let pk = PublicKey::from_secret_key(&sk);
-    Ok(  EciesKeyPair::new(pk, sk) )
+    pub fn as_array(&self) -> &[u8; 65] {
+        &self.0
+    }
 }
 
-pub fn check_master_pw_and_login(mut master_pw: String, mut salt: Salt)
-                                 -> Result<(EciesKeyPair, WrappedUserKey), MasterPWError> {
-    let mut master_key = master_pw_kdf(&master_pw, salt);
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct SecKey(Box<[u8; 32]>);
+impl SecKey {
+    pub fn from_array(mut sk: [u8; 32]) -> SecKey {
+        let boxed = Box::new(sk);
+        sk.zeroize();
+        Self ( boxed )
+    }
+    pub fn as_array(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+impl From<SecretKey> for SecKey {
+    fn from(mut sk: SecretKey) -> SecKey {
+        let boxed = Box::new(sk.serialize());
+        manual_zeroize!(sk);
+        Self ( boxed )
+    }
+}
+
+pub fn general_login(mut master_pw: String, mut salt: Salt)
+                     -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
+    let mut sec_key = master_pw_kdf(&master_pw, salt);
     salt.zeroize();
-    let ecies_key_pair = get_ecies_keypair(&master_key)?;
-    let wrapped_user_key = get_wrapped_user_key(&master_pw, &master_key);
+    let pub_key = PubKey::from_sec_key(&sec_key);
+    let wrapped_user_key = get_wrapped_user_key(&master_pw, &sec_key);
     master_pw.zeroize();
-    master_key.zeroize();
-    Ok( (ecies_key_pair, wrapped_user_key) )
+    sec_key.zeroize();
+    Ok( (sec_key, pub_key, wrapped_user_key) )
 }
-pub fn set_master_pw_and_1st_login(mut master_pw: String) -> (EciesKeyPair, Salt, WrappedUserKey) {
+pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
     let mut salt = Salt::default();
-    let mut master_key = MasterKey::default();
+    let mut sec_key;
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        master_key = master_pw_kdf(&master_pw, salt);
-        if is_valid_ecies_key(&master_key) {
+        sec_key = master_pw_kdf(&master_pw, salt);
+        if is_valid_ecies_key(sec_key.as_array()) {
             break;
         }
     }
-    let ecies_key_pair = get_ecies_keypair(&master_key).ok().unwrap();
-    let wrapped_user_key = get_wrapped_user_key(&master_pw, &master_key);
+    let pub_key = PubKey::from_sec_key(&sec_key);
+    let wrapped_user_key = get_wrapped_user_key(&master_pw, &sec_key);
     master_pw.zeroize();
-    master_key.zeroize();
-    (ecies_key_pair, salt, wrapped_user_key)
+    sec_key.zeroize();
+    (pub_key, salt, wrapped_user_key)
 }
 pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: WrappedUserKey)
-                        -> Result<(Box<PublicKey>, Salt, WrappedUserKey), MasterPWError> {
+                        -> Result<(PubKey, Salt, WrappedUserKey), MasterPWError> {
     let mut salt = Salt::default();
-    let mut master_key = MasterKey::default();
+    let mut sec_key;
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        master_key = master_pw_kdf(&new_master_pw, salt);
-        if is_valid_ecies_key(&master_key) {
+        sec_key = master_pw_kdf(&new_master_pw, salt);
+        if is_valid_ecies_key(sec_key.as_array()) {
             break;
         }
     }
-    let ecies_pub_key = get_ecies_keypair(&master_key).ok().unwrap().pk;
-    let new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &master_key);
+    let pub_key = PubKey::from_sec_key(&sec_key);
+    let new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &sec_key);
     new_master_pw.zeroize();
-    master_key.zeroize();
+    sec_key.zeroize();
 
     let mut users_archive = vec![];
     for site in &mut *db {
@@ -216,15 +231,15 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
             .map_err(|err| MasterPWError::InvalidSession)?;
     }
     // users_archive.zeroize();
-    Ok( (ecies_pub_key, salt, new_wrapped_user_key) )
+    Ok( (pub_key, salt, new_wrapped_user_key) )
 }
-pub fn get_wrapped_user_key(master_pw: &String, mster_key: &MasterKey) -> WrappedUserKey {
+pub fn get_wrapped_user_key(master_pw: &String, mster_key: &SecKey) -> WrappedUserKey {
     let mut hasher1 = Sha256::new();
     hasher1.update(master_pw.as_bytes());
     let mut hasher2 = hasher1.clone();
     let mut tmp = [0u8;32];
     FixedOutputReset::finalize_into_reset(&mut hasher1, GenericArray::from_mut_slice(tmp.as_mut_slice()));
-    hasher2.update(mster_key.as_slice());
+    hasher2.update(mster_key.as_array());
     hasher2.update(&tmp);
     hasher2.update(&tmp);
     let mut user_key = UserKey::default();
@@ -247,20 +262,20 @@ pub fn get_wrapped_user_key(master_pw: &String, mster_key: &MasterKey) -> Wrappe
 
 pub type EncryptedDB = Vec<u8>;
 
-pub fn encrypt_db(db: &DB, pk: &Box<PublicKey>,)
+pub fn encrypt_db(db: &DB, pk: &PubKey,)
                   -> Result<EncryptedDB, MasterPWError> {
     let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
-    let encrypted = ecies::encrypt(&pk.serialize(), &serialized).unwrap();
+    let encrypted = ecies::encrypt(pk.as_array(), &serialized).unwrap();
     serialized.zeroize();
 
     Ok( encrypted )
 }
 
-pub fn decrypt_db(bytes: &[u8], mut sk: Box<SecretKey>,
+pub fn decrypt_db(bytes: &[u8], mut sk: SecKey,
 ) -> Result<DB, MasterPWError> {
-    let mut decrypted = ecies::decrypt(&sk.serialize(), &bytes)
+    let mut decrypted = ecies::decrypt(sk.as_array(), &bytes)
         .map_err(|_| MasterPWError::IncorrectPW)?;
-    manual_zeroize!(*sk);
+    sk.zeroize();
     let db = rkyv::from_bytes::<DB, Error>(&decrypted).unwrap();
     decrypted.zeroize();
 
