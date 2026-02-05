@@ -21,12 +21,12 @@ pub fn cli_app() -> () {
 
     // let mut should_save_db = true;
 
-    let (is_first_login, user_wran, mut db_header, encrypted_db)
+    let (user_wran, mut db_header, encrypted_db)
         = match load_db() {
-        Ok(v) => {v}
-        Err(e) => {
-            println!("Error loading db: {}", e);
-            return;
+            Ok(v) => {v}
+            Err(e) => {
+                println!("Error loading db: {}", e);
+                return;
         }
     };
     match user_wran {
@@ -39,7 +39,7 @@ pub fn cli_app() -> () {
     let mut db: DB;
     let mut ecies_keys;
     let mut wrapped_user_key;
-    if is_first_login {
+    if encrypted_db.is_none() {
         println!("[ First Login ]");
         loop {
             print!("Please enter new master password: ");

@@ -67,7 +67,7 @@ impl Display for FileIOError {
 }
 
 impl Error for FileIOError {}
-pub fn load_db() -> Result<(bool, Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), FileIOError> {
+pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
 
@@ -89,7 +89,7 @@ pub fn load_db() -> Result<(bool, Option<FileIOWarn>, DBHeader, Option<Encrypted
             .map_err(FileIOError::FileRenameFailed)?;
 
     } else if !db_exist {
-        return Ok( (true, None, DBHeader::empty_valid(), None) );
+        return Ok( (None, DBHeader::empty_valid(), None) );
     }
 
     let db_file = OpenOptions::new()
@@ -114,7 +114,7 @@ pub fn load_db() -> Result<(bool, Option<FileIOWarn>, DBHeader, Option<Encrypted
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
-                return Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
+                return Ok( (Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
             }
             Err(err) => return Err(err)
         };
@@ -123,10 +123,10 @@ pub fn load_db() -> Result<(bool, Option<FileIOWarn>, DBHeader, Option<Encrypted
             continue;
         }
 
-        return Ok( (false, user_warn, header, Some(ciphertext) ) )
+        return Ok( (user_warn, header, Some(ciphertext) ) )
     }
 
-    Ok( (true, Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
+    Ok( (Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
 }
 
 
