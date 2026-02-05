@@ -38,7 +38,7 @@ pub enum MasterPWError {
     // 프로세스 유효성
     InvalidSession
 }
-pub fn master_pw_validation(mut raw_pw: &String) -> Result<MasterPW, MasterPWError> {
+pub fn master_pw_validation(mut raw_pw: &String) -> Result<(), MasterPWError> {
 
     if raw_pw.is_empty() {
         return Err(MasterPWError::Empty);
