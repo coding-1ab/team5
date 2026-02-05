@@ -66,13 +66,8 @@ pub fn cli_app() -> () {
                 master_pw_confirm.zeroize();
                 continue;
             }
-            (ecies_keys, db_header.db_salt, wrapped_user_key) = match set_master_pw_and_1st_login(master_pw_confirm) {
-                Ok(v) => v,
-                Err(e) => {
-                    println!("Error setting master pw: {}", e);
-                    continue;
-                }
-            };
+            (ecies_keys, db_header.db_salt, wrapped_user_key) = set_master_pw_and_1st_login(master_pw_confirm);
+            
             break;
         }
         manual_zeroize!(ecies_keys.sk);
