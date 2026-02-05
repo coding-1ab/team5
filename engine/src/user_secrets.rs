@@ -1,5 +1,5 @@
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
-use crate::master_secrets::{AesKey, __manual_zeroize};
+use crate::master_secrets::{__manual_zeroize};
 use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};

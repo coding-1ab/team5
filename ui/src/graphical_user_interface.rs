@@ -18,7 +18,7 @@ use engine::{
     header::{DBHeader, EncryptedDB}
 };
 use engine::data_base::DB;
-use engine::master_secrets::{decrypt_db, get_master_pw_hash, set_master_pw_and_1st_login, EciesKeyPair, MasterPW};
+use engine::master_secrets::{decrypt_db, master_pw_validation, set_master_pw_and_1st_login, EciesKeyPair, MasterKey};
 use engine::user_secrets::WrappedUserKey;
 
 type TryCountRamming = i64;
@@ -181,7 +181,7 @@ impl eframe::App for GraphicalUserInterface {
 
         if !self.login {
             match load_db() {
-                Ok((is_fresh, mut user_warn, mut data_base_header, encrypted_data_base)) => {
+                Ok(( mut user_warn, mut data_base_header, encrypted_data_base)) => {
                     if encrypted_data_base.is_none() {
                         self.window_open_list.set("first_master_login", true);
                     }
@@ -204,37 +204,25 @@ impl eframe::App for GraphicalUserInterface {
                                     ui.text_edit_singleline(&mut self.recheck_password);
                                     ui.label(format!("{}", self.error_message));
                                     if ui.button("Accept").clicked() {
-                                        let mut master_password = match MasterPW::new(self.password.take().into()) {
-                                            Ok(value) => value,
-                                            Err(error) => {
-                                                self.error_message = format!("Master password creation error: {}", error);
-                                                self.password.zeroize();
-                                                return;
-                                            }
-                                        };
-                                        self.password.zeroize();
-                                        let mut recheck_master_password = match MasterPW::new(self.recheck_password.take().into()) {
-                                            Ok(value) => value,
-                                            Err(error) => {
-                                                self.error_message = format!("Master password creation error: {}", error);
-                                                self.password.zeroize();
-                                                return;
-                                            }
-                                        };
-                                        self.recheck_password.zeroize();
-                                        let master_password_hash = get_master_pw_hash(&master_password);
-                                        master_password.zeroize();
-                                        let recheck_master_password_hash = get_master_pw_hash(&recheck_master_password);
-                                        recheck_master_password.zeroize();
-                                        if master_password_hash != recheck_master_password_hash {
-                                            self.error_message = "password is mismatch".to_string();
+
+                                        if let Err(err) = master_pw_validation(&self.recheck_password) {
+                                            self.error_message = format!("Master password validation error: {}", err);
+                                            self.password.zeroize();
                                             return;
                                         }
-                                        let (ecies_key_pair, data_base_header_salt, wrapped_user_key) = set_master_pw_and_1st_login(master_password);
+                                        let password_match = self.password == self.recheck_password;
+                                        self.password.zeroize();
+                                        if !password_match {
+                                            self.error_message = "password is mismatch".to_string();
+                                            self.recheck_password.zeroize();
+                                            return;
+                                        }
+                                        let (ecies_key_pair, data_base_header_salt, wrapped_user_key) = set_master_pw_and_1st_login(self.recheck_password);
+                                        self.recheck_password.zeroize();
                                         self.ecies_key_pair = Some(ecies_key_pair);
                                         data_base_header.db_salt = data_base_header_salt;
                                         self.wrapped_user_key = Some(wrapped_user_key);
-                                        self.data_base = Some(DataBase::new(is_fresh, user_warn.take(), data_base_header, DB::default()));
+                                        self.data_base = Some(DataBase::new(user_warn.take(), data_base_header, DB::default()));
                                         self.window_open_list.set("login", true);
                                         self.login = true;
                                     }

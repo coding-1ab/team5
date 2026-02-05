@@ -30,7 +30,6 @@ pub enum MasterPWError {
     // 생성
     Empty,
     TooShort,
-    NonAscii,
     ContainsWitespace,
 
     // 로그인
@@ -39,33 +38,18 @@ pub enum MasterPWError {
     // 프로세스 유효성
     InvalidSession
 }
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct MasterPW (String);
-impl MasterPW {
-    pub fn new(mut raw_pw: Zeroizing<String>) -> Result<MasterPW, MasterPWError> {
-        let trimmed = raw_pw.trim().to_owned();
-        raw_pw.zeroize();
-        if trimmed.is_empty() {
-            return Err(MasterPWError::Empty);
-        }
-        if trimmed.len() < 8 {
-            return Err(MasterPWError::TooShort);
-        }
-        if trimmed.chars().any(|c| c.is_whitespace()) {
-        }
-        if !trimmed.is_ascii() {
-            return Err(MasterPWError::NonAscii);
-        }
-        Ok( Self{ 0: trimmed } )
+pub fn master_pw_validation(mut raw_pw: &String) -> Result<MasterPW, MasterPWError> {
+
+    if raw_pw.is_empty() {
+        return Err(MasterPWError::Empty);
     }
-    pub fn from_unchecked(mut raw_pw: Zeroizing<String>) -> MasterPW {
-        let trimmed = raw_pw.trim().to_owned();
-        raw_pw.zeroize();
-        Self { 0: trimmed }
+    if raw_pw.len() < 8 {
+        return Err(MasterPWError::TooShort);
     }
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
+    if raw_pw.chars().any(|c| c.is_whitespace()) {
     }
+
+    Ok( () )
 }
 impl Display for MasterPWError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -79,9 +63,6 @@ impl Display for MasterPWError {
             MasterPWError::ContainsWitespace => {
                 write!(f, "ContainsWhitespace")
             }
-            MasterPWError::NonAscii => {
-                write!(f, "NonAscii")
-            }
             MasterPWError::IncorrectPW => {
                 write!(f, "IncorrectPW")
             }
@@ -92,8 +73,7 @@ impl Display for MasterPWError {
     }
 }
 
-pub type MasterKdfKey = [u8; 32];
-pub type AesKey = aes_gcm::Key<Aes256Gcm>;
+pub type MasterKey = Box<[u8; 32]>;
 
 // secp256k1 곡선의 유효 범위 (N)
 const SECP256K1_ORDER: [u8; 32] = [
@@ -131,7 +111,7 @@ macro_rules! manual_zeroize {
 }
 
 #[inline]
-fn master_pw_kdf(master_pw: &MasterPW, mut salt: Salt, kdf_out: &mut [u8]) -> () {
+fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> MasterKey {
     salt[5]=5; salt[10]=10; salt[15]=15; salt[20]=20; salt[25]=25; salt[30]=30;
     for (t, s) in salt.iter_mut().zip(master_pw.as_bytes().iter()) {
         *t ^= *s;
@@ -147,9 +127,11 @@ fn master_pw_kdf(master_pw: &MasterPW, mut salt: Salt, kdf_out: &mut [u8]) -> ()
         argon2::Version::V0x13,
         params
     );
+    let mut kdf_out = MasterKey::default();
     argon2.hash_password_into(master_pw.as_bytes(), salt.as_slice(), kdf_out.as_mut())
         .unwrap();
     salt.zeroize();
+    kdf_out
 }
 
 pub struct EciesKeyPair {pub pk: Box<PublicKey>, pub sk: Box<SecretKey>}
@@ -172,55 +154,54 @@ impl Zeroize for EciesKeyPair {
 //     }
 // }
 impl ZeroizeOnDrop for EciesKeyPair {}
-pub fn get_ecies_keypair(kdf_key: &MasterKdfKey) -> Result<EciesKeyPair, MasterPWError> {
+pub fn get_ecies_keypair(kdf_key: &MasterKey) -> Result<EciesKeyPair, MasterPWError> {
     let sk = SecretKey::parse(&kdf_key)
         .map_err(|_| MasterPWError::IncorrectPW)?;
     let pk = PublicKey::from_secret_key(&sk);
     Ok(  EciesKeyPair::new(pk, sk) )
 }
 
-pub fn check_master_pw_and_login(mut master_pw: MasterPW, mut salt: Salt)
+pub fn check_master_pw_and_login(mut master_pw: String, mut salt: Salt)
                                  -> Result<(EciesKeyPair, WrappedUserKey), MasterPWError> {
-    let mut kdf_out = MasterKdfKey::default();
-    master_pw_kdf(&master_pw, salt, &mut kdf_out);
-    let ecies_key_pair = get_ecies_keypair(&kdf_out)?;
-    let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
-    kdf_out.zeroize();
-    master_pw.zeroize();
+    let mut master_key = master_pw_kdf(&master_pw, salt);
     salt.zeroize();
+    let ecies_key_pair = get_ecies_keypair(&master_key)?;
+    let wrapped_user_key = get_wrapped_user_key(&master_pw, &master_key);
+    master_pw.zeroize();
+    master_key.zeroize();
     Ok( (ecies_key_pair, wrapped_user_key) )
 }
-pub fn set_master_pw_and_1st_login(mut master_pw: MasterPW) -> (EciesKeyPair, Salt, WrappedUserKey) {
+pub fn set_master_pw_and_1st_login(mut master_pw: String) -> (EciesKeyPair, Salt, WrappedUserKey) {
     let mut salt = Salt::default();
-    let mut kdf_out = MasterKdfKey::default();
+    let mut master_key = MasterKey::default();
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        master_pw_kdf(&master_pw, salt, &mut kdf_out);
-        if is_valid_ecies_key(&kdf_out) {
+        master_key = master_pw_kdf(&master_pw, salt);
+        if is_valid_ecies_key(&master_key) {
             break;
         }
     }
-    let ecies_key_pair = get_ecies_keypair(&kdf_out).ok().unwrap();
-    let wrapped_user_key = get_wrapped_user_key(&master_pw, &kdf_out);
-    kdf_out.zeroize();
+    let ecies_key_pair = get_ecies_keypair(&master_key).ok().unwrap();
+    let wrapped_user_key = get_wrapped_user_key(&master_pw, &master_key);
     master_pw.zeroize();
+    master_key.zeroize();
     (ecies_key_pair, salt, wrapped_user_key)
 }
-pub fn change_master_pw(db: &mut DB, mut new_master_pw: MasterPW, wrapped_user_key: WrappedUserKey)
+pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: WrappedUserKey)
                         -> Result<(Box<PublicKey>, Salt, WrappedUserKey), MasterPWError> {
     let mut salt = Salt::default();
-    let mut kdf_out = MasterKdfKey::default();
+    let mut master_key = MasterKey::default();
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        master_pw_kdf(&new_master_pw, salt, &mut kdf_out);
-        if is_valid_ecies_key(&kdf_out) {
+        master_key = master_pw_kdf(&new_master_pw, salt);
+        if is_valid_ecies_key(&master_key) {
             break;
         }
     }
-    let ecies_pub_key = get_ecies_keypair(&kdf_out).ok().unwrap().pk;
-    let new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &kdf_out);
-    kdf_out.zeroize();
+    let ecies_pub_key = get_ecies_keypair(&master_key).ok().unwrap().pk;
+    let new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &master_key);
     new_master_pw.zeroize();
+    master_key.zeroize();
 
     let mut users_archive = vec![];
     for site in &mut *db {
@@ -237,13 +218,13 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: MasterPW, wrapped_user_k
     // users_archive.zeroize();
     Ok( (ecies_pub_key, salt, new_wrapped_user_key) )
 }
-pub fn get_wrapped_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> WrappedUserKey {
+pub fn get_wrapped_user_key(master_pw: &String, mster_key: &MasterKey) -> WrappedUserKey {
     let mut hasher1 = Sha256::new();
     hasher1.update(master_pw.as_bytes());
     let mut hasher2 = hasher1.clone();
     let mut tmp = [0u8;32];
     FixedOutputReset::finalize_into_reset(&mut hasher1, GenericArray::from_mut_slice(tmp.as_mut_slice()));
-    hasher2.update(&kdf_key);
+    hasher2.update(mster_key.as_slice());
     hasher2.update(&tmp);
     hasher2.update(&tmp);
     let mut user_key = UserKey::default();
@@ -253,16 +234,16 @@ pub fn get_wrapped_user_key(master_pw: &MasterPW, kdf_key: &MasterKdfKey) -> Wra
     wrapped_user_key
 }
 
-pub fn get_master_pw_hash(master_pw: &MasterPW) -> Box<[u8; 32]> {
-    let mut hasher = Sha256::new();
-    let mut system_info = get_system_identity();
-    hasher.update(*system_info);
-    system_info.zeroize();
-    hasher.update(master_pw.as_bytes());
-    let mut hash = Box::new([0u8; 32]);
-    FixedOutputReset::finalize_into_reset(&mut hasher, GenericArray::from_mut_slice(&mut *hash));
-    hash
-}
+// pub fn get_master_pw_hash(master_pw: &String) -> Box<[u8; 32]> {
+//     let mut hasher = Sha256::new();
+//     let mut system_info = get_system_identity();
+//     hasher.update(*system_info);
+//     system_info.zeroize();
+//     hasher.update(master_pw.as_bytes());
+//     let mut hash = Box::new([0u8; 32]);
+//     FixedOutputReset::finalize_into_reset(&mut hasher, GenericArray::from_mut_slice(&mut *hash));
+//     hash
+// }
 
 pub type EncryptedDB = Vec<u8>;
 
