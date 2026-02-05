@@ -5,13 +5,16 @@
 
 // 흠 뭐부터 하지
 
-use eframe::egui::Context;
+use eframe::egui::{Context, ViewportCommand};
 use eframe::{
     egui::{self, FontData},
     epaint::text::{FontInsert, FontPriority, InsertFontFamily},
 };
 use std::{collections::HashMap, fs, io};
+use std::error::Error;
+use std::process::exit;
 use crate::data_base::{prefix_range, DB};
+use crate::file_io::load_db;
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
@@ -27,8 +30,8 @@ impl WindowOpenList {
         Self(HashMap::new())
     }
 
-    fn get(&self, key: &str) -> bool {
-        self.0.get(key).copied().unwrap_or(false)
+    fn get(&self, key: &str, default: bool) -> bool {
+        self.0.get(key).copied().unwrap_or(default)
     }
 
     fn set(&mut self, key: &'static str, value: bool) {
@@ -52,6 +55,7 @@ pub struct GraphicalUserInterface {
     data_base: Option<DB>,
     search_data_base: String,
     window_open_list: WindowOpenList,
+    first_login: bool,
     output: String,
 }
 
@@ -60,17 +64,16 @@ impl GraphicalUserInterface {
         self.data_base = Some(data_base);
     }
 
-    fn font_load(&mut self, context: &Context, name: &'static str, font_data: FontData, insert_font_family: InsertFontFamily, ) -> Result<(), io::Error> {
+    fn font_load(&mut self, context: &Context, name: &'static str, font_data: FontData, insert_font_family: InsertFontFamily) -> Result<(), io::Error> {
         let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
         font_load(context, name, font_data, insert_font_family, is_font_load, font_try_count_ramming)
     }
 
-    fn font_load_malgun_gothic_font(&mut self, context: &Context) {
+    fn font_load_malgun_gothic_font(&mut self, context: &Context) -> Result<(), io::Error> {
         let font_file_contents = match fs::read(r"C:\Windows\Fonts\malgun.ttf") {
             Ok(contents) => contents,
-            Err(e) => {
-                eprintln!("Error loading malgun gothic: {:?}", e);
-                return;
+            Err(error) => {
+                return Err(error);
             }
         };
         let font_data = FontData::from_owned(font_file_contents);
@@ -82,9 +85,13 @@ impl GraphicalUserInterface {
                 priority: FontPriority::Highest,
             },
         ) {
-            Ok(_) => println!("Successfully loaded malgun gothic"),
-            Err(e) => println!("Error loading malgun gothic: {:?}", e),
-        };
+            Ok(_) => {
+                Ok(())
+            },
+            Err(error) => {
+                Err(error)
+            },
+        }
     }
 
     fn font_load_nanum_gothic_font(&mut self, context: &Context) {
@@ -129,8 +136,9 @@ impl Default for GraphicalUserInterface {
     fn default() -> Self {
         Self {
             first_run: true,
+            first_login: Default::default(),
+            login: Default::default(),
             font_load_list: FontLoadList::default(),
-            login: false,
             id: String::new(),
             password: String::new(),
             re_check_password: String::new(),
@@ -144,24 +152,54 @@ impl Default for GraphicalUserInterface {
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        if self.window_open_list.get("root", false) {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+
         if self.first_run {
-            self.font_load_malgun_gothic_font(ctx);
+            match retry_function(|| self.font_load_malgun_gothic_font(ctx), CAN_TRY_LOAD_COUNT) {
+                Ok(_) => (),
+                Err(error) => {
+                    println!("Error loading malgun gothic");
+                    println!("Error: {}", error);
+                }
+            };
             self.font_load_nanum_gothic_font(ctx);
             self.font_load_emoji_font(ctx);
-            self.window_open_list.set("master_login", true);
             self.first_run = false;
         }
 
+        let (is_first_login, user_wran, mut db_header, encrypted_db) = match load_db() {
+            Ok(value) => value,
+            Err(err) => {
+                ctx.show_viewport_immediate(
+                    egui::ViewportId::from_hash_of("first_master_login"),
+                    egui::ViewportBuilder::default().with_title("error").with_always_on_top().with_inner_size([350.0, 25.0]),
+                    |ctx, _| {
+                        if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                            self.window_open_list.set("root", true);
+                            return;
+                        }
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            ui.label(format!("Error loading db: {}", err));
+                        });
+                    }
+                );
+                return;
+            }
+        };
+
+        self.window_open_list.set("master_login", true);
+
         let master_login_viewport_id = egui::ViewportId::from_hash_of("master_login");
 
-        if self.window_open_list.get("master_login") {
+        if self.window_open_list.get("master_login", false) {
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("master_login"),
                 egui::ViewportBuilder::default().with_title("마스터 로그인"),
                 |ctx, _| {
                     if ctx.input(|i| i.viewport().close_requested()) {
-                        self.window_open_list.set("master_login", false);
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        self.window_open_list.set("root", true);
                     }
                     egui::CentralPanel::default().show(ctx, |ui| {
                         // todo
@@ -225,6 +263,44 @@ impl eframe::App for GraphicalUserInterface {
 
         if self.login {
             egui::CentralPanel::default().show(ctx, |ui| {
+                egui::Grid::new("user_input").show(ui, |ui| {
+                    let add_password_button = ui.button("add password").on_hover_text("add password");
+                    if add_password_button.clicked() {
+                        self.window_open_list.set("add_password", true);
+                    }
+                    if self.window_open_list.get("add_password", false) {
+                        ctx.show_viewport_immediate(
+                            egui::ViewportId::from_hash_of("add_password"),
+                            egui::ViewportBuilder::default().with_title("add password"),
+                            |ctx, _| {
+                                egui::CentralPanel::default().show(ctx, |ui| {
+                                    let mut site_name = String::new();
+                                    let mut user_id = String::new();
+                                    let mut password = String::new();
+                                    ui.label("add password");
+                                    ui.horizontal(|ui| {
+                                        ui.label("site name");
+                                        ui.text_edit_singleline(&mut site_name);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("user id");
+                                        ui.text_edit_singleline(&mut user_id);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.label("password");
+                                        ui.text_edit_singleline(&mut password);
+                                    });
+                                    if ui.button("Accept").clicked() {
+                                        if site_name.is_empty() || user_id.is_empty() || password.is_empty() {
+                                            ui.label("empty input!");
+                                        }
+
+                                    }
+                                })
+                            }
+                        );
+                    }
+                });
                 ui.label("search");
                 ui.add(egui::TextEdit::singleline(&mut self.search_data_base));
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -235,9 +311,9 @@ impl eframe::App for GraphicalUserInterface {
                     for user_data in prefix_range(data_base, &self.search_data_base) {
                         egui::Grid::new("user_data").show(ui, |ui| {
                             let (site_name, user_data) = user_data;
-                            ui.label(&site_name.0);
-                            if ui.button("asdf").clicked() {
-
+                            ui.label(&*site_name.as_str());
+                            for (user_id, password) in user_data {
+                                ui.label(user_id.as_str());
                             }
                         });
                     }
@@ -328,4 +404,22 @@ fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>) -> Result<T, E> {
     };
 
     unreachable!()
+}
+
+fn retry_function<F, T, E>(try_function: F, try_count: i64) -> Result<T, E>
+where
+    F: FnMut() -> Result<T, E>,
+    T: Sized,
+    E: Error,
+{
+    let mut last_err = None;
+
+    for _ in 0..try_count {
+        match try_function() {
+            Ok(v) => return Ok(v),
+            Err(e) => last_err = Some(e),
+        }
+    }
+
+    Err(last_err.expect("max_attempts > 0"))
 }

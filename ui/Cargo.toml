@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+app = { path = "../app" }
+eframe = { version = "0.33.3", optional = true }
 
-app = {path = "../app"}
-
+[features]
+gui = ["eframe"]
+cui = []
 

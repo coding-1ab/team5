@@ -13,7 +13,6 @@ members = ["engine", "app", "cli", "ui"]
 
 [dependencies]
 memlock = "*"
-eframe = { version = "0.33.3", optional = true }
 
 cli = {path = "./cli"}
 single-instance = "*"
@@ -25,5 +24,4 @@ single-instance = "*"
 
 
 [features]
-gui = ["eframe"]
-cui = []
+
