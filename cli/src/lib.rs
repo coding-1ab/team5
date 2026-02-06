@@ -1,6 +1,6 @@
 
 use std::io;
-use std::io::{stdin, Write};
+use std::io::{stdin, Read, Write};
 use std::process::exit;
 use single_instance::SingleInstance;
 use zeroize::*;
@@ -73,12 +73,26 @@ pub fn cli_app() -> () {
             let encrypted_db = encrypt_db(&db, &pub_key);
             if let Err(e) = save_db(db_header, encrypted_db) {
                 println!("Error saving db: {}", e);
-                println!("Please check your environment, and press <Enter> for try again");
+                println!("Please check your system, and press <Enter> try again, or enter <C> to exit this program.");
+                let mut buf = [u8::default()];
+                io::stdin().read_exact(&mut buf).unwrap();
+                if buf[0] == 'C' as u8 || buf[0] == 'c' as u8 {
+                    pub_key.zeroize();
+                    wrapped_user_key.zeroize();
+                    exit(0);
+                }
                 continue;
             }
             if let Err(err) = mark_as_graceful_exited_to_file() {
                 println!("Error saving db: {}", err);
-                println!("Please check your environment, and press <Enter> for try again");
+                println!("Please check your system, and press <Enter> try again, or enter <C> to exit this program.");
+                let mut buf = [u8::default()];
+                io::stdin().read_exact(&mut buf).unwrap();
+                if buf[0] == 'C' as u8 || buf[0] == 'c' as u8 {
+                    pub_key.zeroize();
+                    wrapped_user_key.zeroize();
+                    exit(0);
+                }
                 continue;
             }
 
