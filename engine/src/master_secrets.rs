@@ -31,7 +31,7 @@ pub enum MasterPWError {
     // 생성
     Empty,
     TooShort,
-    ContainsWitespace,
+    ContainsWhitespace,
 
     // 로그인
     IncorrectPW,
@@ -61,7 +61,7 @@ impl Display for MasterPWError {
             MasterPWError::TooShort => {
                 write!(f, "TooShort")
             }
-            MasterPWError::ContainsWitespace => {
+            MasterPWError::ContainsWhitespace => {
                 write!(f, "ContainsWhitespace")
             }
             MasterPWError::IncorrectPW => {
@@ -101,13 +101,6 @@ impl SecKey {
     }
     pub fn as_array(&self) -> &[u8; 32] {
         &self.0
-    }
-}
-impl From<SecretKey> for SecKey {
-    fn from(mut sk: SecretKey) -> SecKey {
-        let boxed = Box::new(sk.serialize());
-        manual_zeroize!(sk);
-        Self ( boxed )
     }
 }
 
@@ -160,6 +153,7 @@ pub fn general_login(mut master_pw: String, mut salt: Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
     let mut sec_key = master_pw_kdf(&master_pw, salt);
     if !is_valid_sec_key(sec_key.as_array()) {
+        master_pw.zeroize();
         sec_key.zeroize();
         return Err(MasterPWError::IncorrectPW);
     }
@@ -196,8 +190,8 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
             break;
         }
     }
-    let pub_key = PubKey::from_sec_key(&sec_key);
-    let new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &sec_key);
+    let mut pub_key = PubKey::from_sec_key(&sec_key);
+    let mut new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &sec_key);
     new_master_pw.zeroize();
     sec_key.zeroize();
 
@@ -208,10 +202,12 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
         }
     }
     for user in users_archive.into_iter() {
-        let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key)
-            .map_err(|err| MasterPWError::InvalidSession)?;
-        change_user_pw(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key)
-            .map_err(|err| MasterPWError::InvalidSession)?;
+        let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
+        if let Err(_) =  change_user_pw(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key) {
+            pub_key.zeroize();
+            new_wrapped_user_key.zeroize();
+            return Err(MasterPWError::InvalidSession);
+        }
     }
     // users_archive.zeroize();
     Ok( (pub_key, salt, new_wrapped_user_key) )
@@ -256,8 +252,13 @@ pub fn encrypt_db(db: &DB, pk: &PubKey,)
 
 pub fn decrypt_db(bytes: &[u8], mut sk: SecKey,
 ) -> Result<DB, MasterPWError> {
-    let mut decrypted = ecies::decrypt(sk.as_array(), &bytes)
-        .map_err(|_| MasterPWError::IncorrectPW)?;
+    let mut decrypted = match ecies::decrypt(sk.as_array(), &bytes) {
+        Ok(v) => {v}
+        Err(_) => {
+            sk.zeroize();
+            return Err(MasterPWError::IncorrectPW)
+        }
+    };
     sk.zeroize();
     let db = rkyv::from_bytes::<DB, Error>(&decrypted).unwrap();
     decrypted.zeroize();
