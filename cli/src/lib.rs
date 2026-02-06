@@ -5,6 +5,7 @@ use std::process::exit;
 use single_instance::SingleInstance;
 use zeroize::*;
 use clap::*;
+use zeroize::__internal::AssertZeroize;
 use engine::data_base::*;
 use engine::master_secrets::*;
 use engine::file_io::*;
@@ -69,8 +70,8 @@ pub fn cli_app() -> () {
 
         db = DB::new();
         loop {
-            let encryted_db = encrypt_db(&db, &pub_key);
-            if let Err(e) = save_db(db_header, encryted_db) {
+            let encrypted_db = encrypt_db(&db, &pub_key);
+            if let Err(e) = save_db(db_header, encrypted_db) {
                 println!("Error saving db: {}", e);
                 println!("Please check your environment, and press <Enter> for try again");
                 continue;
@@ -80,6 +81,7 @@ pub fn cli_app() -> () {
                 println!("Please check your environment, and press <Enter> for try again");
                 continue;
             }
+
             break;
         }
     } else {
@@ -95,7 +97,7 @@ pub fn cli_app() -> () {
                 master_pw.zeroize();
                 continue;
             };
-            let mut sec_key;
+            let sec_key;
             (sec_key, pub_key, wrapped_user_key) = match general_login(master_pw, db_header.db_salt.clone()) {
                 Ok(v) => { v }
                 Err(e) => {
@@ -112,6 +114,7 @@ pub fn cli_app() -> () {
                     continue;
                 }
             };
+
             break;
         }
     }
