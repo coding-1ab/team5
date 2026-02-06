@@ -52,10 +52,12 @@ pub fn cli_app() -> () {
                 master_pw.zeroize();
                 continue;
             };
+
             print!("Please confirm master password: ");
             io::stdout().flush().unwrap();
             let mut master_pw_confirm = String::new();
             stdin().read_line(&mut master_pw_confirm).unwrap();
+
             let is_match = master_pw == master_pw_confirm;
             master_pw.zeroize();
             if !is_match {
@@ -63,6 +65,7 @@ pub fn cli_app() -> () {
                 master_pw_confirm.zeroize();
                 continue;
             }
+
             (pub_key, db_header.db_salt, wrapped_user_key) = first_login(master_pw_confirm);
 
             break;
@@ -111,6 +114,7 @@ pub fn cli_app() -> () {
                 master_pw.zeroize();
                 continue;
             };
+
             let sec_key;
             (sec_key, pub_key, wrapped_user_key) = match general_login(master_pw, db_header.db_salt.clone()) {
                 Ok(v) => { v }
@@ -119,6 +123,7 @@ pub fn cli_app() -> () {
                     continue;
                 }
             };
+
             db = match decrypt_db(encrypted_db.as_ref().unwrap(), sec_key) {
                 Ok(v) => { v }
                 Err(e) => {
@@ -218,6 +223,7 @@ pub fn cli_app() -> () {
                             master_pw_confirm.zeroize();
                             continue;
                         }
+
                         (pub_key, db_header.db_salt, wrapped_user_key) = match change_master_pw(&mut db, master_pw_confirm, wrapped_user_key.clone()) {
                             Ok(v) => v,
                             Err(e) => {
@@ -239,9 +245,9 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::SaveDB => {
                         // if should_save_db {
-                        let encryted_db = encrypt_db(&db, &pub_key);
+                        let encrypted_db = encrypt_db(&db, &pub_key);
 
-                        if let Err(e) = save_db(db_header, encryted_db) {
+                        if let Err(e) = save_db(db_header, encrypted_db) {
                             println!("Error saving db: {}", e);
                             continue;
                         }
