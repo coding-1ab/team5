@@ -86,11 +86,6 @@ impl PubKey {
         manual_zeroize!(pk_obj);
         Self ( pk )
     }
-    pub fn from_array(mut pk: [u8; 65]) -> PubKey {
-        let boxed = Box::new(pk);
-        pk.zeroize();
-        Self(boxed)
-    }
     pub fn as_array(&self) -> &[u8; 65] {
         &self.0
     }
@@ -134,8 +129,10 @@ fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> SecKey {
         params
     );
     let mut kdf_out = [0u8; 32];
-    argon2.hash_password_into(master_pw.as_bytes(), salt.as_slice(), kdf_out.as_mut())
-        .unwrap();
+    argon2.hash_password_into(
+        master_pw.as_bytes(), salt.as_slice(),
+        kdf_out.as_mut()
+    ).unwrap();
     let sec_key = SecKey::from_array(kdf_out);
     kdf_out.zeroize();
     sec_key
@@ -162,7 +159,10 @@ fn is_valid_sec_key(key: &[u8; 32]) -> bool {
 pub fn general_login(mut master_pw: String, mut salt: Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
     let mut sec_key = master_pw_kdf(&master_pw, salt);
-    salt.zeroize();
+    if !is_valid_sec_key(sec_key.as_array()) {
+        sec_key.zeroize();
+        return Err(MasterPWError::IncorrectPW);
+    }
     let pub_key = PubKey::from_sec_key(&sec_key);
     let wrapped_user_key = get_wrapped_user_key(&master_pw, &sec_key);
     master_pw.zeroize();

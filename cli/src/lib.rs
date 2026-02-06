@@ -104,11 +104,12 @@ pub fn cli_app() -> () {
                     continue;
                 }
             };
-            let encrypted_db = &encrypted_db;
             db = match decrypt_db(encrypted_db.as_ref().unwrap(), sec_key) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error decrypting db: {}", e);
+                    pub_key.zeroize();
+                    wrapped_user_key.zeroize();
                     continue;
                 }
             };
