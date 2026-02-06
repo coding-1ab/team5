@@ -246,12 +246,12 @@ fn get_wrapped_user_key(master_pw: &String, sec_key: &SecKey) -> WrappedUserKey 
 pub type EncryptedDB = Vec<u8>;
 
 pub fn encrypt_db(db: &DB, pk: &PubKey,)
-                  -> Result<EncryptedDB, MasterPWError> {
+                  -> EncryptedDB {
     let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
     let encrypted = ecies::encrypt(pk.as_array(), &serialized).unwrap();
     serialized.zeroize();
 
-    Ok( encrypted )
+    encrypted
 }
 
 pub fn decrypt_db(bytes: &[u8], mut sk: SecKey,

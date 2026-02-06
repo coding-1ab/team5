@@ -26,7 +26,7 @@ pub fn cli_app() -> () {
             Ok(v) => {v}
             Err(e) => {
                 println!("Error loading db: {}", e);
-                return;
+                exit(0);
         }
     };
     match user_wran {
@@ -68,20 +68,19 @@ pub fn cli_app() -> () {
         }
 
         db = DB::new();
-        let encryted_db = match encrypt_db(&db, &pub_key) {
-            Ok(v) => { v }
-            Err(e) => {
-                println!("Error encrypting db: {}", e);
-                exit(0);
+        loop {
+            let encryted_db = encrypt_db(&db, &pub_key);
+            if let Err(e) = save_db(db_header, encryted_db) {
+                println!("Error saving db: {}", e);
+                println!("Please check your environment, and press <Enter> for try again");
+                continue;
             }
-        };
-        if let Err(e) = save_db(db_header, encryted_db) {
-            println!("Error saving db: {}", e);
-            exit(0);
-        }
-        if let Err(err) = mark_as_graceful_exited_to_file() {
-            println!("Error saving db: {}", err);
-            exit(0);
+            if let Err(err) = mark_as_graceful_exited_to_file() {
+                println!("Error saving db: {}", err);
+                println!("Please check your environment, and press <Enter> for try again");
+                continue;
+            }
+            break;
         }
     } else {
         println!("[ General Login ]");
@@ -189,10 +188,12 @@ pub fn cli_app() -> () {
                             master_pw.zeroize();
                             continue;
                         };
+
                         print!("Please confirm master password: ");
                         io::stdout().flush().unwrap();
                         let mut master_pw_confirm = String::new();
                         stdin().read_line(&mut master_pw_confirm).unwrap();
+
                         let is_match = master_pw == master_pw_confirm;
                         master_pw.zeroize();
                         if is_match {
@@ -208,13 +209,8 @@ pub fn cli_app() -> () {
                             }
                         };
 
-                        let encryted_db = match encrypt_db(&db, &pub_key) {
-                            Ok(v) => { v }
-                            Err(e) => {
-                                println!("Error encrypting db: {}", e);
-                                continue;
-                            }
-                        };
+                        let encryted_db = encrypt_db(&db, &pub_key);
+
                         if let Err(e) = save_db(db_header, encryted_db) {
                             println!("Error saving db: {}", e);
                             continue;
@@ -226,13 +222,8 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::SaveDB => {
                         // if should_save_db {
-                        let encryted_db = match encrypt_db(&db, &pub_key) {
-                            Ok(v) => { v }
-                            Err(e) => {
-                                println!("Error encrypting db: {}", e);
-                                continue;
-                            }
-                        };
+                        let encryted_db = encrypt_db(&db, &pub_key);
+
                         if let Err(e) = save_db(db_header, encryted_db) {
                             println!("Error saving db: {}", e);
                             continue;
@@ -245,13 +236,8 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::ExitAppWithSave => {
                         // if should_save_db {
-                        let encryted_db = match encrypt_db(&db, &pub_key) {
-                            Ok(v) => { v }
-                            Err(e) => {
-                                println!("Error encrypting db: {}", e);
-                                continue;
-                            }
-                        };
+                        let encryted_db = encrypt_db(&db, &pub_key);
+
                         if let Err(e) = save_db(db_header, encryted_db) {
                             println!("Error saving db: {}", e);
                             continue;
