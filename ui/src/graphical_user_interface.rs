@@ -18,7 +18,7 @@ use engine::{
     header::{DBHeader, EncryptedDB}
 };
 use engine::data_base::DB;
-use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, EciesKeyPair, MasterKey, PubKey, SecKey};
+use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey};
 use engine::user_secrets::WrappedUserKey;
 
 type TryCountRamming = i64;
@@ -212,7 +212,7 @@ impl eframe::App for GraphicalUserInterface {
                                             return;
                                         }
                                         if self.password == self.recheck_password {
-                                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password);
+                                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password.clone());
                                             self.password.zeroize();
                                             self.recheck_password.zeroize();
                                             self.public_key = Some(public_key);
