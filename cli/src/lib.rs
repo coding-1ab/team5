@@ -76,7 +76,7 @@ pub fn cli_app() -> () {
             let encrypted_db = encrypt_db(&db, &pub_key);
             if let Err(e) = save_db(db_header, encrypted_db) {
                 println!("Error saving db: {}", e);
-                println!("Please check your system, and press <Enter> try again, or enter <C> to exit this program.");
+                println!("Please press <Enter> to try again after check your system, or enter <C> to exit this app");
                 let mut buf = [u8::default()];
                 io::stdin().read_exact(&mut buf).unwrap();
                 if buf[0] == 'C' as u8 || buf[0] == 'c' as u8 {
@@ -88,7 +88,7 @@ pub fn cli_app() -> () {
             }
             if let Err(err) = mark_as_graceful_exited_to_file() {
                 println!("Error saving db: {}", err);
-                println!("Please check your system, and press <Enter> try again, or enter <C> to exit this program.");
+                println!("Please press <Enter> to try again after check your system, or enter <C> to exit this app");
                 let mut buf = [u8::default()];
                 io::stdin().read_exact(&mut buf).unwrap();
                 if buf[0] == 'C' as u8 || buf[0] == 'c' as u8 {
