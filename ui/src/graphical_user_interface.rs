@@ -10,6 +10,7 @@ use eframe::{
     epaint::text::{FontInsert, FontPriority, InsertFontFamily}
 };
 use std::{collections::HashMap, fs, io, error::Error, num::NonZeroU64};
+use std::io::Read;
 use eframe::egui::TextBuffer;
 use zeroize::{Zeroize, Zeroizing};
 use engine::{
@@ -18,7 +19,7 @@ use engine::{
     header::{DBHeader, EncryptedDB}
 };
 use engine::data_base::DB;
-use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey};
+use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login};
 use engine::user_secrets::WrappedUserKey;
 
 type TryCountRamming = i64;
@@ -46,18 +47,6 @@ impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
     }
 }
 
-struct DataBase {
-    user_warn: Option<FileIOWarn>,
-    data_base_header: DBHeader,
-    decrypted_data_base: DB
-}
-
-impl DataBase {
-    fn new(user_warn: Option<FileIOWarn>, data_base_header: DBHeader, decrypted_data_base: DB) -> Self {
-        Self { user_warn, data_base_header, decrypted_data_base }
-    }
-}
-
 pub struct GraphicalUserInterface {
     first_run: bool,
     font_load_list: FontLoadList,
@@ -69,7 +58,8 @@ pub struct GraphicalUserInterface {
     window_open_list: WindowOpenList,
     output: String,
     error_message: String,
-    data_base: Option<DataBase>,
+    data_base: Option<DB>,
+    data_base_header: Option<DBHeader>,
     public_key: Option<PubKey>,
     secret_key: Option<SecKey>,
     wrapped_user_key: Option<WrappedUserKey>
@@ -154,6 +144,7 @@ impl Default for GraphicalUserInterface {
             output: String::new(),
             error_message: String::new(),
             data_base: None,
+            data_base_header: None,
             public_key: None,
             secret_key: None,
             wrapped_user_key: None,
@@ -205,20 +196,21 @@ impl eframe::App for GraphicalUserInterface {
                                     ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
                                     ui.label(format!("{}", self.error_message));
                                     if ui.button("Accept").clicked() {
-
                                         if let Err(err) = master_pw_validation(&self.password) {
                                             self.error_message = format!("Master password validation error: {}", err);
                                             self.password.zeroize();
+                                            self.recheck_password.zeroize();
                                             return;
                                         }
                                         if self.password == self.recheck_password {
-                                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password.clone());
+                                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password.take());
                                             self.password.zeroize();
                                             self.recheck_password.zeroize();
                                             self.public_key = Some(public_key);
                                             data_base_header.db_salt = data_base_header_salt;
                                             self.wrapped_user_key = Some(wrapped_user_key);
-                                            self.data_base = Some(DataBase::new(user_warn.take(), data_base_header, DB::default()));
+                                            self.data_base = Some(DB::default());
+                                            self.data_base_header = Some(data_base_header);
                                             self.window_open_list.set("login", true);
                                             self.login = true;
                                         } else {
@@ -248,50 +240,38 @@ impl eframe::App for GraphicalUserInterface {
                                     self.window_open_list.set("root", false);
                                 }
                                 egui::CentralPanel::default().show(ctx, |ui| {
-                                    // todo
-                                    /*
-                                    egui::Grid::new("login_grid").num_columns(2).spacing([8.0, 6.0]).show(ui, |ui| {
-                                        ui.label("id");
-                                        ui.text_edit_singleline(&mut self.id);
-                                        ui.end_row();
-                                        ui.label("password");
-                                        ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
-                                    });
-                                    */
-                                    egui::Grid::new("master_login_grid")
-                                        .num_columns(2)
-                                        .show(ui, |ui| {
-                                            ui.label("master_login");
-                                            // todo
-                                            // ui.text_edit_singleline()
-                                        });
-                                    ui.horizontal(|ui| {
-                                        ui.label("master password");
-                                        ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("master password");
-                                        ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
-                                    });
+                                    ui.label("input master password");
+                                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                                    ui.label("input recheck master password");
+                                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
+                                    ui.label(format!("{}", self.error_message));
                                     if ui.button("login").clicked() {
                                         if self.password != self.recheck_password {
-                                            ui.label("invalid password");
+                                            self.error_message = "invalid password".to_string();
                                             return;
                                         }
-                                        println!("login_click");
-
-                                        // todo
-                                        /*
-                                        let master_password_32 = match CryptoKey::new(&self.password) {
-                                            Ok(master_password_32) => master_password_32,
-                                             Err(err) => {
-                                                dbg!(err);
-                                                return
+                                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.password.take(), self.data_base_header.unwrap().db_salt.clone()) {
+                                            Ok(value) => {
+                                                self.password.zeroize();
+                                                self.recheck_password.zeroize();
+                                                value
+                                            },
+                                            Err(error) => {
+                                                self.error_message = format!("{}", error);
+                                                self.password.zeroize();
+                                                self.recheck_password.zeroize();
+                                                return;
                                             }
                                         };
-                                        println!("master password: {:?}", master_password_32);
-                                        */
-
+                                        let decrypted_data_base = match decrypt_db(&encrypted_data_base.unwrap(), secret_key) {
+                                            Ok(decrypted_data_base) => decrypted_data_base,
+                                            Err(error) => {
+                                                self.error_message = format!("{}", error);
+                                                return;
+                                            }
+                                        };
+                                        self.data_base = Some(decrypted_data_base);
+                                        self.data_base_header = Some(data_base_header);
                                         self.window_open_list.set("master_login", false);
                                         self.login = true;
                                     }
@@ -364,7 +344,6 @@ impl eframe::App for GraphicalUserInterface {
                         ui.label("invalided data base!");
                         return;
                     };
-                    let data_base = &data_base.decrypted_data_base;
                     for user_data in prefix_range(data_base, &self.search_data_base) {
                         egui::Grid::new("user_data").show(ui, |ui| {
                             let (site_name, user_data) = user_data;
@@ -385,7 +364,7 @@ impl eframe::App for GraphicalUserInterface {
                             if ctx.input(|i| i.viewport().close_requested()) {
                                 println!("닫기!");
                                 self.window_open_list.set("test", false);
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                ctx.send_viewport_cmd(ViewportCommand::Close);
                             }
                             egui::CentralPanel::default().show(ctx, |ui| {
                                 egui::Grid::new("test_grid")
