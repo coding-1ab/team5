@@ -103,6 +103,7 @@ pub fn cli_app() -> () {
         }
     } else {
         println!("[ General Login ]");
+        let encrypted_db = encrypted_db.unwrap();
         loop {
             print!("Please enter master password: ");
             io::stdout().flush().unwrap();
@@ -124,7 +125,7 @@ pub fn cli_app() -> () {
                 }
             };
 
-            db = match decrypt_db(encrypted_db.as_ref().unwrap(), sec_key) {
+            db = match decrypt_db(&encrypted_db, sec_key) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error decrypting db: {}", e);
