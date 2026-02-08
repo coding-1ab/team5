@@ -12,13 +12,13 @@ use engine::file_io::*;
 use engine::manual_zeroize;
 
 pub fn cli_app() -> () {
-    let instance = SingleInstance::new("team-5").unwrap();
+    // let instance = SingleInstance::new("team-5").unwrap();
     assert_eq!(size_of::<usize>(), 8, "Unsupported Architecture");
 
-    if !instance.is_single() {
-        println!("This instance is not a single.");
-        return ();
-    }
+    // if !instance.is_single() {
+    //     println!("This instance is not a single.");
+    //     return ();
+    // }
 
     // let mut should_save_db = true;
 
