@@ -10,16 +10,16 @@ use eframe::{
     epaint::text::{FontInsert, FontPriority, InsertFontFamily}
 };
 use std::{collections::HashMap, fs, io, error::Error, num::NonZeroU64};
-use std::io::Read;
-use eframe::egui::TextBuffer;
-use zeroize::{Zeroize, Zeroizing};
+use eframe::egui::{TextBuffer, Ui};
+use zeroize::Zeroize;
 use engine::{
-    data_base::{prefix_range},
-    file_io::{load_db, FileIOWarn},
-    header::{DBHeader, EncryptedDB}
+    data_base::prefix_range,
+    file_io::load_db,
+    header::DBHeader
 };
-use engine::data_base::DB;
-use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login};
+use engine::data_base::{add_user_pw, SiteName, SiteNameError, UserID, UserPW, DB};
+use engine::file_io::mark_as_ungraceful_exited_to_file;
+use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB};
 use engine::user_secrets::WrappedUserKey;
 
 type TryCountRamming = i64;
@@ -128,6 +128,169 @@ impl GraphicalUserInterface {
             Err(e) => println!("Error loading emoji_font: {:?}", e),
         }
     }
+
+    fn graphical_user_interface_first_login(&mut self, context: &Context, encrypted_data_base: &EncryptedDB, data_base_header: DBHeader) {
+        context.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("master_login"),
+            egui::ViewportBuilder::default().with_title("마스터 로그인"),
+            |ctx, _| {
+                if ctx.input(|i| i.viewport().close_requested()) {
+                    self.window_open_list.set("root", false);
+                }
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.label("input master password");
+                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                    ui.label("input recheck master password");
+                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
+                    ui.label(format!("{}", self.error_message));
+                    if ui.button("login").clicked() {
+                        if self.password != self.recheck_password {
+                            self.error_message = "invalid password".to_string();
+                            return;
+                        }
+                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.password.take(), self.data_base_header.unwrap().db_salt.clone()) {
+                            Ok(value) => {
+                                self.password.zeroize();
+                                self.recheck_password.zeroize();
+                                value
+                            },
+                            Err(error) => {
+                                self.error_message = format!("{}", error);
+                                self.password.zeroize();
+                                self.recheck_password.zeroize();
+                                return;
+                            }
+                        };
+                        let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
+                            Ok(decrypted_data_base) => decrypted_data_base,
+                            Err(error) => {
+                                self.error_message = format!("{}", error);
+                                return;
+                            }
+                        };
+                        self.data_base = Some(decrypted_data_base);
+                        self.data_base_header = Some(data_base_header);
+                        self.public_key = Some(public_key);
+                        self.wrapped_user_key = Some(wrapped_user_key);
+                        self.window_open_list.set("master_login", false);
+                        self.login = true;
+                    }
+                });
+            },
+        );
+    }
+
+    fn graphical_user_interface_not_first_login(&mut self, context: &Context, mut data_base_header: DBHeader) {
+        context.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("first_master_login"),
+            egui::ViewportBuilder::default().with_title("first_master_login").with_always_on_top().with_inner_size([300.0, 150.0]),
+            |ctx, _| {
+                if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                    self.window_open_list.set("root", false);
+                    return;
+                }
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.label("input new master password");
+                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                    ui.label("recheck master password");
+                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
+                    ui.label(format!("{}", self.error_message));
+                    if ui.button("Accept").clicked() {
+                        if let Err(err) = master_pw_validation(&self.password) {
+                            self.error_message = format!("Master password validation error: {}", err);
+                            self.password.zeroize();
+                            self.recheck_password.zeroize();
+                            return;
+                        }
+                        if self.password == self.recheck_password {
+                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password.take());
+                            self.password.zeroize();
+                            self.recheck_password.zeroize();
+                            self.public_key = Some(public_key);
+                            data_base_header.db_salt = data_base_header_salt;
+                            self.wrapped_user_key = Some(wrapped_user_key);
+                            self.data_base = Some(DB::default());
+                            self.data_base_header = Some(data_base_header);
+                            self.window_open_list.set("login", true);
+                            self.login = true;
+                        } else {
+                            self.password.zeroize();
+                            self.recheck_password.zeroize();
+                            self.error_message = "password is mismatch".to_string();
+                            return;
+                        }
+                    }
+                });
+            }
+        );
+    }
+
+    fn add_user_password(&mut self, context: &Context, user_interface: &mut Ui, button: egui::Response) {
+        let add_password_button = button;
+        if add_password_button.clicked() {
+            self.window_open_list.set("add_password", true);
+        }
+        if *self.window_open_list.get("add_password", &false) {
+            context.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("add_password"),
+                egui::ViewportBuilder::default().with_title("add password"),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let mut site_name = String::new();
+                        let mut user_id = String::new();
+                        let mut password = String::new();
+                        ui.label("add password");
+                        ui.horizontal(|ui| {
+                            ui.label("site name");
+                            ui.text_edit_singleline(&mut site_name);
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("user id");
+                            ui.text_edit_singleline(&mut user_id);
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("password");
+                            ui.text_edit_singleline(&mut password);
+                        });
+                        ui.label(&self.error_message);
+                        if ui.button("Accept").clicked() {
+                            if site_name.is_empty() || user_id.is_empty() || password.is_empty() {
+                                self.error_message = "empty input!".to_string()
+                            }
+                            let site_name = match SiteName::new(&site_name) {
+                                Ok(site_name) => site_name,
+                                Err(error) => {
+                                    self.error_message = error.to_string();
+                                    return;
+                                }
+                            };
+                            let user_id = match UserID::new(&user_id) {
+                                Ok(user_id) => user_id,
+                                Err(error) => {
+                                    self.error_message = error.to_string();
+                                    return;
+                                }
+                            };
+                            let password = match UserPW::new(&password) {
+                                Ok(password) => password,
+                                Err(error) => {
+                                    self.error_message = error.to_string();
+                                    return;
+                                }
+                            };
+                            let data_base = self.data_base.unwrap().values_mut();
+                            if let Err(e) = add_user_pw(data_base, site_name, user_id, password, &self.wrapped_user_key.unwrap()) {
+                                println!("Error adding password: {}", e);
+                            }
+                            if let Err(err) = mark_as_ungraceful_exited_to_file() {
+                                println!("Error saving status: {}", err);
+                            }
+                        }
+                    })
+                }
+            );
+        }
+    }
 }
 
 impl Default for GraphicalUserInterface {
@@ -173,111 +336,28 @@ impl eframe::App for GraphicalUserInterface {
 
         if !self.login {
             match load_db() {
-                Ok((mut user_warn, mut data_base_header, encrypted_data_base)) => {
-                    if encrypted_data_base.is_none() {
-                        self.window_open_list.set("first_master_login", true);
-                    }
-                    if encrypted_data_base.is_some() {
-                        self.window_open_list.set("master_login", true);
-                    }
-                    if *self.window_open_list.get("first_master_login", &false) {
+                Ok((user_warn, data_base_header, encrypted_data_base)) => {
+                    if let Some(user_warn) = user_warn {
                         ctx.show_viewport_immediate(
-                            egui::ViewportId::from_hash_of("first_master_login"),
-                            egui::ViewportBuilder::default().with_title("first_master_login").with_always_on_top().with_inner_size([300.0, 150.0]),
+                            egui::ViewportId::from_hash_of("user_warn"),
+                            egui::ViewportBuilder::default().with_title("warn"),
                             |ctx, _| {
-                                if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                                    self.window_open_list.set("root", false);
-                                    return;
+                                if ctx.input(|input| input.viewport().close_requested()) {
+                                    ctx.send_viewport_cmd(ViewportCommand::Close);
                                 }
                                 egui::CentralPanel::default().show(ctx, |ui| {
-                                    ui.label("input new master password");
-                                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
-                                    ui.label("recheck master password");
-                                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
-                                    ui.label(format!("{}", self.error_message));
-                                    if ui.button("Accept").clicked() {
-                                        if let Err(err) = master_pw_validation(&self.password) {
-                                            self.error_message = format!("Master password validation error: {}", err);
-                                            self.password.zeroize();
-                                            self.recheck_password.zeroize();
-                                            return;
-                                        }
-                                        if self.password == self.recheck_password {
-                                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password.take());
-                                            self.password.zeroize();
-                                            self.recheck_password.zeroize();
-                                            self.public_key = Some(public_key);
-                                            data_base_header.db_salt = data_base_header_salt;
-                                            self.wrapped_user_key = Some(wrapped_user_key);
-                                            self.data_base = Some(DB::default());
-                                            self.data_base_header = Some(data_base_header);
-                                            self.window_open_list.set("login", true);
-                                            self.login = true;
-                                        } else {
-                                            self.password.zeroize();
-                                            self.recheck_password.zeroize();
-                                            self.error_message = "password is mismatch".to_string();
-                                            return;
-                                        }
-                                    }
-                                });
+                                    ui.label(format!("warn: {}", user_warn));
+                                })
                             }
-                        )
-                    }
-
-                    /* todo
-                    if let Some(encrypted_data_base) = encrypted_data_base {
-                        self.data_base = Some(DataBase::new(is_fresh, user_warn, data_base_header))
-                    }
-                    */
-
-                    if *self.window_open_list.get("master_login", &false) {
-                        ctx.show_viewport_immediate(
-                            egui::ViewportId::from_hash_of("master_login"),
-                            egui::ViewportBuilder::default().with_title("마스터 로그인"),
-                            |ctx, _| {
-                                if ctx.input(|i| i.viewport().close_requested()) {
-                                    self.window_open_list.set("root", false);
-                                }
-                                egui::CentralPanel::default().show(ctx, |ui| {
-                                    ui.label("input master password");
-                                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
-                                    ui.label("input recheck master password");
-                                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
-                                    ui.label(format!("{}", self.error_message));
-                                    if ui.button("login").clicked() {
-                                        if self.password != self.recheck_password {
-                                            self.error_message = "invalid password".to_string();
-                                            return;
-                                        }
-                                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.password.take(), self.data_base_header.unwrap().db_salt.clone()) {
-                                            Ok(value) => {
-                                                self.password.zeroize();
-                                                self.recheck_password.zeroize();
-                                                value
-                                            },
-                                            Err(error) => {
-                                                self.error_message = format!("{}", error);
-                                                self.password.zeroize();
-                                                self.recheck_password.zeroize();
-                                                return;
-                                            }
-                                        };
-                                        let decrypted_data_base = match decrypt_db(&encrypted_data_base.unwrap(), secret_key) {
-                                            Ok(decrypted_data_base) => decrypted_data_base,
-                                            Err(error) => {
-                                                self.error_message = format!("{}", error);
-                                                return;
-                                            }
-                                        };
-                                        self.data_base = Some(decrypted_data_base);
-                                        self.data_base_header = Some(data_base_header);
-                                        self.window_open_list.set("master_login", false);
-                                        self.login = true;
-                                    }
-                                });
-                            },
                         );
+                    }
+                    match encrypted_data_base {
+                        Some(encrypted_data_base) => {
+                            self.graphical_user_interface_first_login(ctx, &encrypted_data_base, data_base_header);
+                        }
+                        None => {
+                            self.graphical_user_interface_not_first_login(ctx, data_base_header);
+                        }
                     }
                 },
                 Err(err) => {
@@ -300,42 +380,8 @@ impl eframe::App for GraphicalUserInterface {
         } else {
             egui::CentralPanel::default().show(ctx, |ui| {
                 egui::Grid::new("user_input").show(ui, |ui| {
-                    let add_password_button = ui.button("add password").on_hover_text("add password");
-                    if add_password_button.clicked() {
-                        self.window_open_list.set("add_password", true);
-                    }
-                    if *self.window_open_list.get("add_password", &false) {
-                        ctx.show_viewport_immediate(
-                            egui::ViewportId::from_hash_of("add_password"),
-                            egui::ViewportBuilder::default().with_title("add password"),
-                            |ctx, _| {
-                                egui::CentralPanel::default().show(ctx, |ui| {
-                                    let mut site_name = String::new();
-                                    let mut user_id = String::new();
-                                    let mut password = String::new();
-                                    ui.label("add password");
-                                    ui.horizontal(|ui| {
-                                        ui.label("site name");
-                                        ui.text_edit_singleline(&mut site_name);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("user id");
-                                        ui.text_edit_singleline(&mut user_id);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.label("password");
-                                        ui.text_edit_singleline(&mut password);
-                                    });
-                                    if ui.button("Accept").clicked() {
-                                        if site_name.is_empty() || user_id.is_empty() || password.is_empty() {
-                                            ui.label("empty input!");
-                                        }
-
-                                    }
-                                })
-                            }
-                        );
-                    }
+                    let button = ui.button("add password").on_hover_text("add password");
+                    self.add_user_password(ctx, ui, button);
                 });
                 ui.label("search");
                 ui.add(egui::TextEdit::singleline(&mut self.search_data_base));
@@ -443,20 +489,20 @@ fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>, try_count: NonZeroU
     unreachable!()
 }
 
-fn retry_function<F, T, E>(mut try_function: F, try_count: NonZeroU64) -> Result<T, E>
-where
-    F: FnMut() -> Result<T, E>,
-    T: Sized,
-    E: Error,
-{
-    let mut last_err = None;
 
-    for _ in 0..try_count.into() {
-        match try_function() {
-            Ok(v) => return Ok(v),
-            Err(e) => last_err = Some(e),
-        }
-    }
 
-    Err(last_err.expect("max_attempts > 0"))
-}
+
+
+
+
+/*
+AddUserPW {site: SiteName, id: UserID, pw: UserPW},
+ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
+RemoveUserPW {site: SiteName, id: UserID},
+GetUserPW {site: SiteName, id: UserID},
+PrefixSearch {site: String},
+ChangeMasterPW,
+SaveDB,
+ExitAppWithSave,
+ExitAppWithoutSave,
+*/
