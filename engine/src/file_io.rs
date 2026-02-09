@@ -47,7 +47,6 @@ pub enum FileIOError {
     // 무결성(재시도 이후에도 복원 불가)
     PersistentIntegrityFailure,
 }
-
 impl Display for FileIOError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use FileIOError::*;
@@ -65,8 +64,9 @@ impl Display for FileIOError {
         }
     }
 }
-
 impl Error for FileIOError {}
+
+
 pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), FileIOError> {
     let bak_path = Path::new(DB_BAK_FILE);
     let db_path = Path::new(DB_FILE);
@@ -128,7 +128,6 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
 
     Ok( (Some(FileIOWarn::ResetDBForCorruptedFile), DBHeader::empty_valid(), None) )
 }
-
 
 pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
