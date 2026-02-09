@@ -13,16 +13,16 @@ const DB_BAK_FILE: &str = "db.bin.bak";
 #[derive(Debug)]
 pub enum FileIOWarn {
     RevertedForUngracefulExited,
-    RevertedForCorruptedFile
+    ResetDBForCorruptedFile
 }
 impl Display for FileIOWarn {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             FileIOWarn::RevertedForUngracefulExited => {
-                write!(f, "RevertedForUngracefulExited")
+                write!(f, "This app is ungracefully exited. reverted the database to the last backup")
             }
-            FileIOWarn::RevertedForCorruptedFile => {
-                write!(f, "RevertedForCorruptedFile")
+            FileIOWarn::ResetDBForCorruptedFile => {
+                write!(f, "Reset the database, because the database file is corrupted.")
             }
         }
     }
@@ -114,7 +114,7 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
-                return Ok( (Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
+                return Ok( (Some(FileIOWarn::ResetDBForCorruptedFile), DBHeader::empty_valid(), None) )
             }
             Err(err) => return Err(err)
         };
@@ -126,7 +126,7 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
         return Ok( (user_warn, header, Some(ciphertext) ) )
     }
 
-    Ok( (Some(FileIOWarn::RevertedForCorruptedFile), DBHeader::empty_valid(), None) )
+    Ok( (Some(FileIOWarn::ResetDBForCorruptedFile), DBHeader::empty_valid(), None) )
 }
 
 
