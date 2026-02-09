@@ -269,4 +269,3 @@ pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
 
     Ok(())
 }
-
