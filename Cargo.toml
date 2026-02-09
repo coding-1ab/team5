@@ -20,7 +20,7 @@ single-instance = "*"
 
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
-single-instance = "*"
+arboard = "*"
 
 
 [features]

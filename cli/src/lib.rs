@@ -2,7 +2,7 @@
 use std::io;
 use std::io::{stdin, Read, Write};
 use std::process::exit;
-use single_instance::SingleInstance;
+use arboard::Clipboard;
 use zeroize::*;
 use clap::*;
 use zeroize::__internal::AssertZeroize;
@@ -12,13 +12,6 @@ use engine::file_io::*;
 use engine::manual_zeroize;
 
 pub fn cli_app() -> () {
-    // let instance = SingleInstance::new("team-5").unwrap();
-    assert_eq!(size_of::<usize>(), 8, "Unsupported Architecture");
-
-    // if !instance.is_single() {
-    //     println!("This instance is not a single.");
-    //     return ();
-    // }
 
     // let mut should_save_db = true;
 
@@ -187,7 +180,21 @@ pub fn cli_app() -> () {
                                 continue;
                             }
                         };
+
                         println!("{}", pw.as_str());
+                    }
+                    UserRequest::GetUserPWToClipboard { site, id } => {
+                        let mut pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
+                            Ok(v) => {v}
+                            Err(e) => {
+                                println!("Error getting password: {}", e);
+                                continue;
+                            }
+                        };
+
+                        let mut ctx = Clipboard::new().unwrap();
+                        ctx.set_text(pw.as_str()).unwrap();
+                        pw.zeroize();
                     }
                     UserRequest::PrefixSearch { site } => {
                         // prefix_range(&db, site)
@@ -259,9 +266,9 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::ExitAppWithSave => {
                         // if should_save_db {
-                        let encryted_db = encrypt_db(&db, &pub_key);
+                        let encrypted_db = encrypt_db(&db, &pub_key);
 
-                        if let Err(e) = save_db(db_header, encryted_db) {
+                        if let Err(e) = save_db(db_header, encrypted_db) {
                             println!("Error saving db: {}", e);
                             continue;
                         }
@@ -305,6 +312,7 @@ pub enum UserRequest {
     ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
     RemoveUserPW {site: SiteName, id: UserID},
     GetUserPW {site: SiteName, id: UserID},
+    GetUserPWToClipboard {site: SiteName, id: UserID},
     PrefixSearch {site: String},
     ChangeMasterPW,
     SaveDB,

@@ -7,6 +7,6 @@ edition = "2024"
 engine = {path = "../engine"}
 
 clap = "*"
+arboard = {workspace = true}
 
-single-instance = {workspace = true}
 zeroize = {workspace = true}
