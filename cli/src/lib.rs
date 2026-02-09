@@ -200,7 +200,7 @@ pub fn cli_app() -> () {
                         // prefix_range(&db, site)
                         // continue;
                         // explor_db(&mut db, site, &wrapped_user_key);
-                        for site in prefix_range(&db, &*site) {
+                        for site in prefix_range(&db, &*(site).unwrap_or("".to_string())) {
                             println!("{}", site.0.as_str());
                             for user in site.1.iter() {
                                 println!("  {}", user.0.as_str());
@@ -313,7 +313,7 @@ pub enum UserRequest {
     RemoveUserPW {site: SiteName, id: UserID},
     GetUserPW {site: SiteName, id: UserID},
     GetUserPWToClipboard {site: SiteName, id: UserID},
-    PrefixSearch {site: String},
+    PrefixSearch {site: Option<String>},
     ChangeMasterPW,
     SaveDB,
     ExitAppWithSave,
