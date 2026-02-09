@@ -9,7 +9,7 @@ debug = true
 panic = "abort"
 
 [workspace]
-members = ["engine", "app", "cli", "ui"]
+members = ["engine", "cli", "ui"]
 
 [dependencies]
 memlock = "*"
