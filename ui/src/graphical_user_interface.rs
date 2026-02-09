@@ -47,22 +47,46 @@ impl AsRef<HashMap<&'static str, bool>> for WindowOpenList {
     }
 }
 
+#[derive(Default)]
+struct StringValues(HashMap<&'static str, String>);
+
+impl StringValues {
+    fn get<'a>(&'a self, key: &'static str, default: &'a String) -> &'a String {
+        self.0.get(key).unwrap_or(default)
+    }
+
+    fn set(&mut self, key: &'static str, value: String) {
+        self.0.insert(key, value);
+    }
+
+    fn get_mut<'a>(&'a mut self, key: &'static str, default: &'a mut String) -> &'a mut String {
+        self.0.get_mut(key).unwrap_or(default)
+    }
+}
+
+impl AsRef<HashMap<&'static str, String>> for StringValues {
+    fn as_ref(&self) -> &HashMap<&'static str, String> {
+        &self.0
+    }
+}
+
+impl AsMut<HashMap<&'static str, String>> for StringValues {
+    fn as_mut(&mut self) -> &mut HashMap<&'static str, String> {
+        &mut self.0
+    }
+}
+
 pub struct GraphicalUserInterface {
     first_run: bool,
-    font_load_list: FontLoadList,
     login: bool,
-    id: String,
-    password: String,
-    recheck_password: String,
-    search_data_base: String,
+    font_load_list: FontLoadList,
+    string_values: StringValues,
     window_open_list: WindowOpenList,
-    output: String,
-    error_message: String,
-    data_base: Option<DB>,
+    data_base: DB,
+    wrapped_user_key: WrappedUserKey,
     data_base_header: Option<DBHeader>,
     public_key: Option<PubKey>,
     secret_key: Option<SecKey>,
-    wrapped_user_key: Option<WrappedUserKey>
 }
 
 impl GraphicalUserInterface {
@@ -139,39 +163,43 @@ impl GraphicalUserInterface {
                 }
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label("input master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                    ui.add(egui::TextEdit::singleline(self.string_values.get_mut("password", &mut String::new())).password(true));
                     ui.label("input recheck master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
-                    ui.label(format!("{}", self.error_message));
+                    ui.add(egui::TextEdit::singleline(self.string_values.get_mut("recheck_password", &mut String::new())).password(true));
+                    ui.label(self.string_values.get("error_message", &String::new()));
                     if ui.button("login").clicked() {
-                        if self.password != self.recheck_password {
-                            self.error_message = "invalid password".to_string();
+                        if *self.string_values.get("password", &String::new()) != *self.string_values.get("recheck_password", &String::new()) {
+                            *self.string_values.get_mut("error_message", &mut String::new()) = "invalid password".to_string();
                             return;
                         }
-                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.password.take(), self.data_base_header.unwrap().db_salt.clone()) {
+                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.string_values.get_mut("password", &mut String::new()).take(), self.data_base_header.unwrap().db_salt) {
                             Ok(value) => {
-                                self.password.zeroize();
-                                self.recheck_password.zeroize();
+                                self.string_values.get_mut("password", &mut String::new()).zeroize();
+                                self.string_values.as_mut().remove("password");
+                                self.string_values.get_mut("recheck_password", &mut String::new()).zeroize();
+                                self.string_values.as_mut().remove("recheck_password");
                                 value
                             },
                             Err(error) => {
-                                self.error_message = format!("{}", error);
-                                self.password.zeroize();
-                                self.recheck_password.zeroize();
+                                *self.string_values.get_mut("error_message", &mut String::new()) = error.to_string();
+                                self.string_values.get_mut("password", &mut String::new()).zeroize();
+                                self.string_values.as_mut().remove("password");
+                                self.string_values.get_mut("recheck_password", &mut String::new()).zeroize();
+                                self.string_values.as_mut().remove("recheck_password");
                                 return;
                             }
                         };
                         let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
                             Ok(decrypted_data_base) => decrypted_data_base,
                             Err(error) => {
-                                self.error_message = format!("{}", error);
+                                *self.string_values.get_mut("error_message", &mut String::new()) = error.to_string();
                                 return;
                             }
                         };
-                        self.data_base = Some(decrypted_data_base);
+                        self.data_base = decrypted_data_base;
                         self.data_base_header = Some(data_base_header);
                         self.public_key = Some(public_key);
-                        self.wrapped_user_key = Some(wrapped_user_key);
+                        self.wrapped_user_key = wrapped_user_key;
                         self.window_open_list.set("master_login", false);
                         self.login = true;
                     }
@@ -191,32 +219,38 @@ impl GraphicalUserInterface {
                 }
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label("input new master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                    ui.add(egui::TextEdit::singleline(self.string_values.get_mut("password", &mut String::new())).password(true));
                     ui.label("recheck master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.recheck_password).password(true));
-                    ui.label(format!("{}", self.error_message));
+                    ui.add(egui::TextEdit::singleline(self.string_values.get_mut("recheck_password", &mut String::new())).password(true));
+                    ui.label(format!("{}", self.string_values.get("error_message", &String::new())));
                     if ui.button("Accept").clicked() {
-                        if let Err(err) = master_pw_validation(&self.password) {
-                            self.error_message = format!("Master password validation error: {}", err);
-                            self.password.zeroize();
-                            self.recheck_password.zeroize();
+                        if let Err(err) = master_pw_validation(self.string_values.get("password", &String::new())) {
+                            *self.string_values.get_mut("error_message", &mut String::new()) = format!("Master password validation error: {}", err);
+                            self.string_values.get_mut("password", &mut String::new()).zeroize();
+                            self.string_values.as_mut().remove("password");
+                            self.string_values.get_mut("recheck_password", &mut String::new()).zeroize();
+                            self.string_values.as_mut().remove("recheck_password");
                             return;
                         }
-                        if self.password == self.recheck_password {
-                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.password.take());
-                            self.password.zeroize();
-                            self.recheck_password.zeroize();
+                        if *self.string_values.get("password", &String::new()) == *self.string_values.get("recheck_password", &String::new()) {
+                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.string_values.get_mut("password", &mut String::new()).take());
+                            self.string_values.get_mut("password", &mut String::new()).zeroize();
+                            self.string_values.as_mut().remove("password");
+                            self.string_values.get_mut("recheck_password", &mut String::new()).zeroize();
+                            self.string_values.as_mut().remove("recheck_password");
                             self.public_key = Some(public_key);
                             data_base_header.db_salt = data_base_header_salt;
-                            self.wrapped_user_key = Some(wrapped_user_key);
-                            self.data_base = Some(DB::default());
+                            self.wrapped_user_key = wrapped_user_key;
+                            self.data_base = DB::default();
                             self.data_base_header = Some(data_base_header);
                             self.window_open_list.set("login", true);
                             self.login = true;
                         } else {
-                            self.password.zeroize();
-                            self.recheck_password.zeroize();
-                            self.error_message = "password is mismatch".to_string();
+                            self.string_values.get_mut("password", &mut String::new()).zeroize();
+                            self.string_values.as_mut().remove("password");
+                            self.string_values.get_mut("recheck_password", &mut String::new()).zeroize();
+                            self.string_values.as_mut().remove("recheck_password");
+                            *self.string_values.get_mut("error_message", &mut String::new()) = "password is mismatch".to_string();
                             return;
                         }
                     }
@@ -225,20 +259,22 @@ impl GraphicalUserInterface {
         );
     }
 
-    fn add_user_password(&mut self, context: &Context, user_interface: &mut Ui, button: egui::Response) {
-        let add_password_button = button;
-        if add_password_button.clicked() {
+    fn graphical_user_interface_add_user_password(&mut self, context: &Context, button: egui::Response) {
+        if button.clicked() {
             self.window_open_list.set("add_password", true);
         }
         if *self.window_open_list.get("add_password", &false) {
+            let mut site_name = String::new();
+            let mut user_id = String::new();
+            let mut password = String::new();
             context.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("add_password"),
                 egui::ViewportBuilder::default().with_title("add password"),
                 |ctx, _| {
+                    if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                        self.window_open_list.set("add_password", false);
+                    }
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        let mut site_name = String::new();
-                        let mut user_id = String::new();
-                        let mut password = String::new();
                         ui.label("add password");
                         ui.horizontal(|ui| {
                             ui.label("site name");
@@ -252,34 +288,33 @@ impl GraphicalUserInterface {
                             ui.label("password");
                             ui.text_edit_singleline(&mut password);
                         });
-                        ui.label(&self.error_message);
+                        ui.label(self.string_values.get("error_message", &String::new()));
                         if ui.button("Accept").clicked() {
                             if site_name.is_empty() || user_id.is_empty() || password.is_empty() {
-                                self.error_message = "empty input!".to_string()
+                                *self.string_values.get_mut("error_message", &mut String::new()) = "empty input!".to_string()
                             }
                             let site_name = match SiteName::new(&site_name) {
                                 Ok(site_name) => site_name,
                                 Err(error) => {
-                                    self.error_message = error.to_string();
+                                    *self.string_values.get_mut("error_message", &mut String::new()) = error.to_string();
                                     return;
                                 }
                             };
                             let user_id = match UserID::new(&user_id) {
                                 Ok(user_id) => user_id,
                                 Err(error) => {
-                                    self.error_message = error.to_string();
+                                    *self.string_values.get_mut("error_message", &mut String::new()) = error.to_string();
                                     return;
                                 }
                             };
                             let password = match UserPW::new(&password) {
                                 Ok(password) => password,
                                 Err(error) => {
-                                    self.error_message = error.to_string();
+                                    *self.string_values.get_mut("error_message", &mut String::new()) = error.to_string();
                                     return;
                                 }
                             };
-                            let data_base = self.data_base.unwrap().values_mut();
-                            if let Err(e) = add_user_pw(data_base, site_name, user_id, password, &self.wrapped_user_key.unwrap()) {
+                            if let Err(e) = add_user_pw(&mut self.data_base, site_name, user_id, password, &self.wrapped_user_key) {
                                 println!("Error adding password: {}", e);
                             }
                             if let Err(err) = mark_as_ungraceful_exited_to_file() {
@@ -291,26 +326,47 @@ impl GraphicalUserInterface {
             );
         }
     }
+
+    fn change_user_password(&mut self, context: &Context, button: egui::Response) {
+        if button.clicked() {
+            self.window_open_list.set("change_password", true);
+        }
+        if *self.window_open_list.get("change_password", &false) {
+            context.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("change_user_password"),
+                egui::ViewportBuilder::default().with_title("change user password"),
+                |ctx, _| {
+
+                }
+            )
+        }
+    }
+
+    /*
+    ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
+    RemoveUserPW {site: SiteName, id: UserID},
+    GetUserPW {site: SiteName, id: UserID},
+    PrefixSearch {site: String},
+    ChangeMasterPW,
+    SaveDB,
+    ExitAppWithSave,
+    ExitAppWithoutSave,
+    */
 }
 
 impl Default for GraphicalUserInterface {
     fn default() -> Self {
         Self {
             first_run: true,
-            login: Default::default(),
-            font_load_list: FontLoadList::default(),
-            id: String::new(),
-            password: String::new(),
-            recheck_password: String::new(),
-            search_data_base: String::new(),
+            login: false,
+            font_load_list: HashMap::new(),
+            string_values: Default::default(),
             window_open_list: Default::default(),
-            output: String::new(),
-            error_message: String::new(),
-            data_base: None,
+            data_base: Default::default(),
             data_base_header: None,
             public_key: None,
             secret_key: None,
-            wrapped_user_key: None,
+            wrapped_user_key: Default::default(),
         }
     }
 }
@@ -381,16 +437,12 @@ impl eframe::App for GraphicalUserInterface {
             egui::CentralPanel::default().show(ctx, |ui| {
                 egui::Grid::new("user_input").show(ui, |ui| {
                     let button = ui.button("add password").on_hover_text("add password");
-                    self.add_user_password(ctx, ui, button);
+                    self.graphical_user_interface_add_user_password(ctx, button);
                 });
                 ui.label("search");
-                ui.add(egui::TextEdit::singleline(&mut self.search_data_base));
+                ui.add(egui::TextEdit::singleline(self.string_values.get_mut("search_data_base", &mut String::new())));
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    let Some(data_base) = &self.data_base else {
-                        ui.label("invalided data base!");
-                        return;
-                    };
-                    for user_data in prefix_range(data_base, &self.search_data_base) {
+                    for user_data in prefix_range(&self.data_base, self.string_values.get("search_data_base", &String::new())) {
                         egui::Grid::new("user_data").show(ui, |ui| {
                             let (site_name, user_data) = user_data;
                             ui.label(&*site_name.as_str());
@@ -418,11 +470,11 @@ impl eframe::App for GraphicalUserInterface {
                                     .spacing([8.0, 6.0])
                                     .show(ui, |ui| {
                                         ui.label("id");
-                                        ui.text_edit_singleline(&mut self.id);
+                                        ui.text_edit_singleline(self.string_values.get_mut("id", &mut String::new()));
                                         ui.end_row();
                                         ui.label("password");
                                         ui.add(
-                                            egui::TextEdit::singleline(&mut self.password)
+                                            egui::TextEdit::singleline(self.string_values.get_mut("password", &mut String::new()))
                                                 .password(true),
                                         );
                                     });
@@ -438,16 +490,7 @@ impl eframe::App for GraphicalUserInterface {
                             });
                         },
                     );
-                    self.output = format!(
-                        "You typed id: {}\nYou typed password: {}",
-                        self.id, self.password
-                    );
                 }
-
-                ui.separator();
-
-                ui.label("Output:");
-                ui.label(&self.output);
             });
         }
     }
@@ -488,21 +531,3 @@ fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>, try_count: NonZeroU
 
     unreachable!()
 }
-
-
-
-
-
-
-
-/*
-AddUserPW {site: SiteName, id: UserID, pw: UserPW},
-ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
-RemoveUserPW {site: SiteName, id: UserID},
-GetUserPW {site: SiteName, id: UserID},
-PrefixSearch {site: String},
-ChangeMasterPW,
-SaveDB,
-ExitAppWithSave,
-ExitAppWithoutSave,
-*/
