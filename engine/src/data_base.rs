@@ -1,4 +1,4 @@
-use crate::user_secrets::{EncryptdUsrPW, WrappedUserKey, decrypt_user_pw, encryt_user_pw};
+use crate::user_secrets::{EncryptedUserPW, WrappedUserKey, decrypt_user_pw, encryt_user_pw};
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Bound, RangeFrom};
 use rkyv::{Archive, Deserialize, Serialize};
@@ -35,7 +35,7 @@ impl UserPW {
             0: trimmed.to_string(),
         })
     }
-    pub fn from_uncheched(input: String) -> Self {
+    pub fn from_unchecked(input: String) -> Self {
         Self {0: input}
     }
     pub fn void() -> Self {
@@ -237,7 +237,7 @@ impl Display for SiteNameError {
 }
 impl Error for SiteNameError {}
 
-pub type DB = BTreeMap<SiteName, HashMap<UserID, EncryptdUsrPW>>;
+pub type DB = BTreeMap<SiteName, HashMap<UserID, EncryptedUserPW>>;
 
 #[derive(Debug)]
 pub enum DBIOError {
@@ -356,7 +356,7 @@ pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key
 
 #[inline]
 pub fn prefix_range<'a>(db: &'a DB, prefix: &str, )
-    -> impl Iterator<Item = (&'a SiteName, &'a HashMap<UserID, EncryptdUsrPW>)> {
+    -> impl Iterator<Item = (&'a SiteName, &'a HashMap<UserID, EncryptedUserPW>)> {
     let lower = SiteName::from_unchecked("", prefix);
     let mut upper_reg = prefix.to_string();
     upper_reg.push(char::MAX);

@@ -105,9 +105,10 @@ impl SecKey {
 }
 
 #[inline]
-fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> SecKey {
-    salt[5]=5; salt[10]=10; salt[15]=15; salt[20]=20; salt[25]=25; salt[30]=30;
-    for (t, s) in salt.iter_mut().zip(master_pw.as_bytes().iter()) {
+fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
+    let mut salt_cloned = salt.clone();
+    salt_cloned[5]=5; salt_cloned[10]=10; salt_cloned[15]=15; salt_cloned[20]=20; salt_cloned[25]=25; salt_cloned[30]=30;
+    for (t, s) in salt_cloned.iter_mut().zip(master_pw.as_bytes().iter()) {
         *t ^= *s;
     }
     let mut params = Params::new(
@@ -123,7 +124,7 @@ fn master_pw_kdf(master_pw: &String, mut salt: Salt) -> SecKey {
     );
     let mut kdf_out = [0u8; 32];
     argon2.hash_password_into(
-        master_pw.as_bytes(), salt.as_slice(),
+        master_pw.as_bytes(), salt_cloned.as_slice(),
         kdf_out.as_mut()
     ).unwrap();
     let sec_key = SecKey::from_array(kdf_out);
@@ -149,7 +150,7 @@ fn is_valid_sec_key(key: &[u8; 32]) -> bool {
     false
 }
 
-pub fn general_login(mut master_pw: String, mut salt: Salt)
+pub fn general_login(mut master_pw: String, salt: &Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
     let mut sec_key = master_pw_kdf(&master_pw, salt);
     if !is_valid_sec_key(sec_key.as_array()) {
@@ -157,6 +158,7 @@ pub fn general_login(mut master_pw: String, mut salt: Salt)
         sec_key.zeroize();
         return Err(MasterPWError::IncorrectPW);
     }
+
     let pub_key = PubKey::from_sec_key(&sec_key);
     let wrapped_user_key = get_wrapped_user_key(&master_pw, &sec_key);
     master_pw.zeroize();
@@ -167,7 +169,7 @@ pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
     let mut sec_key;
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        sec_key = master_pw_kdf(&master_pw, salt);
+        sec_key = master_pw_kdf(&master_pw, &salt);
         if is_valid_sec_key(sec_key.as_array()) {
             break;
         }
@@ -178,17 +180,18 @@ pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
     sec_key.zeroize();
     (pub_key, salt, wrapped_user_key)
 }
-pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: WrappedUserKey)
-                        -> Result<(PubKey, Salt, WrappedUserKey), MasterPWError> {
+pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: &mut WrappedUserKey)
+                        -> Result<(PubKey, Salt), MasterPWError> {
     let mut salt = Salt::default();
     let mut sec_key;
     loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        sec_key = master_pw_kdf(&new_master_pw, salt);
+        sec_key = master_pw_kdf(&new_master_pw, &salt);
         if is_valid_sec_key(sec_key.as_array()) {
             break;
         }
     }
+
     let mut pub_key = PubKey::from_sec_key(&sec_key);
     let mut new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &sec_key);
     new_master_pw.zeroize();
@@ -197,19 +200,25 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
     let mut users_archive = vec![];
     for site in &mut *db {
         for user in site.1 {
+
             users_archive.push((site.0.clone(), user.0.clone()));
         }
     }
+
     for user in users_archive.into_iter() {
+
         let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
-        if let Err(_) =  change_user_pw(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key) {
+
+        if let Err(err) = change_user_pw(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key) {
             pub_key.zeroize();
             new_wrapped_user_key.zeroize();
             return Err(MasterPWError::InvalidSession);
         }
     }
-    // users_archive.zeroize();
-    Ok( (pub_key, salt, new_wrapped_user_key) )
+    wrapped_user_key.zeroize();
+
+    *wrapped_user_key = new_wrapped_user_key;
+    Ok( (pub_key, salt) )
 }
 fn get_wrapped_user_key(master_pw: &String, sec_key: &SecKey) -> WrappedUserKey {
     let mut hasher1 = Sha256::new();
@@ -221,7 +230,7 @@ fn get_wrapped_user_key(master_pw: &String, sec_key: &SecKey) -> WrappedUserKey 
     hasher2.update(&tmp);
     hasher2.update(&tmp);
     let mut user_key = UserKey::default();
-    FixedOutputReset::finalize_into_reset(&mut hasher2, GenericArray::from_mut_slice(user_key.as_mut_slice()));
+    FixedOutputReset::finalize_into_reset(&mut hasher2, GenericArray::from_mut_slice(user_key.as_mut_bytes()));
     tmp.zeroize();
     let wrapped_user_key = wrap_user_key(user_key).unwrap();
     wrapped_user_key

@@ -11,7 +11,7 @@ pub type Magic = [u8; MAGIC_LEN];
 pub type Version = [u8; VERSION_DIGITS];
 pub type Salt = [u8; SALT_LEN];
 pub type Nonce = [u8; NONCE_LEN];
-pub type CiphTxtChksum = [u8; 32];
+pub type CiphTxtChecksum = [u8; 32];
 pub type CipherTextLen = usize;
 
 /// Program_internal maginc literal
@@ -28,7 +28,7 @@ pub struct DBHeader {
     pub(crate) version: Version,
     pub db_salt: Salt, // argon2 salt
     // pub(crate) user_nonce: Nonce,
-    pub(crate) ciphertext_checksum: CiphTxtChksum,
+    pub(crate) ciphertext_checksum: CiphTxtChecksum,
     pub(crate) ciphertext_len: CipherTextLen,
 }
 pub const HEADER_LEN: usize = size_of::<DBHeader>();

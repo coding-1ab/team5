@@ -30,7 +30,8 @@ impl Display for FileIOWarn {
 #[derive(Debug)]
 pub enum FileIOError {
     // Lock 관련
-    LockUnavailable, // 다른 프로세스가 락 보유
+    LockUnavailable,
+    LockWouldBlock,  // 다른 프로세스가 락 보유
 
     // 파일 열기/읽기/쓰기/동기화
     FileOpenFailed(io::Error),
@@ -51,7 +52,8 @@ impl Display for FileIOError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use FileIOError::*;
         match self {
-            LockUnavailable => write!(f, "File is locked by another process"),
+            LockWouldBlock => write!(f, "File is locked by another process"),
+            LockUnavailable => write!(f, "Failed to getting file lock."),
             FileOpenFailed(e) => write!(f, "Failed to open file: {}", e),
             FileReadFailed(e) => write!(f, "Failed to read file: {}", e),
             FileWriteFailed(e) => write!(f, "Failed to write file: {}", e),
@@ -100,12 +102,12 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
     match db_file.try_lock_exclusive() {
         Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { /* 보유중 */ },
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { return Err(FileIOError::LockWouldBlock) },
         Err(err) => { return Err(FileIOError::LockUnavailable) }
     }
 
-    let read_triales = 3;
-    for _ in 0..read_triales {
+    let read_trials = 3;
+    for _ in 0..read_trials {
         let mut data = Vec::new();
         (&db_file).seek(SeekFrom::Start(0));
         (&db_file).take(u64::MAX).read_to_end(&mut data)

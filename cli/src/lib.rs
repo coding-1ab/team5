@@ -109,7 +109,7 @@ pub fn cli_app() -> () {
             };
 
             let sec_key;
-            (sec_key, pub_key, wrapped_user_key) = match general_login(master_pw, db_header.db_salt.clone()) {
+            (sec_key, pub_key, wrapped_user_key) = match general_login(master_pw, &db_header.db_salt) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error checking master pw: {}", e);
@@ -231,7 +231,7 @@ pub fn cli_app() -> () {
                             continue;
                         }
 
-                        (pub_key, db_header.db_salt, wrapped_user_key) = match change_master_pw(&mut db, master_pw_confirm, wrapped_user_key.clone()) {
+                        (pub_key, db_header.db_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key) {
                             Ok(v) => v,
                             Err(e) => {
                                 println!("Error setting master pw: {}", e);
@@ -239,9 +239,9 @@ pub fn cli_app() -> () {
                             }
                         };
 
-                        let encryted_db = encrypt_db(&db, &pub_key);
+                        let encrypted_db = encrypt_db(&db, &pub_key);
 
-                        if let Err(e) = save_db(db_header, encryted_db) {
+                        if let Err(e) = save_db(db_header, encrypted_db) {
                             println!("Error saving db: {}", e);
                             continue;
                         }
