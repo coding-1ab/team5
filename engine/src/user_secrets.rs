@@ -1,4 +1,4 @@
-
+use std::ops::Deref;
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::master_secrets::{__manual_zeroize};
 use crate::manual_zeroize;
@@ -51,9 +51,6 @@ impl UserPWNonce {
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct UserKeyWrapper (Box<[u8; 32]>);
 impl UserKeyWrapper {
-    pub fn default() -> UserKeyWrapper {
-        UserKeyWrapper (Box::new([0; 32]))
-    }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0.as_slice()
     }
@@ -61,12 +58,14 @@ impl UserKeyWrapper {
         self.0.as_mut_slice()
     }
 }
+impl Default for UserKeyWrapper {
+    fn default() -> UserKeyWrapper {
+        UserKeyWrapper (Box::new([0; 32]))
+    }
+}
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct WrappedUserKey (Vec<u8>);
 impl WrappedUserKey {
-    pub fn default() -> WrappedUserKey {
-        WrappedUserKey(Vec::with_capacity(64))
-    }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
     }
@@ -76,12 +75,14 @@ impl From<Vec<u8>> for WrappedUserKey {
         WrappedUserKey(v)
     }
 }
+impl Default for WrappedUserKey {
+    fn default() -> WrappedUserKey {
+        WrappedUserKey(Vec::with_capacity(64))
+    }
+}
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct UserKey (Box<[u8; 32]>);
 impl UserKey {
-    pub fn default() -> UserKey {
-        UserKey (Box::new([0; 32]))
-    }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0.as_slice()
     }
@@ -94,6 +95,11 @@ impl From<[u8; 32]> for UserKey {
         let key = UserKey ( Box::new(arr) );
         arr.zeroize();
         key
+    }
+}
+impl Default for UserKey {
+    fn default() -> Self {
+        UserKey (Box::new([0; 32]))
     }
 }
 pub fn get_system_identity() -> UserKeyWrapper {
