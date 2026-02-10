@@ -14,7 +14,6 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashSet;
 use std::ops::DerefMut;
 use eframe::egui::{TextBuffer};
-use lazy_static::lazy_static;
 use zeroize::Zeroize;
 use engine::{
     data_base::prefix_range,
@@ -76,7 +75,7 @@ pub struct GraphicalUserInterface {
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
-    wrapped_user_key: Option<WrappedUserKey>,
+    wrapped_user_key: WrappedUserKey,
     data_base_header: Option<DBHeader>,
     public_key: Option<PubKey>,
     secret_key: Option<SecKey>,
@@ -165,7 +164,7 @@ impl GraphicalUserInterface {
                             self.string_values.error_message = "invalid password".to_string();
                             return;
                         }
-                        let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password, &self.data_base_header.unwrap().db_salt) {
+                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.string_values.password.take(), &self.data_base_header.unwrap().db_salt) {
                             Ok(value) => {
                                 self.string_values.password.zeroize();
                                 self.string_values.recheck_password.zeroize();
@@ -188,7 +187,7 @@ impl GraphicalUserInterface {
                         self.data_base = decrypted_data_base;
                         self.data_base_header = Some(data_base_header);
                         self.public_key = Some(public_key);
-                        self.wrapped_user_key = Some(wrapped_user_key);
+                        self.wrapped_user_key = wrapped_user_key;
                         self.window_open_list.master_login = false;
                         self.login = true;
                     }
@@ -225,7 +224,7 @@ impl GraphicalUserInterface {
                             self.string_values.recheck_password.zeroize();
                             self.public_key = Some(public_key);
                             data_base_header.db_salt = data_base_header_salt;
-                            self.wrapped_user_key = Some(wrapped_user_key);
+                            self.wrapped_user_key = wrapped_user_key;
                             self.data_base = DB::default();
                             self.data_base_header = Some(data_base_header);
                             self.window_open_list.login = true;
@@ -247,7 +246,6 @@ impl GraphicalUserInterface {
             self.window_open_list.add_password = true;
         }
         if self.window_open_list.add_password {
-            let wrapped_user_key = &self.wrapped_user_key.unwrap();
             context.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("add_password"),
                 egui::ViewportBuilder::default().with_title("add password"),
@@ -301,7 +299,7 @@ impl GraphicalUserInterface {
                                     return;
                                 }
                             };
-                            if let Err(e) = add_user_pw(&mut self.data_base, site_name, user_id, password, &wrapped_user_key) {
+                            if let Err(e) = add_user_pw(&mut self.data_base, site_name, user_id, password, &self.wrapped_user_key) {
                                 println!("Error adding password: {}", e);
                             }
                             if let Err(err) = mark_as_ungraceful_exited_to_file() {
@@ -352,10 +350,10 @@ impl Default for GraphicalUserInterface {
             string_values: Default::default(),
             window_open_list: Default::default(),
             data_base: Default::default(),
+            wrapped_user_key: Default::default(),
             data_base_header: None,
             public_key: None,
             secret_key: None,
-            wrapped_user_key: None,
         }
     }
 }
