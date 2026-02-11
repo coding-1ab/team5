@@ -6,13 +6,11 @@ edition = "2024"
 [profile.dev]
 opt-level = 2
 debug = true
-panic = "unwind"
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "unwind"
 
 [workspace]
 members = ["engine", "cli", "ui"]
