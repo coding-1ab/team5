@@ -168,7 +168,7 @@ pub fn cli_app() -> () {
                         }
                     }
                     UserRequest::RemoveUserPW { site, id } => {
-                        if let Err(e) = remove_user_pw(&mut db, site, id) {
+                        if let Err(e) = remove_user_pw(&mut db, &site, &id) {
                             println!("Error removing password: {}", e);
                             continue;
                         }

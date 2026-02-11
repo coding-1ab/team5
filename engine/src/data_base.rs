@@ -280,16 +280,19 @@ impl Display for DBIOError {
 
 pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
                    -> Result<(), DBIOError> { //todo 중복 처리
-    let encryted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
+    let encrypted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
-    let users = db.entry(site_name).or_insert_with(HashMap::new);
+    let users = db.entry(site_name)
+        .or_insert_with(HashMap::new);
 
     match users.entry(user_id) {
         std::collections::hash_map::Entry::Vacant(e) => {
-            e.insert(encryted_pw);
+            e.insert(encrypted_pw);
             Ok(())
         }
-        std::collections::hash_map::Entry::Occupied(_) => Err(DBIOError::UserAlreadyExists),
+        std::collections::hash_map::Entry::Occupied(_) => {
+            Err(DBIOError::UserAlreadyExists)
+        }
     }
 }
 
@@ -312,32 +315,21 @@ pub fn change_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw:
             *pw = encrypted_pw;
             Ok(())
         }
-        std::collections::hash_map::Entry::Vacant(_) => Err(DBIOError::UserNotFound),
+        std::collections::hash_map::Entry::Vacant(_) => {
+            Err(DBIOError::UserNotFound)
+        }
     }
 }
 
-pub fn remove_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID) -> Result<(), DBIOError> {
-    let remove_site = {
-        let users = match db.entry(site_name.clone()) {
-            std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
-            std::collections::btree_map::Entry::Vacant(_) => {
-                return Err(DBIOError::SiteNotFound);
-            }
-        };
+pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Result<(), DBIOError> {
+    let users = db.get_mut(site_name)
+        .ok_or(DBIOError::SiteNotFound)?;
 
-        match users.entry(user_id) {
-            std::collections::hash_map::Entry::Occupied(e) => {
-                e.remove_entry();
-                users.is_empty()
-            }
-            std::collections::hash_map::Entry::Vacant(_) => {
-                return Err(DBIOError::UserNotFound);
-            }
-        }
-    };
+    users.remove(user_id)
+        .ok_or(DBIOError::UserNotFound)?;
 
-    if remove_site {
-        db.remove(&site_name);
+    if users.is_empty() {
+        db.remove(site_name);
     }
 
     Ok(())

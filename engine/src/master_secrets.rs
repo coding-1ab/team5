@@ -37,8 +37,6 @@ pub enum MasterPWError {
     IncorrectPW,
 
     // 프로세스 유효성
-    // 해당 에러 발생시 시스템 변동이 감지된 경우이므로 재로그인 전까지 DB 입출력 불가
-    // 마지막 변경사항까지 파일에 저장할 수 있도록 프로그램 종료를 보류함
     InvalidSession
 }
 pub fn master_pw_validation(mut raw_pw: &String) -> Result<(), MasterPWError> {
