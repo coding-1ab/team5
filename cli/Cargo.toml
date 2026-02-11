@@ -10,3 +10,4 @@ clap = "*"
 arboard = {workspace = true}
 
 zeroize = {workspace = true}
+single-instance = {workspace = true}

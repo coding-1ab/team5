@@ -6,7 +6,12 @@ edition = "2024"
 [profile.dev]
 opt-level = 2
 debug = true
-panic = "abort"
+panic = "unwind"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "unwind"
 
 [workspace]
 members = ["engine", "cli", "ui"]
@@ -21,6 +26,7 @@ single-instance = "*"
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
 arboard = "*"
+single-instance = "*"
 
 
 [features]

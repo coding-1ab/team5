@@ -6,10 +6,10 @@ compile_error!("이 코드는 64비트 환경(usize가 8바이트)에서만 컴�
 
 
 fn main() -> std::io::Result<()> {
-    let instance = SingleInstance::new("team-5").unwrap();
-    if !instance.is_single() {
-        return Ok(())
-    }
+    // let instance = SingleInstance::new("team-5").unwrap();
+    // if !instance.is_single() {
+    //     return Ok(())
+    // }
 
 
     cli::cli_app();

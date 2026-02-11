@@ -5,6 +5,7 @@ use std::process::exit;
 use arboard::Clipboard;
 use zeroize::*;
 use clap::*;
+use single_instance::SingleInstance;
 use zeroize::__internal::AssertZeroize;
 use engine::data_base::*;
 use engine::master_secrets::*;
@@ -12,6 +13,10 @@ use engine::file_io::*;
 use engine::manual_zeroize;
 
 pub fn cli_app() -> () {
+    let instance = SingleInstance::new("team5").unwrap();
+    if !instance.is_single() {
+        return;
+    }
 
     // let mut should_save_db = true;
 
