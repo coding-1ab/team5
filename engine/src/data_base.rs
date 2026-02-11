@@ -309,10 +309,10 @@ pub fn change_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw:
 
     match users.entry(user_id) {
         std::collections::hash_map::Entry::Occupied(mut e) => {
-            let pw = e.get_mut();
+            let ref_pw = e.get_mut();
 
-            pw.zeroize();
-            *pw = encrypted_pw;
+            ref_pw.zeroize();
+            *ref_pw = encrypted_pw;
             Ok(())
         }
         std::collections::hash_map::Entry::Vacant(_) => {
