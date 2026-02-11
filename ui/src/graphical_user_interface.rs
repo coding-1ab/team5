@@ -5,25 +5,23 @@
 
 // 흠 뭐부터 하지
 
+use std::{collections::HashMap, fs, io, num::NonZeroU64};
 use eframe::{
     egui::{Context, ViewportCommand, self, FontData},
     epaint::text::{FontInsert, FontPriority, InsertFontFamily}
 };
-use std::{collections::HashMap, fs, io, num::NonZeroU64};
-use std::cell::{Ref, RefCell, RefMut};
-use std::collections::HashSet;
-use std::ops::DerefMut;
 use eframe::egui::{TextBuffer};
 use zeroize::Zeroize;
 use engine::{
     data_base::prefix_range,
     file_io::load_db,
-    header::DBHeader
+    header::DBHeader,
+    data_base::{add_user_pw, change_user_pw, get_password, remove_user_pw, SiteName, UserID, UserPW, DB},
+    file_io::mark_as_ungraceful_exited_to_file,
+    master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB},
+    user_secrets::WrappedUserKey
 };
-use engine::data_base::{add_user_pw, SiteName, UserID, UserPW, DB};
-use engine::file_io::mark_as_ungraceful_exited_to_file;
-use engine::master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB};
-use engine::user_secrets::WrappedUserKey;
+use crate::{user_interface_horizontal_input_strings, result_new, command_build};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
@@ -31,18 +29,15 @@ type FontLoadList = HashMap<&'static str, FontLoadState>;
 
 const CAN_TRY_LOAD_COUNT: NonZeroU64 = NonZeroU64::new(5).unwrap();
 
-macro_rules! string_values_default {
-    () => {
-        RefCell::new(String::new())
-    }
-}
-
 struct WindowOpenList {
     root: bool,
     master_login: bool,
     login: bool,
     add_password: bool,
     change_password: bool,
+    remove_user_password: bool,
+    get_user_password: bool,
+    change_master_password: bool
 }
 
 impl Default for WindowOpenList {
@@ -53,6 +48,9 @@ impl Default for WindowOpenList {
             login: false,
             add_password: false,
             change_password: false,
+            remove_user_password: false,
+            get_user_password: false,
+            change_master_password: false,
         }
     }
 }
@@ -62,10 +60,13 @@ struct StringValues {
     password: String,
     recheck_password: String,
     error_message: String,
+    search_data_base: String,
     add_password_site_name: String,
     add_password_user_identifier: String,
     add_password_password: String,
-    search_data_base: String
+    change_user_password_site_name: String,
+    change_user_password_user_identifier: String,
+    change_user_password_password: String,
 }
 
 pub struct GraphicalUserInterface {
@@ -258,47 +259,20 @@ impl GraphicalUserInterface {
                         let user_id = &mut self.string_values.add_password_user_identifier;
                         let password = &mut self.string_values.add_password_password;
                         ui.label("add password");
-                        ui.horizontal(|ui| {
-                            ui.label("site name");
-                            ui.text_edit_singleline(site_name);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("user id");
-                            ui.text_edit_singleline(user_id);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("password");
-                            ui.text_edit_singleline(password);
-                        });
+                        user_interface_horizontal_input_strings!(
+                            ui,
+                            ("site name", site_name),
+                            ("user id", user_id),
+                            ("password", password),
+                        );
                         ui.label(&self.string_values.error_message);
                         if ui.button("Accept").clicked() {
                             if site_name.is_empty() || user_id.is_empty() || password.is_empty() {
                                 self.string_values.error_message = "empty input!".to_string()
                             }
-                            let site_name = match SiteName::new(&site_name) {
-                                Ok(site_name) => site_name,
-                                Err(error) => {
-                                    self.string_values.error_message = error.to_string();
-                                    password.zeroize();
-                                    return;
-                                }
-                            };
-                            let user_id = match UserID::new(&user_id) {
-                                Ok(user_id) => user_id,
-                                Err(error) => {
-                                    self.string_values.error_message = error.to_string();
-                                    password.zeroize();
-                                    return;
-                                }
-                            };
-                            let password = match UserPW::new(&password) {
-                                Ok(password) => password,
-                                Err(error) => {
-                                    self.string_values.error_message = error.to_string();
-                                    password.zeroize();
-                                    return;
-                                }
-                            };
+                            let site_name = result_new!(SiteName, site_name, self.string_values.error_message, return, (password));
+                            let user_id = result_new!(UserID, user_id, self.string_values.error_message, return, (password));
+                            let password = result_new!(UserPW, password, self.string_values.error_message, return, (password));
                             if let Err(e) = add_user_pw(&mut self.data_base, site_name, user_id, password, &self.wrapped_user_key) {
                                 println!("Error adding password: {}", e);
                             }
@@ -313,19 +287,31 @@ impl GraphicalUserInterface {
     }
 
     fn change_user_password(&mut self, context: &Context, button: egui::Response) {
-        if button.clicked() {
-            self.window_open_list.change_password = true;
-        }
-        if self.window_open_list.change_password {
-            context.show_viewport_immediate(
-                egui::ViewportId::from_hash_of("change_user_password"),
-                egui::ViewportBuilder::default().with_title("change user password"),
-                |ctx, _| {
-                    egui::CentralPanel::default().show(ctx, |ui| {
+        command_build!(
+            context, button, change_user_pw, self.window_open_list.change_password, "change_user_password", "change user password", "change user password", self.string_values.error_message, &mut self.data_base, &self.wrapped_user_key,
+            (&mut self.string_values.change_user_password_site_name, "site_name", site_name, SiteName, (password)),
+            (&mut self.string_values.change_user_password_user_identifier, "user_identifier", user_identifier, UserID, (password)),
+            (&mut self.string_values.change_user_password_password, "password", password, UserPW, (password))
+        );
+    }
 
-                    });
-                }
-            );
+    fn remove_user_password(&mut self, context: &Context, button: egui::Response) {
+        command_build!(
+            context, button, remove_user_pw, self.window_open_list.change_password, "change_user_password", "change user password", "change user password", self.string_values.error_message, &mut self.data_base,,
+            (&mut self.string_values.add_password_site_name, "site_name", site_name, SiteName,),
+            (&mut self.string_values.add_password_user_identifier, "user_identifier", user_identifier, UserID,),
+        );
+    }
+
+
+
+    fn get_user_password(&mut self, context: &Context, button: egui::Response) {
+
+    }
+
+    fn change_master_password(&mut self, context: &Context, button: egui::Response) {
+        if button.clicked() {
+            self.window_open_list.change_master_password = true;
         }
     }
 

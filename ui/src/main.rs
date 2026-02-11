@@ -1,6 +1,6 @@
 use single_instance::SingleInstance;
 
-mod graphical_user_interface;
+use ui::graphical_user_interface::GraphicalUserInterface;
 
 fn main() {
     let instance = SingleInstance::new("team5").unwrap();
@@ -10,7 +10,6 @@ fn main() {
 
     #[cfg(feature = "gui")]
     {
-        use graphical_user_interface::GraphicalUserInterface;
         let options = eframe::NativeOptions::default();
         eframe::run_native(
             "eframe example",

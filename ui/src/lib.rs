@@ -9,6 +9,7 @@ use engine::data_base::DB;
 
 #[cfg(feature = "gui")]
 pub mod graphical_user_interface;
+mod macros;
 
 struct CharacterUserInterface {
     db: DB
