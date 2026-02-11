@@ -209,7 +209,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 
         let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
 
-        if let Err(err) = change_user_pw(&mut *db, user.0, user.1, user_pw, &new_wrapped_user_key) {
+        if let Err(err) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key) {
             pub_key.zeroize();
             new_wrapped_user_key.zeroize();
             return Err(MasterPWError::InvalidSession);

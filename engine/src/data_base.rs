@@ -285,40 +285,22 @@ pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: U
     let users = db.entry(site_name)
         .or_insert_with(HashMap::new);
 
-    match users.entry(user_id) {
-        std::collections::hash_map::Entry::Vacant(e) => {
-            e.insert(encrypted_pw);
-            Ok(())
-        }
-        std::collections::hash_map::Entry::Occupied(_) => {
-            Err(DBIOError::UserAlreadyExists)
-        }
+    if users.get(&user_id).is_none() {
+        users.insert(user_id, encrypted_pw);
+        Ok(())
+    } else {
+        Err(DBIOError::UserAlreadyExists)
     }
 }
 
-pub fn change_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
+pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
                       -> Result<(), DBIOError> {
-    let encrypted_pw = encryt_user_pw(&site_name, &user_id, new_pw, &wrapped_key)?;
-
-    let users = match db.entry(site_name) {
-        std::collections::btree_map::Entry::Occupied(e) => e.into_mut(),
-        std::collections::btree_map::Entry::Vacant(_) => {
-            return Err(DBIOError::SiteNotFound);
-        }
-    };
-
-    match users.entry(user_id) {
-        std::collections::hash_map::Entry::Occupied(mut e) => {
-            let pw = e.get_mut();
-
-            pw.zeroize();
-            *pw = encrypted_pw;
-            Ok(())
-        }
-        std::collections::hash_map::Entry::Vacant(_) => {
-            Err(DBIOError::UserNotFound)
-        }
-    }
+    let encrypted_pw = encryt_user_pw(site_name, user_id, new_pw, wrapped_key)?;
+    let users = db.get_mut(site_name).ok_or(DBIOError::SiteNotFound)?;
+    let password = users.get_mut(user_id).ok_or(DBIOError::UserNotFound)?;
+    password.zeroize();
+    *password = encrypted_pw;
+    Ok(())
 }
 
 pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Result<(), DBIOError> {
