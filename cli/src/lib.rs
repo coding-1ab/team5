@@ -114,7 +114,7 @@ pub fn cli_app() -> () {
             };
 
             let sec_key;
-            (sec_key, pub_key, wrapped_user_key) = match general_login(master_pw, &db_header.db_salt) {
+            (sec_key, pub_key, wrapped_user_key) = match general_login(&mut master_pw, &db_header.db_salt) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error checking master pw: {}", e);
@@ -158,7 +158,7 @@ pub fn cli_app() -> () {
                         }
                     }
                     UserRequest::ChangeUserPW { site, id, pw } => {
-                        if let Err(e) = change_user_pw(&mut db, site, id, pw, &wrapped_user_key) {
+                        if let Err(e) = change_user_pw(&mut db, &site, &id, pw, &wrapped_user_key) {
                             println!("Error changing password: {}", e);
                             continue;
                         }

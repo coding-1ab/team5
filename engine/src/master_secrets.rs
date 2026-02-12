@@ -150,9 +150,9 @@ fn is_valid_sec_key(key: &[u8; 32]) -> bool {
     false
 }
 
-pub fn general_login(mut master_pw: String, salt: &Salt)
+pub fn general_login(master_pw: &mut String, salt: &Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
-    let mut sec_key = master_pw_kdf(&master_pw, salt);
+    let mut sec_key = master_pw_kdf(master_pw, salt);
     if !is_valid_sec_key(sec_key.as_array()) {
         master_pw.zeroize();
         sec_key.zeroize();
@@ -160,7 +160,7 @@ pub fn general_login(mut master_pw: String, salt: &Salt)
     }
 
     let pub_key = PubKey::from_sec_key(&sec_key);
-    let wrapped_user_key = get_wrapped_user_key(&master_pw, &sec_key);
+    let wrapped_user_key = get_wrapped_user_key(master_pw, &sec_key);
     master_pw.zeroize();
     Ok( (sec_key, pub_key, wrapped_user_key) )
 }
