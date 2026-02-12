@@ -1,4 +1,4 @@
-
+use std::cell::RefCell;
 use std::io;
 use std::io::{stdin, Read, Write};
 use std::process::exit;
@@ -198,10 +198,8 @@ pub fn cli_app() -> () {
                         };
 
                         let mut ctx = Clipboard::new().unwrap();
-                        let mut pw_s = pw.as_str().to_owned();
-                        ctx.set_text(&pw_s).unwrap();
+                        ctx.set_text(pw.as_str().to_owned()).unwrap();
                         pw.zeroize();
-                        pw_s.zeroize();
                     }
                     UserRequest::PrefixSearch { site } => {
                         // prefix_range(&db, site)
