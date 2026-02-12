@@ -1,5 +1,5 @@
 use crate::manual_zeroize;
-use crate::header::{EncryptedDB as OtherEncryptedDB, Salt};
+use crate::header::{EncryptedDB as OtherEncryptedDB, Salt, DB_MAGIC};
 use crate::user_secrets::{decrypt_user_pw, get_system_identity, wrap_user_key, UserKey, WrappedUserKey};
 use aes_gcm::Aes256Gcm;
 use argon2::password_hash::rand_core;
@@ -223,10 +223,12 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 fn get_wrapped_user_key(master_pw: &String, sec_key: &SecKey) -> WrappedUserKey {
     let mut hasher1 = Sha256::new();
     hasher1.update(master_pw.as_bytes());
+    hasher1.update(DB_MAGIC);
     let mut hasher2 = hasher1.clone();
     let mut tmp = [0u8;32];
     FixedOutputReset::finalize_into_reset(&mut hasher1, GenericArray::from_mut_slice(tmp.as_mut_slice()));
     hasher2.update(sec_key.as_array());
+    hasher2.update(DB_MAGIC);
     hasher2.update(&tmp);
     hasher2.update(&tmp);
     let mut user_key = UserKey::default();
