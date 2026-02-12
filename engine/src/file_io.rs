@@ -171,10 +171,10 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     header.write_to(&mut bytes);
     bytes.append(&mut ciphertext);
 
-    let write_triales = 2;
+    let write_trials = 2;
     let check_counters = 3;
     let mut write_success= false;
-    for _ in 0..write_triales {
+    for _ in 0..write_trials {
         // db_file.set_len(0)
         //     .map_err(|err| FileIOError::FileWriteFailed(err))?;
         db_file.write_all(bytes.as_slice())

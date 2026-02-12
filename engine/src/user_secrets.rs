@@ -114,14 +114,14 @@ pub fn get_system_identity() -> UserKeyWrapper {
         .and_then(|p| p.parent())
         .map(|p| p.as_u32())
         .unwrap_or(0);
-    let mut combined_pid = (pid_u32 as u64) << 32 | (ppid as u64);
+    let mut combined_pids = (pid_u32 as u64) << 32 | (ppid as u64);
     manual_zeroize!(pid_u32, s_pid, ppid);
-    hasher.update(&combined_pid.to_le_bytes());
-    combined_pid.zeroize();
+    hasher.update(&combined_pids.to_le_bytes());
 
     let mut start_time = sys.process(s_pid)
         .map(|p| p.start_time())
-        .unwrap_or(0);
+        .unwrap_or(combined_pids);
+    combined_pids.zeroize();
     hasher.update(&start_time.to_le_bytes());
     start_time.zeroize();
 
@@ -133,8 +133,8 @@ pub fn get_system_identity() -> UserKeyWrapper {
     kernel_version.zeroize();
 
     let mut total_memory = sys.total_memory();
-    let mut total_processors = sys.physical_core_count();
-    let mut combined_c = total_memory as usize + total_processors.unwrap_or(4);
+    let mut total_processors = sys.physical_core_count().unwrap_or(4);
+    let mut combined_c = total_memory as usize + total_processors;
     manual_zeroize!(total_memory, total_processors);
     hasher.update(combined_c.to_le_bytes());
     combined_c.zeroize();
