@@ -249,7 +249,6 @@ impl GraphicalUserInterface {
                             self.string_values.error_message = "invalid password".to_string();
                             return;
                         }
-                        self.string_values.password.zeroize();
                         let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password.take(), &self.data_base_header.unwrap().db_salt) {
                             Ok(value) => {
                                 self.string_values.password.zeroize();
