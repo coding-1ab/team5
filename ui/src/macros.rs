@@ -11,9 +11,9 @@ macro_rules! user_interface_horizontal_input_strings {
 }
 
 #[macro_export]
-macro_rules! result_new {
-    ($new_type:ident, $input:ident, $($error_message:expr)?, $control:tt, ($($zeroizes:ident),* $(,)?)) => {
-        match $new_type::new($input) {
+macro_rules! result_function {
+    ($result_function:expr, $input:ident, $($error_message:expr)?, $control:tt, ($($zeroizes:ident),* $(,)?)) => {
+        match $result_function($input) {
             Ok(value) => value,
             Err(error) => {
                 $(
@@ -36,7 +36,7 @@ macro_rules! command_build {
             $input_value_modifier:expr,
             $input_value_expr_name:expr,
             $input_value_ident_name:ident,
-            $input_value_type:ident, $(,)?
+            $result_function:expr, $(,)?
             $((
                 $zeroize:ident $(,)?
             ))?
@@ -68,9 +68,9 @@ macro_rules! command_build {
                                 $error_message = "empty input!".to_string()
                             }
                             $(
-                                let $input_value_ident_name = result_new!($input_value_type, $input_value_ident_name, $error_message, return, ($($zeroize,)*));
+                                let $input_value_ident_name = result_function!($result_function, $input_value_ident_name, $error_message, return, ($($zeroize,)*));
                             )*
-                            if let Err(e) = $command_function($($data_base,)? $($input_value_ident_name, )* $($wrapped_user_key)?) {
+                            if let Err(e) = $command_function($($data_base,)? $(&$input_value_ident_name, )* $($wrapped_user_key)?) {
                                 println!("Error adding password: {}", e);
                             }
                             if let Err(err) = mark_as_ungraceful_exited_to_file() {

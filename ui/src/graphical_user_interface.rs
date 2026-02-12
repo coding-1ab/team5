@@ -21,7 +21,9 @@ use engine::{
     master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB},
     user_secrets::WrappedUserKey
 };
-use crate::{user_interface_horizontal_input_strings, result_new, command_build};
+use engine::file_io::save_db;
+use engine::master_secrets::{change_master_pw, encrypt_db};
+use crate::{user_interface_horizontal_input_strings, result_function, command_build};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
@@ -29,12 +31,78 @@ type FontLoadList = HashMap<&'static str, FontLoadState>;
 
 const CAN_TRY_LOAD_COUNT: NonZeroU64 = NonZeroU64::new(5).unwrap();
 
+macro_rules! command_build_inner {
+    (
+        $command_function:expr, $command_function_run:expr,
+        $(data_base: ($data_base_value:ident: $data_base:ty),)?
+        $(wrapped_user_key: ($wrapped_user_key_value:ident: $wrapped_user_key:ty),)?
+        $((
+            $input_value_type:ty,
+            $input_value_expr_name:expr,
+            $input_value_identifier_name:ident,
+            $result_function:expr,
+            $result_value_identifier_name:ident,
+            $command_function_using_value:expr, $(,)?
+            $((
+                $zeroize:ident $(,)?
+            ))?
+        )),* $(,)?
+    ) => {
+        fn command_build_inner(
+            context: &Context, button: egui::Response, window_open: &mut bool,
+            viewport_identifier: &str, viewport_title: &str, screen_name: &str, error_message: &mut String,
+            $(
+            $input_value_identifier_name: $input_value_type,
+            )*
+            $($data_base_value: $data_base,)? $($wrapped_user_key_value: $wrapped_user_key,)?
+        ) {
+            if button.clicked() {
+                *window_open = true;
+            }
+            if *window_open {
+                context.show_viewport_immediate(
+                    egui::ViewportId::from_hash_of(viewport_identifier),
+                    egui::ViewportBuilder::default().with_title(viewport_title),
+                    |ctx, _| {
+                        if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                            *window_open = false;
+                        }
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            ui.label(screen_name);
+                            user_interface_horizontal_input_strings!(
+                                ui,
+                                $(($input_value_expr_name, $input_value_identifier_name),)*
+                            );
+                            ui.label(&*error_message);
+                            if ui.button("Accept").clicked() {
+                                if false $(|| $input_value_identifier_name.is_empty())* {
+                                    *error_message = "empty input!".to_string()
+                                }
+                                $(
+                                    let $result_value_identifier_name = result_function!($result_function, $input_value_identifier_name, *error_message, return, ($($zeroize,)*));
+                                )*
+                                if let Err(e) = $command_function($($data_base_value,)? $($command_function_using_value, )* $($wrapped_user_key_value)?) {
+                                    println!("Error adding password: {}", e);
+                                }
+                                if let Err(err) = mark_as_ungraceful_exited_to_file() {
+                                    println!("Error saving status: {}", err);
+                                }
+                            }
+                        })
+                    }
+                );
+            }
+        }
+        $command_function_run
+    }
+}
+
 struct WindowOpenList {
     root: bool,
     master_login: bool,
     login: bool,
-    add_password: bool,
-    change_password: bool,
+    add_user_password: bool,
+    change_user_password: bool,
     remove_user_password: bool,
     get_user_password: bool,
     change_master_password: bool
@@ -46,8 +114,8 @@ impl Default for WindowOpenList {
             root: true,
             master_login: false,
             login: false,
-            add_password: false,
-            change_password: false,
+            add_user_password: false,
+            change_user_password: false,
             remove_user_password: false,
             get_user_password: false,
             change_master_password: false,
@@ -61,13 +129,29 @@ struct StringValues {
     recheck_password: String,
     error_message: String,
     search_data_base: String,
-    add_password_site_name: String,
-    add_password_user_identifier: String,
-    add_password_password: String,
+    add_user_password_site_name: String,
+    add_user_password_user_identifier: String,
+    add_user_password_password: String,
     change_user_password_site_name: String,
     change_user_password_user_identifier: String,
     change_user_password_password: String,
+    remove_user_password_site_name: String,
+    remove_user_password_user_identifier: String,
+    get_user_password_site_name: String,
+    get_user_password_user_identifier: String,
+    change_master_password_password: String,
 }
+
+/*
+ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
+RemoveUserPW {site: SiteName, id: UserID},
+GetUserPW {site: SiteName, id: UserID},
+PrefixSearch {site: String},
+ChangeMasterPW,
+SaveDB,
+ExitAppWithSave,
+ExitAppWithoutSave,
+*/
 
 pub struct GraphicalUserInterface {
     first_run: bool,
@@ -146,7 +230,7 @@ impl GraphicalUserInterface {
         }
     }
 
-    fn graphical_user_interface_first_login(&mut self, context: &Context, encrypted_data_base: &EncryptedDB, data_base_header: DBHeader) {
+    fn graphical_user_interface_not_first_login(&mut self, context: &Context, encrypted_data_base: &EncryptedDB) {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of("master_login"),
             egui::ViewportBuilder::default().with_title("마스터 로그인"),
@@ -165,7 +249,8 @@ impl GraphicalUserInterface {
                             self.string_values.error_message = "invalid password".to_string();
                             return;
                         }
-                        let (secret_key, public_key, wrapped_user_key) = match general_login(self.string_values.password.take(), &self.data_base_header.unwrap().db_salt) {
+                        self.string_values.password.zeroize();
+                        let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password.take(), &self.data_base_header.unwrap().db_salt) {
                             Ok(value) => {
                                 self.string_values.password.zeroize();
                                 self.string_values.recheck_password.zeroize();
@@ -186,7 +271,6 @@ impl GraphicalUserInterface {
                             }
                         };
                         self.data_base = decrypted_data_base;
-                        self.data_base_header = Some(data_base_header);
                         self.public_key = Some(public_key);
                         self.wrapped_user_key = wrapped_user_key;
                         self.window_open_list.master_login = false;
@@ -197,7 +281,7 @@ impl GraphicalUserInterface {
         );
     }
 
-    fn graphical_user_interface_not_first_login(&mut self, context: &Context, mut data_base_header: DBHeader) {
+    fn graphical_user_interface_first_login(&mut self, context: &Context, data_base_header: &mut DBHeader) {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of("first_master_login"),
             egui::ViewportBuilder::default().with_title("first_master_login").with_always_on_top().with_inner_size([300.0, 150.0]),
@@ -223,11 +307,11 @@ impl GraphicalUserInterface {
                             let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.string_values.password.take());
                             self.string_values.password.zeroize();
                             self.string_values.recheck_password.zeroize();
+                            save_db(self.data_base_header.unwrap(), encrypt_db(&DB::default(), &public_key));
                             self.public_key = Some(public_key);
                             data_base_header.db_salt = data_base_header_salt;
                             self.wrapped_user_key = wrapped_user_key;
                             self.data_base = DB::default();
-                            self.data_base_header = Some(data_base_header);
                             self.window_open_list.login = true;
                             self.login = true;
                         } else {
@@ -243,76 +327,70 @@ impl GraphicalUserInterface {
     }
 
     fn graphical_user_interface_add_user_password(&mut self, context: &Context, button: egui::Response) {
-        if button.clicked() {
-            self.window_open_list.add_password = true;
-        }
-        if self.window_open_list.add_password {
-            context.show_viewport_immediate(
-                egui::ViewportId::from_hash_of("add_password"),
-                egui::ViewportBuilder::default().with_title("add password"),
-                |ctx, _| {
-                    if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                        self.window_open_list.add_password = false;
-                    }
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        let site_name = &mut self.string_values.add_password_site_name;
-                        let user_id = &mut self.string_values.add_password_user_identifier;
-                        let password = &mut self.string_values.add_password_password;
-                        ui.label("add password");
-                        user_interface_horizontal_input_strings!(
-                            ui,
-                            ("site name", site_name),
-                            ("user id", user_id),
-                            ("password", password),
-                        );
-                        ui.label(&self.string_values.error_message);
-                        if ui.button("Accept").clicked() {
-                            if site_name.is_empty() || user_id.is_empty() || password.is_empty() {
-                                self.string_values.error_message = "empty input!".to_string()
-                            }
-                            let site_name = result_new!(SiteName, site_name, self.string_values.error_message, return, (password));
-                            let user_id = result_new!(UserID, user_id, self.string_values.error_message, return, (password));
-                            let password = result_new!(UserPW, password, self.string_values.error_message, return, (password));
-                            if let Err(e) = add_user_pw(&mut self.data_base, site_name, user_id, password, &self.wrapped_user_key) {
-                                println!("Error adding password: {}", e);
-                            }
-                            if let Err(err) = mark_as_ungraceful_exited_to_file() {
-                                println!("Error saving status: {}", err);
-                            }
-                        }
-                    })
-                }
-            );
-        }
+        command_build_inner!(
+            add_user_pw, command_build_inner(
+                context, button, &mut self.window_open_list.add_user_password,
+                "add_user_password", "add user password", "add user password",
+                &mut self.string_values.error_message,
+                &mut self.string_values.change_user_password_site_name,
+                &mut self.string_values.change_user_password_user_identifier,
+                &mut self.string_values.change_user_password_password,
+                &mut self.data_base, &self.wrapped_user_key
+            ),
+            data_base: (data_base: &mut DB), wrapped_user_key: (wrapped_user_key: &WrappedUserKey),
+            (&mut String, "site_name", site_name, SiteName::new, site_name, site_name, (password)),
+            (&mut String, "user_identifier", user_identifier, UserID::new, user_identifier, user_identifier, (password)),
+            (&mut String, "password", password, UserPW::new, password, password, (password))
+        );
     }
 
     fn change_user_password(&mut self, context: &Context, button: egui::Response) {
-        command_build!(
-            context, button, change_user_pw, self.window_open_list.change_password, "change_user_password", "change user password", "change user password", self.string_values.error_message, &mut self.data_base, &self.wrapped_user_key,
-            (&mut self.string_values.change_user_password_site_name, "site_name", site_name, SiteName, (password)),
-            (&mut self.string_values.change_user_password_user_identifier, "user_identifier", user_identifier, UserID, (password)),
-            (&mut self.string_values.change_user_password_password, "password", password, UserPW, (password))
+        command_build_inner!(
+            change_user_pw, command_build_inner(
+                context, button, &mut self.window_open_list.change_user_password,
+                "change_user_password", "change user password", "change user password",
+                &mut self.string_values.error_message,
+                &mut self.string_values.change_user_password_site_name,
+                &mut self.string_values.change_user_password_user_identifier,
+                &mut self.string_values.change_user_password_password,
+                &mut self.data_base, &self.wrapped_user_key
+            ),
+            data_base: (data_base: &mut DB), wrapped_user_key: (wrapped_user_key: &WrappedUserKey),
+            (&mut String, "site_name", site_name, SiteName::new, site_name, &site_name, (password)),
+            (&mut String, "user_identifier", user_identifier, UserID::new, user_identifier, &user_identifier, (password)),
+            (&mut String, "password", password, UserPW::new, password, password, (password))
         );
     }
 
     fn remove_user_password(&mut self, context: &Context, button: egui::Response) {
-        command_build!(
-            context, button, remove_user_pw, self.window_open_list.change_password, "change_user_password", "change user password", "change user password", self.string_values.error_message, &mut self.data_base,,
-            (&mut self.string_values.add_password_site_name, "site_name", site_name, SiteName,),
-            (&mut self.string_values.add_password_user_identifier, "user_identifier", user_identifier, UserID,),
-        );
+        /*command_build!(
+            context, button, remove_user_pw, self.window_open_list.change_user_password, "change_user_password", "change user password", "change user password", self.string_values.error_message, &mut self.data_base,,
+            (&mut self.string_values.remove_user_password_site_name, "site_name", site_name, SiteName::new,),
+            (&mut self.string_values.remove_user_password_user_identifier, "user_identifier", user_identifier, UserID::new,),
+        );*/
     }
 
 
 
     fn get_user_password(&mut self, context: &Context, button: egui::Response) {
-
+        /*command_build!(
+            context, button, get_password, self.window_open_list.get_user_password, "get_user_password", "get user password", "get user password", self.string_values.error_message, &mut self.data_base, &self.wrapped_user_key,
+            (&mut self.string_values.get_user_password_site_name, "site_name", site_name, SiteName::new, ),
+            (&mut self.string_values.get_user_password_user_identifier, "user_identifier", user_identifier, UserID::new, ),
+        );*/
     }
 
     fn change_master_password(&mut self, context: &Context, button: egui::Response) {
-        if button.clicked() {
-            self.window_open_list.change_master_password = true;
-        }
+        /*command_build!(
+            context, button, change_master_pw, self.window_open_list.change_master_password, "change_master_password", "change master password", "change master password", self.string_values.error_message, &mut self.data_base, &mut self.wrapped_user_key,
+            (&mut self.string_values.change_master_password_password, "password", password, master_pw_validation, (password)),
+        );*/
+    }
+
+    fn save_db(&mut self, context: &Context, button: egui::Response) {
+        /*command_build_inner!(
+            save_db,
+            command_build_inner())*/
     }
 
     /*
@@ -347,6 +425,8 @@ impl Default for GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if !self.window_open_list.root {
+            let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.take().unwrap());
+            save_db(self.data_base_header.unwrap(), encrypted_data_base).unwrap();
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
 
@@ -366,6 +446,7 @@ impl eframe::App for GraphicalUserInterface {
         if !self.login {
             match load_db() {
                 Ok((user_warn, data_base_header, encrypted_data_base)) => {
+                    self.data_base_header = Some(data_base_header);
                     if let Some(user_warn) = user_warn {
                         ctx.show_viewport_immediate(
                             egui::ViewportId::from_hash_of("user_warn"),
@@ -382,10 +463,10 @@ impl eframe::App for GraphicalUserInterface {
                     }
                     match encrypted_data_base {
                         Some(encrypted_data_base) => {
-                            self.graphical_user_interface_first_login(ctx, &encrypted_data_base, data_base_header);
+                            self.graphical_user_interface_not_first_login(ctx, &encrypted_data_base);
                         }
                         None => {
-                            self.graphical_user_interface_not_first_login(ctx, data_base_header);
+                            self.graphical_user_interface_first_login(ctx, &mut self.data_base_header.unwrap());
                         }
                     }
                 },
@@ -465,3 +546,5 @@ fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>, try_count: NonZeroU
 
     unreachable!()
 }
+
+
