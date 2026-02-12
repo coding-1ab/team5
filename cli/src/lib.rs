@@ -198,8 +198,10 @@ pub fn cli_app() -> () {
                         };
 
                         let mut ctx = Clipboard::new().unwrap();
-                        ctx.set_text(pw.as_str()).unwrap();
+                        let mut pw_s = pw.as_str().to_owned();
+                        ctx.set_text(&pw_s).unwrap();
                         pw.zeroize();
+                        pw_s.zeroize();
                     }
                     UserRequest::PrefixSearch { site } => {
                         // prefix_range(&db, site)
