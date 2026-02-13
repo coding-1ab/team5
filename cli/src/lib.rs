@@ -1,3 +1,4 @@
+use std::string::String;
 use std::cell::RefCell;
 use std::io;
 use std::io::{stdin, Read, Write};
@@ -140,8 +141,11 @@ pub fn cli_app() -> () {
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        let mut input = Zeroizing::new(String::new());
+        if let Err(e) = io::stdin().read_line(&mut input) {
+            println!("Error reading input: {}", e);
+            continue;
+        }
         let words = input.split_whitespace();
         let args = std::iter::once(">").chain(words);
         match UserRequest::try_parse_from(args) {
