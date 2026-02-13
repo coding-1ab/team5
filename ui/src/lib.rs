@@ -1,4 +1,5 @@
 // todo
+
 // 사이트 이름 + 계정 정보 주면 저장
 // 사이트 이름 주면 계정 정보 불러오기
 
@@ -9,7 +10,6 @@ use engine::data_base::DB;
 
 #[cfg(feature = "gui")]
 pub mod graphical_user_interface;
-mod macros;
 
 struct CharacterUserInterface {
     db: DB

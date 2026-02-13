@@ -8,6 +8,7 @@ engine = { path = "../engine" }
 eframe = { version = "0.33.3" }
 zeroize = { workspace = true }
 single-instance = {workspace = true}
+anyhow = "1.0.101"
 
 [features]
 gui = []
