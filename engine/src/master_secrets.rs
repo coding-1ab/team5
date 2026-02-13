@@ -23,6 +23,7 @@ use zeroize::__internal::AssertZeroize;
 use crate::data_base::{change_user_pw, get_password, DB};
 
 use std::fmt::{Display, Formatter};
+use std::error::Error as StdError;
 use std::str::FromStr;
 use crate::data_base::{UserPW, UserPWError};
 
@@ -52,6 +53,7 @@ pub fn master_pw_validation(mut raw_pw: &String) -> Result<(), MasterPWError> {
 
     Ok( () )
 }
+
 impl Display for MasterPWError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -74,6 +76,7 @@ impl Display for MasterPWError {
     }
 }
 
+impl StdError for MasterPWError {}
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct PubKey(Box<[u8; 65]>);

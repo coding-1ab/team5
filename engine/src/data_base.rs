@@ -267,6 +267,8 @@ impl Display for DBIOError {
     }
 }
 
+impl Error for DBIOError {}
+
 // Key zeroize 불가
 // pub fn zeroize_db(db: &mut DB) {
 //     for (_site, users) in db.iter_mut() {
