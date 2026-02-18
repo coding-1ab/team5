@@ -52,7 +52,6 @@ impl<D: Fallible + ?Sized> DeserializeWith<Archived<Vec<u8>>, SecretBox<[u8]>, D
     }
 }
 
-
 #[derive(Archive, Deserialize, Serialize)]
 pub struct EncryptedUserPW (
     #[rkyv(with = SecretBoxRef)]
