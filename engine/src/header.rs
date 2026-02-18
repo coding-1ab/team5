@@ -2,7 +2,6 @@ use crate::file_io::FileIOError;
 use bytemuck::{Pod, Zeroable};
 
 const SALT_LEN: usize = 32;
-const NONCE_LEN: usize = 12;
 const MAGIC_LEN: usize = 28;
 const VERSION_DIGITS: usize = 4;
 
@@ -10,7 +9,6 @@ const VERSION_DIGITS: usize = 4;
 type Magic = [u8; MAGIC_LEN];
 type Version = [u8; VERSION_DIGITS];
 pub type Salt = [u8; SALT_LEN];
-type Nonce = [u8; NONCE_LEN];
 pub type CiphTxtChecksum = [u8; 64];
 pub type CipherTextLen = usize;
 
