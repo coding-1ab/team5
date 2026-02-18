@@ -1,6 +1,5 @@
-use crate::user_secrets::{EncryptedUserPW, WrappedUserKey, decrypt_user_pw, encryt_user_pw};
+use crate::user_secrets::{EncryptedUserPW, WrappedUserKey, decrypt_user_pw, encrypt_user_pw};
 use std::collections::{BTreeMap, HashMap};
-use std::ops::{Bound, RangeFrom};
 use rkyv::{Archive, Deserialize, Serialize};
 use std::error::Error;
 use std::str::FromStr;
@@ -269,20 +268,10 @@ impl Display for DBIOError {
 
 impl Error for DBIOError {}
 
-// Key zeroize 불가
-// pub fn zeroize_db(db: &mut DB) {
-//     for (_site, users) in db.iter_mut() {
-//         for (_id, pw) in users.iter_mut() {
-//             pw.zeroize();
-//         }
-//         users.clear();
-//     }
-//     db.clear();
-// }
 
 pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
-                   -> Result<(), DBIOError> { //todo 중복 처리
-    let encrypted_pw = encryt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
+                   -> Result<(), DBIOError> {
+    let encrypted_pw = encrypt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
 
     let users = db.entry(site_name)
         .or_insert_with(HashMap::new);
@@ -297,11 +286,10 @@ pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: U
 
 pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
                       -> Result<(), DBIOError> {
-    let encrypted_pw = encryt_user_pw(site_name, user_id, new_pw, wrapped_key)?;
     let users = db.get_mut(site_name).ok_or(DBIOError::SiteNotFound)?;
     let password = users.get_mut(user_id).ok_or(DBIOError::UserNotFound)?;
     password.zeroize();
-    *password = encrypted_pw;
+    *password = encrypt_user_pw(site_name, user_id, new_pw, wrapped_key)?;;
     Ok(())
 }
 
@@ -319,8 +307,8 @@ pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Re
     Ok(())
 }
 
-pub fn get_password(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey)
-    -> Result<UserPW, DBIOError> {
+pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey)
+                   -> Result<UserPW, DBIOError> {
     let users = db.get(site_name).ok_or(DBIOError::SiteNotFound)?;
 
     let encrypted_pw = users.get(user_id).ok_or(DBIOError::UserNotFound)?;
@@ -341,7 +329,6 @@ pub fn prefix_range<'a>(db: &'a DB, prefix: &str, )
     db.range(lower..upper)
 }
 
-
 pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) {
     let range =  prefix_range(db, &*input_site);
     for (site, credentials) in range {
@@ -350,32 +337,9 @@ pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) 
             println!(
                 "  user_id: {:?}\n  password: {:?}\n",
                 &cred.0,
-                get_password(db, &site, &cred.0, &wrapped_key).ok()
+                get_user_pw(db, &site, &cred.0, &wrapped_key).ok()
             );
         }
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use std::collections::HashMap;
-//     use crate::data_base::{prefix_range, SiteName, DB};
-//
-//     #[test]
-//     fn test_range() {
-//         let mut db = DB::new();
-//         db.insert(SiteName::new("naver.com").unwrap(), HashMap::new());
-//         db.insert(SiteName::new("daum.net").unwrap(), HashMap::new());
-//         db.insert(SiteName::new("google.com").unwrap(), HashMap::new());
-//         db.insert(SiteName::new("youtube.com").unwrap(), HashMap::new());
-//
-//         let mut detected = vec![];
-//
-//         prefix_range(&db, "g".to_string()).for_each(|(name, _)| {
-//             detected.push(name.clone());
-//         });
-//
-//         assert_eq!(detected.len(), 1);
-//         assert_eq!(detected.drain(..).next().unwrap(), SiteName::new("google.com").unwrap());
-//     }
-// }

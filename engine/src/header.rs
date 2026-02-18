@@ -3,21 +3,21 @@ use bytemuck::{Pod, Zeroable};
 
 const SALT_LEN: usize = 32;
 const NONCE_LEN: usize = 12;
-const MAGIC_LEN: usize = 8;
+const MAGIC_LEN: usize = 28;
 const VERSION_DIGITS: usize = 4;
 
 
-pub type Magic = [u8; MAGIC_LEN];
-pub type Version = [u8; VERSION_DIGITS];
+type Magic = [u8; MAGIC_LEN];
+type Version = [u8; VERSION_DIGITS];
 pub type Salt = [u8; SALT_LEN];
-pub type Nonce = [u8; NONCE_LEN];
-pub type CiphTxtChecksum = [u8; 32];
+type Nonce = [u8; NONCE_LEN];
+pub type CiphTxtChecksum = [u8; 64];
 pub type CipherTextLen = usize;
 
-/// Program_internal maginc literal
-pub const DB_MAGIC: Magic = *b"TeamFive";
+/// Program internal magic literal
+const DB_MAGIC: Magic = *b"[ DB file of team5 project ]";
 /// Program-internal DB format version
-pub const DB_VERSION: Version = [0,1,0,0];
+const DB_VERSION: Version = [0,1,0,0];
 
 pub type EncryptedDB = Vec<u8>;
 
@@ -26,8 +26,7 @@ pub type EncryptedDB = Vec<u8>;
 pub struct DBHeader {
     pub(crate) magic: Magic,
     pub(crate) version: Version,
-    pub db_salt: Salt, // argon2 salt
-    // pub(crate) user_nonce: Nonce,
+    pub master_pw_salt: Salt,
     pub(crate) ciphertext_checksum: CiphTxtChecksum,
     pub(crate) ciphertext_len: CipherTextLen,
 }
@@ -62,9 +61,8 @@ impl DBHeader {
         Self {
             magic: DB_MAGIC,
             version: DB_VERSION,
-            db_salt: Salt::default(), // argon2 slat
-            // user_nonce: Nonce::default(),
-            ciphertext_checksum: Default::default(),
+            master_pw_salt: Salt::default(),
+            ciphertext_checksum: [0u8; _],
             ciphertext_len: 0,
         }
     }

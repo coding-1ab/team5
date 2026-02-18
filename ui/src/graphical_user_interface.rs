@@ -17,7 +17,7 @@ use engine::{
     data_base::prefix_range,
     file_io::load_db,
     header::DBHeader,
-    data_base::{add_user_pw, change_user_pw, get_password, remove_user_pw, SiteName, UserID, UserPW, DB},
+    data_base::{add_user_pw, change_user_pw, get_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
     master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB},
     user_secrets::WrappedUserKey
 };
@@ -375,7 +375,7 @@ impl GraphicalUserInterface {
                             self.string_values.error_message = "invalid password".to_string();
                             return;
                         }
-                        let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password.take(), &self.data_base_header.unwrap().db_salt) {
+                        let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password.take(), &self.data_base_header.unwrap().master_pw_salt) {
                             Ok(value) => {
                                 self.string_values.password.zeroize();
                                 self.string_values.recheck_password.zeroize();
@@ -432,7 +432,7 @@ impl GraphicalUserInterface {
                             let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.string_values.password.take());
                             self.string_values.password.zeroize();
                             self.string_values.recheck_password.zeroize();
-                            data_base_header.db_salt = data_base_header_salt;
+                            data_base_header.master_pw_salt = data_base_header_salt;
                             self.data_base_header = Some(*data_base_header);
                             save_db(*data_base_header, encrypt_db(&DB::default(), &public_key));
                             self.public_key = Some(public_key);
@@ -509,7 +509,7 @@ impl GraphicalUserInterface {
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
-                let password = get_password(data_base.unwrap(), &site_name, &user_identifier, wrapped_user_key.unwrap())?;
+                let password = get_user_pw(data_base.unwrap(), &site_name, &user_identifier, wrapped_user_key.unwrap())?;
                 Ok(password)
             })
             .on_success(|password| {
@@ -529,7 +529,7 @@ impl GraphicalUserInterface {
                 }
                 let (public_key, salt) = change_master_pw(data_base.unwrap(), inputs[0].value.take(), wrapped_user_key_mut.unwrap())?;
                 self.public_key = Some(public_key);
-                self.data_base_header.unwrap().db_salt = salt;
+                self.data_base_header.unwrap().master_pw_salt = salt;
                 Ok(())
             })
             .on_success(|_| {}).error_message(&mut self.string_values.error_message)

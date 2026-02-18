@@ -4,17 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rkyv = { version = "0.8"}
+rkyv = { version = "0.8" }
 fs2 = "*"
 bytemuck = "*"
-aes-gcm = { version = "*", features = ["zeroize"] }
-argon2 = "*"
+aes-gcm = {version = "*", features = ["zeroize"]}
+argon2 = { version = "*", features = ["zeroize"] }
 rand = "0.8"
+sha2 = "*"
+sha3 = "*"
 sysinfo = "0.30"
 ecies = "*"
-sha2 = "0.10"
 zeroize = { workspace = true }
 clap = { version = "*", features = ["derive"] }
 psl = "*"
 
-url = { path = "./libs/url-2.5.8" }
+#sha3 = { path = "libs/sha3-0.10.8-fork" }
+url = { path = "libs/url-2.5.8-fork" }

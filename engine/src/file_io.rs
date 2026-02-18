@@ -1,10 +1,10 @@
 use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
 use fs2::FileExt;
-use sha2::{Digest, Sha256};
 use std::fs::{self, remove_file, rename, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};
+use sha2::{Digest, Sha512};
 
 const DB_FILE: &str = "db.bin";
 const DB_BAK_FILE: &str = "db.bin.bak";
@@ -120,7 +120,7 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
             }
             Err(err) => return Err(err)
         };
-        let hash = Sha256::digest(ciphertext.as_slice());
+        let hash = Sha512::digest(ciphertext.as_slice());
         if header.ciphertext_checksum.as_slice() != hash.as_slice() {
             continue;
         }
@@ -164,7 +164,7 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
         return Err(FileIOError::LockUnavailable);
     };
 
-    header.ciphertext_checksum = Sha256::digest(&ciphertext).into();
+    header.ciphertext_checksum = Sha512::digest(&ciphertext).into();
     header.ciphertext_len = ciphertext.len();
 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);

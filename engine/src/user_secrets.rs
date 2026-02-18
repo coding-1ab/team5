@@ -1,23 +1,21 @@
-use std::ops::Deref;
+use sha3::{Digest};
+use std::cell::RefCell;
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::master_secrets::{__manual_zeroize};
 use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
+use aes_gcm::{ Aes256Gcm, Key, KeyInit};
 use argon2::{Argon2, ParamsBuilder, Params};
-use sha2::digest::generic_array::{arr, GenericArray};
-use sha2::{Digest, Sha256};
 use std::process;
-use std::sync::OnceLock;
-use aes_gcm::aes::Aes256;
+use rand::prelude::*;
 use sysinfo::{Pid, System};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rkyv::{Archive, Deserialize, Serialize};
+use std::pin::Pin;
+use sha3::digest::generic_array::GenericArray;
+use sha3::digest::Update;
+use sha3::Sha3_256;
 
-
-/// 명시적 zeroize로 변경하기
-/// 종료전 유효성 검사
-pub const MAX_USER_PW_LEN: usize = 32;
 #[derive(Zeroize, ZeroizeOnDrop)]
 #[derive(Archive, Deserialize, Serialize)]
 pub struct EncryptedUserPW (Vec<u8>);
@@ -28,26 +26,52 @@ impl EncryptedUserPW {
 }
 impl From<Vec<u8>> for EncryptedUserPW {
     fn from(v: Vec<u8>) -> EncryptedUserPW {
-        EncryptedUserPW(v)
+        EncryptedUserPW (v)
     }
 }
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct UserPWNonce (Box<[u8; 12]>);
-
 impl UserPWNonce {
-    pub(crate) fn as_mut_bytes(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice()
-    }
-}
-
-impl UserPWNonce {
-    pub fn default() -> UserPWNonce {
-        UserPWNonce(Box::from([0u8; 12]))
-    }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0.as_slice()
     }
+    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
 }
+impl Default for UserPWNonce {
+    fn default() -> UserPWNonce {
+        UserPWNonce(Box::from([0u8; 12]))
+    }
+}
+#[derive(Zeroize, ZeroizeOnDrop)]
+struct UserKeyNonce (Box<[u8; 12]>);
+impl UserKeyNonce {
+    pub fn new() -> Self {
+        let mut boxed = Box::new([0u8; 12]);
+        OsRng.fill_bytes(boxed.as_mut_slice());
+        UserKeyNonce(boxed)
+    }
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+    // pub fn as_mut_bytes(&mut self) -> &mut [u8] {
+    //     self.0.as_mut_slice()
+    // }
+}
+impl Default for UserKeyNonce {
+    fn default() -> Self {
+        UserKeyNonce(Box::from([0u8; 12]))
+    }
+}
+// impl AsRef<aes_gcm::Nonce<U12>> for UserKeyNonce {
+//     fn as_ref(&self) -> &aes_gcm::Nonce<U12> {
+//         let array_ref: &[u8; 12] = self.0.as_ref();
+//         unsafe {
+//             &*(array_ref as *const [u8; 12] as *const aes_gcm::Nonce<U12>)
+//         }
+//     }
+// }
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct UserKeyWrapper (Box<[u8; 32]>);
 impl UserKeyWrapper {
@@ -60,7 +84,7 @@ impl UserKeyWrapper {
 }
 impl Default for UserKeyWrapper {
     fn default() -> UserKeyWrapper {
-        UserKeyWrapper (Box::new([0; 32]))
+        UserKeyWrapper (Box::new([0u8; _]))
     }
 }
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -99,12 +123,12 @@ impl From<[u8; 32]> for UserKey {
 }
 impl Default for UserKey {
     fn default() -> Self {
-        UserKey (Box::new([0; 32]))
+        UserKey (Box::from([0u8; 32]))
     }
 }
-pub fn get_system_identity() -> UserKeyWrapper {
-    let mut hasher = Sha256::new();
-
+pub fn get_user_key_wrapper() -> UserKeyWrapper {
+    let mut hasher = Sha3_256::new();
+    Update::update(&mut hasher, &[248, 106, 27, 141, 130, 70, 18, 189, 65, 15, 132, 220, 144, 144, 143, 196, 57, 128, 134, 145, 197, 235, 192, 209, 150, 152, 201, 113, 12, 189, 100, 93, 92, 69, 244, 146, 157, 57, 131, 56, 143, 160, 17, 233, 114, 23, 32, 13, 68, 9, 116, 95, 26, 104, 73, 81, 7, 7, 103, 206, 63, 251, 161, 223, 226, 125, 184, 225, 6, 164, 65, 13]);
     let mut sys = System::new();
     sys.refresh_all();
 
@@ -116,85 +140,76 @@ pub fn get_system_identity() -> UserKeyWrapper {
         .unwrap_or(0);
     let mut combined_pids = (pid_u32 as u64) << 32 | (ppid as u64);
     manual_zeroize!(pid_u32, s_pid, ppid);
-    hasher.update(&combined_pids.to_le_bytes());
+    Update::update(&mut hasher, &combined_pids.to_le_bytes());
 
     let mut start_time = sys.process(s_pid)
         .map(|p| p.start_time())
         .unwrap_or(combined_pids);
     combined_pids.zeroize();
-    hasher.update(&start_time.to_le_bytes());
+    Update::update(&mut hasher, &start_time.to_le_bytes());
     start_time.zeroize();
 
     let mut host_name = System::host_name().unwrap_or_else(|| "/\'&%unknown".into());
-    hasher.update(&host_name);
+    Update::update(&mut hasher, host_name.as_bytes());
     host_name.zeroize();
     let mut kernel_version = System::kernel_version().unwrap_or_else(|| "?\"$unknown".into());
-    hasher.update(&kernel_version);
+    Update::update(&mut hasher, kernel_version.as_bytes());
     kernel_version.zeroize();
 
     let mut total_memory = sys.total_memory();
     let mut total_processors = sys.physical_core_count().unwrap_or(4);
-    let mut combined_c = total_memory as usize + total_processors;
-    manual_zeroize!(total_memory, total_processors);
-    hasher.update(combined_c.to_le_bytes());
-    combined_c.zeroize();
+    let mut combined_hw = total_memory as usize + total_processors;
+    total_memory.zeroize(); total_processors.zeroize();
+    Update::update(&mut hasher, &combined_hw.to_le_bytes());
+    combined_hw.zeroize();
 
     let mut result = UserKeyWrapper::default();
     hasher.finalize_into_reset(GenericArray::from_mut_slice(result.as_mut_bytes()));
     result
 }
 fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
-    let mut hasher1 = Sha256::new();
-    hasher1.update(format!("`*!^{}{}",id.as_str(), site.as_str()).as_bytes());
-    let mut hasher2 = hasher1.clone();
-    let mut salt= [0u8; 32];
-    hasher1.finalize_into_reset(GenericArray::from_mut_slice(salt.as_mut_slice()));
-    hasher2.update(format!("{}\\@#{}", id.as_str(), site.as_str()).as_bytes());
-    let mut source = [0u8; 32];
-    hasher2.finalize_into_reset(GenericArray::from_mut_slice(source.as_mut_slice()));
+    let mut processed_id = id.as_str().to_owned().into_bytes();
+    let halo = [203u8, 118, 6, 1, 225, 226, 197, 127, 221, 214, 24, 5, 239, 38, 75, 82, 65, 111, 91, 110, 158, 25, 48, 178, 116, 137, 136, 49, 57, 192, 56, 52];
+
+    for (t, s) in processed_id.iter_mut().zip(site.as_str().as_bytes().iter()) {
+        *t ^= *s;
+    }
+
     let mut params = Params::new(
-        16384, // 64MB 지정 (KB 단위)
-        6,      // 반복 횟수
-        3,     // 병렬 처리 수준
-        Some(12),     // 출력 길이
+        64*1024, // 메모리 요구량 (KB 단위)
+        1,        // 반복 횟수
+        1,       // 병렬 처리 수준
+        Some(12),       // 출력 길이
     ).unwrap();
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
         argon2::Version::V0x13,
         params
     );
+
     let mut nonce = UserPWNonce::default();
-    argon2.hash_password_into(&source, &salt, nonce.as_mut_bytes())
+    argon2.hash_password_into(&processed_id, &halo, nonce.as_mut_bytes())
         .unwrap();
-    manual_zeroize!(source, salt);
+    processed_id.zeroize();
+
     nonce
 }
-// fn is_valid_nonce(nonce: &Nonce<Aes256Gcm>) -> bool {
-//     let first_byte = nonce[0];
-//     let is_printable_ascii = first_byte >= 0x20 && first_byte <= 0x7E;
-//     let is_safe_control = first_byte == 0x09;
-//     is_printable_ascii || is_safe_control
-// }
-// fn gen_valid_nonce() -> Nonce<Aes256Gcm> {
-//     let mut candidate;
-//     loop {
-//         candidate = Aes256Gcm::generate_nonce(&mut OsRng);
-//         if is_valid_nonce(&candidate) {
-//             return candidate;
-//         }
-//     }
-// }
-static USER_KEY_NONCE: OnceLock<Nonce<Aes256Gcm>> = OnceLock::new();
+
+
+thread_local! {
+    static USER_KEY_NONCE: RefCell<UserKeyNonce> = RefCell::new(UserKeyNonce::default());
+}
+
 pub fn wrap_user_key(mut user_key: UserKey)
                      -> Result<WrappedUserKey, DBIOError> {
-    let mut wrapper = get_system_identity();
-    let nonce = USER_KEY_NONCE
-        .get_or_init(|| Aes256Gcm::generate_nonce(OsRng));
+    let mut wrapper = get_user_key_wrapper();
+    USER_KEY_NONCE.with_borrow_mut(|v| *v = UserKeyNonce::new());
+    let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes())
         .map_err(|_| DBIOError::InvalidSession)?;
     let ciphertext =
         cipher
-            .encrypt(nonce, user_key.as_bytes())
+            .encrypt(&nonce, user_key.as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
     wrapper.zeroize();
     user_key.zeroize();
@@ -204,14 +219,13 @@ pub fn wrap_user_key(mut user_key: UserKey)
 
 pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
                           -> Result<UserKey, DBIOError> {
-    let mut wrapper = get_system_identity();
+    let mut wrapper = get_user_key_wrapper();
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes())
         .map_err(|_| DBIOError::InvalidSession)?;
-    let nonce = USER_KEY_NONCE
-        .get_or_init(|| Aes256Gcm::generate_nonce(OsRng));
+    let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
     let plaintext =
         cipher
-        .decrypt(nonce, wrapped_key.as_bytes())
+        .decrypt(&nonce, wrapped_key.as_bytes())
         .map_err(|_| DBIOError::InvalidSession)?;
     let user_key: [u8;32] = plaintext.try_into()
             .map_err(|_| DBIOError::InvalidSession)?;
@@ -219,21 +233,12 @@ pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
     Ok( user_key.into() )
 }
 
-// fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserKey {
-//     let mut hasher = Sha256::new();
-//     hasher.update(&site);
-//     hasher.update(&id);
-//     hasher.update(site);
-//     hasher.update(id);
-//     let hash = hasher.finalize();
-//     let result = hash.as_slice();
-//     Zeroizing::new(result.as_bytes())
-// }
-
-pub fn encryt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
-                      -> Result<EncryptedUserPW, DBIOError> {
+#[inline(always)]
+pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
+                       -> Result<EncryptedUserPW, DBIOError> {
     let mut nonce = get_user_pw_nonce(site, id);
     let mut user_key = unwrap_user_key(wrapped_key)?;
+    let p_user_key = Pin::new(&mut user_key);
     let cipher = Aes256Gcm::new_from_slice(user_key.as_mut_bytes())
         .map_err(|_| DBIOError::InvalidSession)?;
     let ciphertext =
@@ -245,6 +250,7 @@ pub fn encryt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key
     Ok( ciphertext.into() )
 }
 
+#[inline(always)]
 pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUserPW, wrapped_key: &WrappedUserKey)
                        -> Result<UserPW, DBIOError> {
     let mut nonce = get_user_pw_nonce(site, id);

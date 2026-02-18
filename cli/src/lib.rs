@@ -65,7 +65,7 @@ pub fn cli_app() -> () {
                 continue;
             }
 
-            (pub_key, db_header.db_salt, wrapped_user_key) = first_login(master_pw_confirm);
+            (pub_key, db_header.master_pw_salt, wrapped_user_key) = first_login(master_pw_confirm);
 
             break;
         }
@@ -115,7 +115,7 @@ pub fn cli_app() -> () {
             };
 
             let sec_key;
-            (sec_key, pub_key, wrapped_user_key) = match general_login(&mut master_pw, &db_header.db_salt) {
+            (sec_key, pub_key, wrapped_user_key) = match general_login(&mut master_pw, &db_header.master_pw_salt) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error checking master pw: {}", e);
@@ -139,7 +139,7 @@ pub fn cli_app() -> () {
 
     // let mut previous_save_status = false;
     loop {
-        print!("> ");
+        print!(">> ");
         io::stdout().flush().unwrap();
         let mut input = Zeroizing::new(String::new());
         if let Err(e) = io::stdin().read_line(&mut input) {
@@ -147,7 +147,7 @@ pub fn cli_app() -> () {
             continue;
         }
         let words = input.split_whitespace();
-        let args = std::iter::once(">").chain(words);
+        let args = std::iter::once(">>").chain(words);
         match UserRequest::try_parse_from(args) {
             Ok(request) =>
                 match request {
@@ -182,7 +182,7 @@ pub fn cli_app() -> () {
                         }
                     }
                     UserRequest::GetUserPW { site, id } => {
-                        let pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
+                        let pw = match get_user_pw(&mut db, &site, &id, &wrapped_user_key) {
                             Ok(v) => {v}
                             Err(e) => {
                                 println!("Error getting password: {}", e);
@@ -193,7 +193,7 @@ pub fn cli_app() -> () {
                         println!("{}", pw.as_str());
                     }
                     UserRequest::GetUserPWToClipboard { site, id } => {
-                        let mut pw = match get_password(&mut db, &site, &id, &wrapped_user_key) {
+                        let mut pw = match get_user_pw(&mut db, &site, &id, &wrapped_user_key) {
                             Ok(v) => {v}
                             Err(e) => {
                                 println!("Error getting password: {}", e);
@@ -240,7 +240,7 @@ pub fn cli_app() -> () {
                             continue;
                         }
 
-                        (pub_key, db_header.db_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key) {
+                        (pub_key, db_header.master_pw_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key) {
                             Ok(v) => v,
                             Err(e) => {
                                 println!("Error setting master pw: {}", e);

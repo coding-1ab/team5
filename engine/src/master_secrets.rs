@@ -1,32 +1,18 @@
 use crate::manual_zeroize;
-use crate::header::{EncryptedDB as OtherEncryptedDB, Salt, DB_MAGIC};
-use crate::user_secrets::{decrypt_user_pw, get_system_identity, wrap_user_key, UserKey, WrappedUserKey};
-use aes_gcm::Aes256Gcm;
+use crate::header::{Salt};
+use crate::user_secrets::{wrap_user_key, UserKey, WrappedUserKey};
 use argon2::password_hash::rand_core;
-use argon2::{Argon2, Params, ParamsBuilder};
+use argon2::{Argon2, Params};
 use ecies::PublicKey;
 use ecies::SecretKey;
 use rand_core::OsRng;
-// use rand::RngCore::SeedableRng;
-// use rand::rngs::OsRng;
-// use rand::RngCore;
 use rand_core::RngCore;
-use sha2::digest::generic_array::GenericArray;
-use sha2::Digest;
-use sha2::Sha256;
 use std::ptr;
-use rand::prelude::{IteratorRandom, ThreadRng};
 use rkyv::rancor::Error;
-use sha2::digest::FixedOutputReset;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use zeroize::__internal::AssertZeroize;
-use crate::data_base::{change_user_pw, get_password, DB};
-
+use crate::data_base::{change_user_pw, get_user_pw, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
-use std::str::FromStr;
-use crate::data_base::{UserPW, UserPWError};
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MasterPWError {
     // 생성
@@ -108,17 +94,36 @@ impl SecKey {
 }
 
 #[inline]
+fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
+    let halo = [40u8, 167, 39, 179, 72, 65, 122, 230, 190, 236, 125, 99, 81, 178, 50, 71, 35, 205, 141, 170, 74, 54, 227, 7, 92, 208, 212, 206, 126, 216, 55, 37];
+
+    let params = Params::new(
+        64*1024, // 메모리 요구량 (KB 단위)
+        1,      // 반복 횟수
+        2,     // 병렬 처리 수준
+        Some(32),     // 출력 길이f
+    ).unwrap();
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        params
+    );
+
+    let mut user_key = UserKey::default();
+    argon2
+        .hash_password_into(&sec_key.as_array().as_slice(), &halo, user_key.as_mut_bytes())
+        .unwrap();
+
+    let wrapped_user_key = wrap_user_key(user_key).unwrap();
+    wrapped_user_key
+}
+
 fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
-    let mut salt_cloned = salt.clone();
-    salt_cloned[5]=5; salt_cloned[10]=10; salt_cloned[15]=15; salt_cloned[20]=20; salt_cloned[25]=25; salt_cloned[30]=30;
-    for (t, s) in salt_cloned.iter_mut().zip(master_pw.as_bytes().iter()) {
-        *t ^= *s;
-    }
-    let mut params = Params::new(
-        65536, // 64MB 지정 (KB 단위)
-        8,      // 반복 횟수
-        3,     // 병렬 처리 수준
-        Some(32),     // 출력 길이
+    let params = Params::new(
+        256*1024, // 메모리 요구량 (KB 단위)
+        2,         // 반복 횟수
+        2,        // 병렬 처리 수준
+        Some(32),        // 출력 길이
     ).unwrap();
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
@@ -127,14 +132,13 @@ fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
     );
     let mut kdf_out = [0u8; 32];
     argon2.hash_password_into(
-        master_pw.as_bytes(), salt_cloned.as_slice(),
+        master_pw.as_bytes(), salt,
         kdf_out.as_mut()
     ).unwrap();
     let sec_key = SecKey::from_array(kdf_out);
     kdf_out.zeroize();
     sec_key
 }
-
 
 // secp256k1 곡선의 유효 범위 (N)
 const SECP256K1_ORDER: [u8; 32] = [
@@ -156,15 +160,14 @@ fn is_valid_sec_key(key: &[u8; 32]) -> bool {
 pub fn general_login(master_pw: &mut String, salt: &Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
     let mut sec_key = master_pw_kdf(master_pw, salt);
+    master_pw.zeroize();
     if !is_valid_sec_key(sec_key.as_array()) {
-        master_pw.zeroize();
         sec_key.zeroize();
         return Err(MasterPWError::IncorrectPW);
     }
 
     let pub_key = PubKey::from_sec_key(&sec_key);
-    let wrapped_user_key = get_wrapped_user_key(master_pw, &sec_key);
-    master_pw.zeroize();
+    let wrapped_user_key = get_wrapped_user_key(&sec_key);
     Ok( (sec_key, pub_key, wrapped_user_key) )
 }
 pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
@@ -177,10 +180,12 @@ pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
             break;
         }
     }
-    let pub_key = PubKey::from_sec_key(&sec_key);
-    let wrapped_user_key = get_wrapped_user_key(&master_pw, &sec_key);
     master_pw.zeroize();
+
+    let pub_key = PubKey::from_sec_key(&sec_key);
+    let wrapped_user_key = get_wrapped_user_key(&sec_key);
     sec_key.zeroize();
+
     (pub_key, salt, wrapped_user_key)
 }
 pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: &mut WrappedUserKey)
@@ -194,10 +199,10 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
             break;
         }
     }
+    new_master_pw.zeroize();
 
     let mut pub_key = PubKey::from_sec_key(&sec_key);
-    let mut new_wrapped_user_key = get_wrapped_user_key(&new_master_pw, &sec_key);
-    new_master_pw.zeroize();
+    let mut new_wrapped_user_key = get_wrapped_user_key(&sec_key);
     sec_key.zeroize();
 
     let mut users_archive = vec![];
@@ -210,7 +215,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 
     for user in users_archive.into_iter() {
 
-        let user_pw = get_password(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
+        let user_pw = get_user_pw(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
 
         if let Err(err) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key) {
             pub_key.zeroize();
@@ -218,39 +223,12 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
             return Err(MasterPWError::InvalidSession);
         }
     }
-    wrapped_user_key.zeroize();
 
+    wrapped_user_key.zeroize();
     *wrapped_user_key = new_wrapped_user_key;
     Ok( (pub_key, salt) )
 }
-fn get_wrapped_user_key(master_pw: &String, sec_key: &SecKey) -> WrappedUserKey {
-    let mut hasher1 = Sha256::new();
-    hasher1.update(master_pw.as_bytes());
-    hasher1.update(DB_MAGIC);
-    let mut hasher2 = hasher1.clone();
-    let mut tmp = [0u8;32];
-    FixedOutputReset::finalize_into_reset(&mut hasher1, GenericArray::from_mut_slice(tmp.as_mut_slice()));
-    hasher2.update(sec_key.as_array());
-    hasher2.update(DB_MAGIC);
-    hasher2.update(&tmp);
-    hasher2.update(&tmp);
-    let mut user_key = UserKey::default();
-    FixedOutputReset::finalize_into_reset(&mut hasher2, GenericArray::from_mut_slice(user_key.as_mut_bytes()));
-    tmp.zeroize();
-    let wrapped_user_key = wrap_user_key(user_key).unwrap();
-    wrapped_user_key
-}
 
-// pub fn get_master_pw_hash(master_pw: &String) -> Box<[u8; 32]> {
-//     let mut hasher = Sha256::new();
-//     let mut system_info = get_system_identity();
-//     hasher.update(*system_info);
-//     system_info.zeroize();
-//     hasher.update(master_pw.as_bytes());
-//     let mut hash = Box::new([0u8; 32]);
-//     FixedOutputReset::finalize_into_reset(&mut hasher, GenericArray::from_mut_slice(&mut *hash));
-//     hash
-// }
 
 pub type EncryptedDB = Vec<u8>;
 
