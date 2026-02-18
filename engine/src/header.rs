@@ -15,7 +15,7 @@ pub type CiphTxtChecksum = [u8; 64];
 pub type CipherTextLen = usize;
 
 /// Program internal magic literal
-const DB_MAGIC: Magic = *b"[ DB file of team5 project ]";
+const DB_MAGIC: Magic = *b"<<DB file of team5 project>>";
 /// Program-internal DB format version
 const DB_VERSION: Version = [0,1,0,0];
 

@@ -139,7 +139,7 @@ pub fn cli_app() -> () {
 
     // let mut previous_save_status = false;
     loop {
-        print!(">> ");
+        print!("> ");
         io::stdout().flush().unwrap();
         let mut input = Zeroizing::new(String::new());
         if let Err(e) = io::stdin().read_line(&mut input) {
@@ -147,7 +147,7 @@ pub fn cli_app() -> () {
             continue;
         }
         let words = input.split_whitespace();
-        let args = std::iter::once(">>").chain(words);
+        let args = std::iter::once(">").chain(words);
         match UserRequest::try_parse_from(args) {
             Ok(request) =>
                 match request {

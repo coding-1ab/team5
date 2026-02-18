@@ -1,3 +1,6 @@
+use region::LockGuard;
+use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith, Skip};
+use rkyv::with::Lock;
 use sha3::{Digest};
 use std::cell::RefCell;
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
@@ -10,50 +13,98 @@ use std::process;
 use rand::prelude::*;
 use sysinfo::{Pid, System};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{Archive, Archived, Deserialize, Place, Serialize};
 use std::pin::Pin;
+use region::Region;
+use rkyv::rancor::Fallible;
+use rkyv::vec::{ArchivedVec, VecResolver};
+use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 use sha3::digest::generic_array::GenericArray;
 use sha3::digest::Update;
 use sha3::Sha3_256;
 
-#[derive(Zeroize, ZeroizeOnDrop)]
+
+struct SecretBoxRef;
+
+impl ArchiveWith<SecretBox<[u8]>> for SecretBoxRef {
+    type Archived = Archived<Vec<u8>>;
+    type Resolver = VecResolver;
+
+    fn resolve_with(field: &SecretBox<[u8]>, resolver: Self::Resolver, out: Place<Self::Archived>) {
+        let exposed = field.expose_secret();
+        ArchivedVec::resolve_from_slice(exposed, resolver, out);
+    }
+}
+
+impl<S: Fallible + ?Sized> SerializeWith<SecretBox<[u8]>, S> for SecretBoxRef
+where
+    S: rkyv::ser::Writer + rkyv::ser::Allocator,
+{
+    fn serialize_with(field: &SecretBox<[u8]>, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        let exposed = field.expose_secret();
+        ArchivedVec::serialize_from_slice(exposed, serializer)
+    }
+}
+
+impl<D: Fallible + ?Sized> DeserializeWith<Archived<Vec<u8>>, SecretBox<[u8]>, D> for SecretBoxRef {
+    fn deserialize_with(field: &Archived<Vec<u8>>, _deserializer: &mut D) -> Result<SecretBox<[u8]>, D::Error> {
+        Ok(SecretBox::new(field.as_slice().into()))
+    }
+}
+
+
 #[derive(Archive, Deserialize, Serialize)]
-pub struct EncryptedUserPW (Vec<u8>);
+pub struct EncryptedUserPW (
+    #[rkyv(with = SecretBoxRef)]
+    SecretBox<[u8]>
+);
 impl EncryptedUserPW {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0.as_slice()
+        self.0.expose_secret()
     }
 }
 impl From<Vec<u8>> for EncryptedUserPW {
     fn from(v: Vec<u8>) -> EncryptedUserPW {
-        EncryptedUserPW (v)
+        EncryptedUserPW (SecretBox::from(v.into_boxed_slice()))
     }
 }
+impl Zeroize for EncryptedUserPW {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
+    }
+}
+impl Drop for EncryptedUserPW {
+    fn drop(&mut self) {
+        self.zeroize()
+    }
+}
+
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub struct UserPWNonce (Box<[u8; 12]>);
+pub struct UserPWNonce (SecretBox<[u8; 12]>);
 impl UserPWNonce {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0.as_slice()
+        self.0.expose_secret().as_slice()
     }
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice()
+        self.0.expose_secret_mut().as_mut_slice()
     }
 }
 impl Default for UserPWNonce {
     fn default() -> UserPWNonce {
-        UserPWNonce(Box::from([0u8; 12]))
+        UserPWNonce (SecretBox::new(Box::from([0u8; _])))
     }
 }
+
 #[derive(Zeroize, ZeroizeOnDrop)]
-struct UserKeyNonce (Box<[u8; 12]>);
+struct UserKeyNonce (SecretBox<[u8; 12]>);
 impl UserKeyNonce {
     pub fn new() -> Self {
-        let mut boxed = Box::new([0u8; 12]);
-        OsRng.fill_bytes(boxed.as_mut_slice());
+        let mut boxed = SecretBox::new(Box::new([0u8; 12]));
+        OsRng.fill_bytes(boxed.expose_secret_mut().as_mut_slice());
         UserKeyNonce(boxed)
     }
     pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_slice()
+        self.0.expose_secret().as_slice()
     }
     // pub fn as_mut_bytes(&mut self) -> &mut [u8] {
     //     self.0.as_mut_slice()
@@ -61,7 +112,7 @@ impl UserKeyNonce {
 }
 impl Default for UserKeyNonce {
     fn default() -> Self {
-        UserKeyNonce(Box::from([0u8; 12]))
+        UserKeyNonce (SecretBox::new(Box::from([0u8; _])))
     }
 }
 // impl AsRef<aes_gcm::Nonce<U12>> for UserKeyNonce {
@@ -72,58 +123,70 @@ impl Default for UserKeyNonce {
 //         }
 //     }
 // }
+
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub struct UserKeyWrapper (Box<[u8; 32]>);
+pub struct UserKeyWrapper (SecretBox<[u8; 32]>);
 impl UserKeyWrapper {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0.as_slice()
+        self.0.expose_secret().as_slice()
     }
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice()
+        self.0.expose_secret_mut().as_mut_slice()
     }
 }
 impl Default for UserKeyWrapper {
     fn default() -> UserKeyWrapper {
-        UserKeyWrapper (Box::new([0u8; _]))
+        UserKeyWrapper (SecretBox::new(Box::new([0u8; _])))
     }
 }
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct WrappedUserKey (Vec<u8>);
+
+pub struct WrappedUserKey (SecretBox<[u8]>);
 impl WrappedUserKey {
     pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_slice()
+        self.0.expose_secret()
     }
 }
 impl From<Vec<u8>> for WrappedUserKey {
     fn from(v: Vec<u8>) -> WrappedUserKey {
-        WrappedUserKey(v)
+        WrappedUserKey (SecretBox::new(v.into_boxed_slice()))
     }
 }
 impl Default for WrappedUserKey {
     fn default() -> WrappedUserKey {
-        WrappedUserKey(Vec::with_capacity(64))
+        WrappedUserKey (SecretBox::new(Box::new([0; 0])))
     }
 }
+impl Zeroize for WrappedUserKey {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
+    }
+}
+impl Drop for WrappedUserKey {
+    fn drop(&mut self) {
+        self.zeroize()
+    }
+}
+
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub struct UserKey (Box<[u8; 32]>);
+pub struct UserKey (SecretBox<[u8; 32]>);
 impl UserKey {
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0.as_slice()
+        self.0.expose_secret().as_slice()
     }
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice()
+        self.0.expose_secret_mut().as_mut_slice()
     }
 }
 impl From<[u8; 32]> for UserKey {
     fn from(mut arr: [u8; 32]) -> UserKey {
-        let key = UserKey ( Box::new(arr) );
+        let key = UserKey (SecretBox::new(Box::new(arr)));
         arr.zeroize();
         key
     }
 }
 impl Default for UserKey {
     fn default() -> Self {
-        UserKey (Box::from([0u8; 32]))
+        UserKey (SecretBox::new(Box::from([0u8; 32])))
     }
 }
 pub fn get_user_key_wrapper() -> UserKeyWrapper {

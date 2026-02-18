@@ -16,13 +16,13 @@ codegen-units = 1
 members = ["engine", "cli", "ui"]
 
 [dependencies]
-memlock = "*"
 
 cli = {path = "./cli"}
 single-instance = "*"
 
 
 [workspace.dependencies]
+region = "*"
 zeroize = { version = "*", features = ["derive"] }
 arboard = "*"
 single-instance = "*"

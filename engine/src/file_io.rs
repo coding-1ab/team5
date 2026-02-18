@@ -30,8 +30,8 @@ impl Display for FileIOWarn {
 #[derive(Debug)]
 pub enum FileIOError {
     // Lock 관련
-    LockUnavailable,
-    LockWouldBlock,  // 다른 프로세스가 락 보유
+    LockUnavailable(io::Error),
+    LockWouldBlock(io::Error),  // 다른 프로세스가 락 보유
 
     // 파일 열기/읽기/쓰기/동기화
     FileOpenFailed(io::Error),
@@ -52,8 +52,8 @@ impl Display for FileIOError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use FileIOError::*;
         match self {
-            LockWouldBlock => write!(f, "File is locked by another process"),
-            LockUnavailable => write!(f, "Failed to getting file lock."),
+            LockWouldBlock(e) => write!(f, "File is locked by another process: {}", e),
+            LockUnavailable(e) => write!(f, "Failed to getting file lock: {}", e),
             FileOpenFailed(e) => write!(f, "Failed to open file: {}", e),
             FileReadFailed(e) => write!(f, "Failed to read file: {}", e),
             FileWriteFailed(e) => write!(f, "Failed to write file: {}", e),
@@ -102,8 +102,8 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
     match db_file.try_lock_exclusive() {
         Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { return Err(FileIOError::LockWouldBlock) },
-        Err(err) => { return Err(FileIOError::LockUnavailable) }
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { return Err(FileIOError::LockWouldBlock(err)) },
+        Err(err) => { return Err(FileIOError::LockUnavailable(err)) }
     }
 
     let read_trials = 3;
@@ -160,8 +160,8 @@ pub fn save_db(mut header: DBHeader, mut ciphertext: EncryptedDB) -> Result<(), 
     // if db_file.set_len(db_file.metadata().map_err(|err| FileIOError::FileReadFailed(err))?
     //         .len()).map_err(|err| FileIOError::FileWriteFailed(err)).is_err() {
     let _ = db_file.unlock().ok();
-    if db_file.try_lock_exclusive().is_err() {
-        return Err(FileIOError::LockUnavailable);
+    if let Err(err) = db_file.try_lock_exclusive() {
+        return Err(FileIOError::LockUnavailable(err));
     };
 
     header.ciphertext_checksum = Sha512::digest(&ciphertext).into();

@@ -14,6 +14,8 @@ sha2 = "*"
 sha3 = "*"
 sysinfo = "0.30"
 ecies = "*"
+secrecy = "*"
+region = {workspace = true}
 zeroize = { workspace = true }
 clap = { version = "*", features = ["derive"] }
 psl = "*"

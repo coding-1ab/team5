@@ -13,6 +13,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::data_base::{change_user_pw, get_user_pw, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
+use secrecy::{ExposeSecret, SecretBox};
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MasterPWError {
     // 생성
@@ -65,31 +67,31 @@ impl Display for MasterPWError {
 impl StdError for MasterPWError {}
 
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub struct PubKey(Box<[u8; 65]>);
+pub struct PubKey(SecretBox<[u8; 65]>);
 impl PubKey {
     pub fn from_sec_key(sk: &SecKey) -> Self {
         let mut sk_obj = SecretKey::parse(sk.as_array()).unwrap();
         let mut pk_obj = PublicKey::from_secret_key(&sk_obj);
         manual_zeroize!(sk_obj);
-        let pk = Box::new(pk_obj.serialize());
+        let pk = SecretBox::new(Box::new(pk_obj.serialize()));
         manual_zeroize!(pk_obj);
         Self ( pk )
     }
     pub fn as_array(&self) -> &[u8; 65] {
-        &self.0
+        self.0.expose_secret()
     }
 }
 
 #[derive(Zeroize, ZeroizeOnDrop)]
-pub struct SecKey(Box<[u8; 32]>);
+pub struct SecKey(SecretBox<[u8; 32]>);
 impl SecKey {
     pub fn from_array(mut sk: [u8; 32]) -> SecKey {
-        let boxed = Box::new(sk);
+        let boxed = SecretBox::new(Box::new(sk));
         sk.zeroize();
         Self ( boxed )
     }
     pub fn as_array(&self) -> &[u8; 32] {
-        &self.0
+        self.0.expose_secret()
     }
 }
 
