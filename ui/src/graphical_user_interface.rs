@@ -84,7 +84,7 @@ pub struct GraphicalUserInterface {
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
-    wrapped_user_key: WrappedUserKey,
+    wrapped_user_key: Option<WrappedUserKey>,
     get_user_password_user_password: Option<UserPW>,
     data_base_header: Option<DBHeader>,
     public_key: Option<PubKey>,
@@ -196,7 +196,7 @@ impl GraphicalUserInterface {
                         };
                         self.data_base = decrypted_data_base;
                         self.public_key = Some(public_key);
-                        self.wrapped_user_key = wrapped_user_key;
+                        self.wrapped_user_key = Some(wrapped_user_key);
                         self.window_open_list.master_login = false;
                         self.login = true;
                     }
@@ -233,7 +233,7 @@ impl GraphicalUserInterface {
                             self.string_values.recheck_password.zeroize();
                             data_base_header.master_pw_salt = data_base_header_salt;
                             self.data_base_header = Some(*data_base_header);
-                            self.wrapped_user_key = wrapped_user_key;
+                            self.wrapped_user_key = Some(wrapped_user_key);
                             self.data_base = DB::default();
                             save_db(data_base_header, &mut encrypt_db(&DB::default(), &public_key));
                             self.public_key = Some(public_key);
@@ -256,7 +256,7 @@ impl GraphicalUserInterface {
             .input("site name", &mut self.string_values.command_value.add_user_password.site_name)
             .input("user identifier", &mut self.string_values.command_value.add_user_password.identifier)
             .sensitive_input("password", &mut self.string_values.command_value.add_user_password.password)
-            .database(&mut self.data_base).user_key(&self.wrapped_user_key)
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().unwrap())
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
@@ -273,7 +273,7 @@ impl GraphicalUserInterface {
             .input("site name", &mut self.string_values.command_value.change_user_password.site_name)
             .input("user identifier", &mut self.string_values.command_value.change_user_password.identifier)
             .sensitive_input("password", &mut self.string_values.command_value.change_user_password.password)
-            .database(&mut self.data_base).user_key(&self.wrapped_user_key)
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().unwrap())
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
@@ -304,7 +304,7 @@ impl GraphicalUserInterface {
         CommandBuilder::new("get user password", "get user password")
             .input("site name", &mut self.string_values.command_value.get_user_password.site_name)
             .input("user identifier", &mut self.string_values.command_value.get_user_password.identifier)
-            .database(&mut self.data_base).user_key(&self.wrapped_user_key)
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().unwrap())
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
@@ -321,7 +321,7 @@ impl GraphicalUserInterface {
     fn graphical_user_interface_change_master_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("change master password", "change master password")
             .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password)
-            .database(&mut self.data_base).user_key_mut(&mut self.wrapped_user_key)
+            .database(&mut self.data_base).user_key_mut(self.wrapped_user_key.as_mut().unwrap())
             .execute(|inputs, data_base, _, wrapped_user_key_mut| {
                 if let Err(error) = master_pw_validation(inputs[0].value) {
                     return Err(error.into());
@@ -376,7 +376,7 @@ impl Default for GraphicalUserInterface {
             string_values: Default::default(),
             window_open_list: Default::default(),
             data_base: Default::default(),
-            wrapped_user_key: Default::default(),
+            wrapped_user_key: None,
             get_user_password_user_password: None,
             data_base_header: None,
             public_key: None,
