@@ -8,219 +8,28 @@
 use std::{collections::HashMap, fs, io, num::NonZeroU64};
 use eframe::{
     egui::{Context, ViewportCommand, self, FontData},
-    epaint::text::{FontInsert, FontPriority, InsertFontFamily}
+    epaint::text::{FontInsert, FontPriority, InsertFontFamily},
+    egui::TextBuffer
 };
-use eframe::egui::{TextBuffer};
 use zeroize::Zeroize;
-use anyhow::Error;
 use engine::{
     data_base::prefix_range,
     file_io::load_db,
     header::DBHeader,
+    user_secrets::WrappedUserKey,
+    file_io::save_db,
+    master_secrets::{change_master_pw, encrypt_db},
     data_base::{add_user_pw, change_user_pw, get_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
     master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB},
-    user_secrets::WrappedUserKey
 };
-use engine::file_io::save_db;
-use engine::master_secrets::{change_master_pw, encrypt_db};
+use engine::file_io::FileIOError;
+use crate::command_builder::{CommandBuilder, CommandValue};
 
 type TryCountRamming = i64;
 type FontLoadState = (TryCountRamming, bool);
 type FontLoadList = HashMap<&'static str, FontLoadState>;
 
 const CAN_TRY_LOAD_COUNT: NonZeroU64 = NonZeroU64::new(5).unwrap();
-
-// 하나의 입력 필드를 표현
-pub struct InputField<'a> {
-    pub label: &'static str,
-    pub value: &'a mut String,
-    pub zeroize_on_error: bool,        // 에러 시 zeroize할지
-}
-
-// CommandBuilder 본체
-pub struct CommandBuilder<'a, Output> {
-    title: &'a str,
-    screen_name: &'a str,
-    inputs: Vec<InputField<'a>>,
-    database: Option<&'a mut DB>,
-    wrapped_user_key: Option<&'a WrappedUserKey>,
-    wrapped_user_key_mut: Option<&'a mut WrappedUserKey>,
-    on_success: Box<dyn FnMut(Output) + 'a>,
-    // execute closure를 저장
-    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>) -> Result<Output, Error> + 'a>>,
-}
-
-impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new() -> Self {   // command_fn은 이제 new()에서 안 받음
-        Self {
-            title: "",
-            screen_name: "",
-            inputs: vec![],
-            database: None,
-            wrapped_user_key: None,
-            wrapped_user_key_mut: None,
-            on_success: Box::new(|_| {}),
-            execute: None,
-        }
-    }
-
-    // DB, Key는 여전히 선택적으로 설정
-    pub fn database(mut self, db: &'a mut DB) -> Self {
-        self.database = Some(db);
-        self
-    }
-
-    pub fn user_key(mut self, key: &'a WrappedUserKey) -> Self {
-        self.wrapped_user_key = Some(key);
-        self
-    }
-
-    pub fn user_key_mut(mut self, key: &'a mut WrappedUserKey) -> Self {
-        self.wrapped_user_key = Some(key);
-        self
-    }
-
-    // ← 여기서 핵심 변경
-    pub fn execute<F>(mut self, execute_fn: F) -> Self
-    where
-        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>) -> Result<Output, Error> + 'a,
-    {
-        self.execute = Some(Box::new(execute_fn));
-        self
-    }
-
-    pub fn title(mut self, title: &'a str) -> Self {
-        self.title = title;
-        self
-    }
-
-    pub fn screen_name(mut self, name: &'a str) -> Self {
-        self.screen_name = name;
-        self
-    }
-
-    pub fn input(mut self, label: &'static str, value: &'a mut String) -> Self {
-        self.inputs.push(InputField {
-            label,
-            value,
-            zeroize_on_error: false,
-        });
-        self
-    }
-
-    pub fn sensitive_input(mut self, label: &'static str, value: &'a mut String) -> Self {
-        self.inputs.push(InputField {
-            label,
-            value,
-            zeroize_on_error: true,
-        });
-        self
-    }
-
-    pub fn on_success<F>(mut self, callback: F) -> Self
-    where
-        F: FnMut(Output) + 'a,
-    {
-        self.on_success = Box::new(callback);
-        self
-    }
-
-    pub fn error_message(self, error_message: &'a mut String) -> CommandBuilderWithError<'a, Output> {
-        CommandBuilderWithError {
-            inner: self,
-            error_message,
-        }
-    }
-}
-
-// 중간 Builder (error_message가 설정된 상태)
-pub struct CommandBuilderWithError<'a, Output> {
-    inner: CommandBuilder<'a, Output>,
-    error_message: &'a mut String,
-}
-
-impl<'a, Output> CommandBuilderWithError<'a, Output> {
-    pub fn show(
-        mut self,
-        context: &egui::Context,
-        button: egui::Response,
-        window_open: &mut bool,
-    ) {
-        if button.clicked() {
-            *window_open = true;
-        }
-
-        if !*window_open {
-            return;
-        }
-
-        let error_message = &mut *self.error_message; // mutable borrow
-
-        context.show_viewport_immediate(
-            egui::ViewportId::from_hash_of(self.inner.title),
-            egui::ViewportBuilder::default().with_title(self.inner.title),
-            move |ctx, _| {
-                if ctx.input(|i| i.viewport().close_requested()) {
-                    *window_open = false;
-                    return;
-                }
-
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.label(self.inner.screen_name);
-
-                    for field in &mut self.inner.inputs {
-                        ui.horizontal(|ui| {
-                            ui.label(field.label);
-                            ui.text_edit_singleline(field.value);
-                        });
-                    }
-
-                    ui.label(&*error_message);
-
-                    if ui.button("Accept").clicked() {
-                        Self::handle_accept(&mut self.inner, error_message, window_open);
-                    }
-                });
-            },
-        );
-    }
-
-    fn handle_accept(
-        builder: &mut CommandBuilder<'_, Output>,
-        error_message: &mut String,
-        window_open: &mut bool,
-    ) {
-        if builder.inputs.iter().any(|f| f.value.trim().is_empty()) {
-            *error_message = "모든 필드를 입력해주세요!".to_string();
-            return;
-        }
-
-        let values: &mut Vec<InputField> = &mut builder.inputs;
-
-        match (builder.execute.as_mut().unwrap())(values, builder.database.as_deref_mut(), builder.wrapped_user_key, builder.wrapped_user_key_mut.as_deref_mut()) {
-            Ok(result) => {
-                (builder.on_success)(result);
-                *window_open = false;
-                error_message.clear();
-                for field in &mut builder.inputs {
-                    if field.zeroize_on_error {
-                        field.value.zeroize();
-                    }
-                }
-            }
-            Err(err) => {
-                *error_message = err.to_string();
-
-                // zeroize 처리
-                for field in &mut builder.inputs {
-                    if field.zeroize_on_error {
-                        field.value.zeroize();
-                    }
-                }
-            }
-        }
-    }
-}
 
 struct WindowOpenList {
     root: bool,
@@ -252,19 +61,9 @@ impl Default for WindowOpenList {
 struct StringValues {
     password: String,
     recheck_password: String,
-    error_message: String,
+    global_error_message: String,
     search_data_base: String,
-    add_user_password_site_name: String,
-    add_user_password_user_identifier: String,
-    add_user_password_user_password: String,
-    change_user_password_site_name: String,
-    change_user_password_user_identifier: String,
-    change_user_password_user_password: String,
-    remove_user_password_site_name: String,
-    remove_user_password_user_identifier: String,
-    get_user_password_site_name: String,
-    get_user_password_user_identifier: String,
-    change_master_password_master_password: String,
+    command_value: CommandValue,
 }
 
 /*
@@ -320,7 +119,7 @@ impl GraphicalUserInterface {
     }
 
     fn font_load_nanum_gothic_font(&mut self, context: &Context) {
-        let font_data = FontData::from_static(include_bytes!("../../NanumGothic.ttf"));
+        let font_data = FontData::from_static(include_bytes!("../NanumGothic.ttf"));
 
         match self.font_load(
             context, "nanum_gothic", font_data,
@@ -369,10 +168,10 @@ impl GraphicalUserInterface {
                     ui.add(egui::TextEdit::singleline(&mut self.string_values.password).password(true));
                     ui.label("input recheck master password");
                     ui.add(egui::TextEdit::singleline(&mut self.string_values.recheck_password).password(true));
-                    ui.label(&self.string_values.error_message);
+                    ui.label(&self.string_values.global_error_message);
                     if ui.button("login").clicked() {
                         if self.string_values.password != self.string_values.recheck_password {
-                            self.string_values.error_message = "invalid password".to_string();
+                            self.string_values.global_error_message = "invalid password".to_string();
                             return;
                         }
                         let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password.take(), &self.data_base_header.unwrap().master_pw_salt) {
@@ -382,7 +181,7 @@ impl GraphicalUserInterface {
                                 value
                             },
                             Err(error) => {
-                                self.string_values.error_message = error.to_string();
+                                self.string_values.global_error_message = error.to_string();
                                 self.string_values.password.zeroize();
                                 self.string_values.recheck_password.zeroize();
                                 return;
@@ -391,7 +190,7 @@ impl GraphicalUserInterface {
                         let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
                             Ok(decrypted_data_base) => decrypted_data_base,
                             Err(error) => { 
-                                self.string_values.error_message = error.to_string();
+                                self.string_values.global_error_message = error.to_string();
                                 return;
                             }
                         };
@@ -420,10 +219,10 @@ impl GraphicalUserInterface {
                     ui.add(egui::TextEdit::singleline(&mut self.string_values.password).password(true));
                     ui.label("recheck master password");
                     ui.add(egui::TextEdit::singleline(&mut self.string_values.recheck_password).password(true));
-                    ui.label(&self.string_values.error_message);
+                    ui.label(&self.string_values.global_error_message);
                     if ui.button("Accept").clicked() {
                         if let Err(err) = master_pw_validation(&self.string_values.password) {
-                            self.string_values.error_message = format!("Master password validation error: {}", err);
+                            self.string_values.global_error_message = format!("Master password validation error: {}", err);
                             self.string_values.password.zeroize();
                             self.string_values.recheck_password.zeroize();
                             return;
@@ -434,16 +233,16 @@ impl GraphicalUserInterface {
                             self.string_values.recheck_password.zeroize();
                             data_base_header.master_pw_salt = data_base_header_salt;
                             self.data_base_header = Some(*data_base_header);
-                            save_db(*data_base_header, encrypt_db(&DB::default(), &public_key));
-                            self.public_key = Some(public_key);
                             self.wrapped_user_key = wrapped_user_key;
                             self.data_base = DB::default();
+                            save_db(data_base_header, &mut encrypt_db(&DB::default(), &public_key));
+                            self.public_key = Some(public_key);
                             self.window_open_list.login = true;
                             self.login = true;
                         } else {
                             self.string_values.password.zeroize();
                             self.string_values.recheck_password.zeroize();
-                            self.string_values.error_message = "password is mismatch".to_string();
+                            self.string_values.global_error_message = "password is mismatch".to_string();
                             return;
                         }
                     }
@@ -453,10 +252,10 @@ impl GraphicalUserInterface {
     }
 
     fn graphical_user_interface_add_user_password(&mut self, context: &Context, button: egui::Response) {
-        CommandBuilder::new().title("add user password").screen_name("add user password")
-            .input("site name", &mut self.string_values.add_user_password_site_name)
-            .input("user identifier", &mut self.string_values.add_user_password_user_identifier)
-            .sensitive_input("password", &mut self.string_values.add_user_password_user_password)
+        CommandBuilder::new("add user password", "add user password")
+            .input("site name", &mut self.string_values.command_value.add_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.add_user_password.identifier)
+            .sensitive_input("password", &mut self.string_values.command_value.add_user_password.password)
             .database(&mut self.data_base).user_key(&self.wrapped_user_key)
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
@@ -465,15 +264,15 @@ impl GraphicalUserInterface {
                 add_user_pw(data_base.unwrap(), site_name, user_identifier, user_password, wrapped_user_key.unwrap())?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
             .show(context, button, &mut self.window_open_list.add_user_password);
     }
 
-    fn change_user_password(&mut self, context: &Context, button: egui::Response) {
-        CommandBuilder::new().title("change user password").screen_name("change user password")
-            .input("site name", &mut self.string_values.add_user_password_site_name)
-            .input("user identifier", &mut self.string_values.add_user_password_user_identifier)
-            .sensitive_input("password", &mut self.string_values.add_user_password_user_password)
+    fn graphical_user_interface_change_user_password(&mut self, context: &Context, button: egui::Response) {
+        CommandBuilder::new("change user password", "change user password")
+            .input("site name", &mut self.string_values.command_value.change_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.change_user_password.identifier)
+            .sensitive_input("password", &mut self.string_values.command_value.change_user_password.password)
             .database(&mut self.data_base).user_key(&self.wrapped_user_key)
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
@@ -482,29 +281,29 @@ impl GraphicalUserInterface {
                 change_user_pw(data_base.unwrap(), &site_name, &user_identifier, user_password, wrapped_user_key.unwrap())?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
             .show(context, button, &mut self.window_open_list.change_user_password);
     }
 
-    fn remove_user_password(&mut self, context: &Context, button: egui::Response) {
-        CommandBuilder::new().title("remove user password").screen_name("remove user password")
-            .input("site name", &mut self.string_values.remove_user_password_site_name)
-            .input("user identifier", &mut self.string_values.remove_user_password_user_identifier)
+    fn graphical_user_interface_remove_user_password(&mut self, context: &Context, button: egui::Response) {
+        CommandBuilder::new("remove user password", "remove user password")
+            .input("site name", &mut self.string_values.command_value.remove_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.remove_user_password.identifier)
             .database(&mut self.data_base)
-            .execute(|inputs, data_base, wrapped_user_key, _| {
+            .execute(|inputs, data_base, _, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
                 remove_user_pw(data_base.unwrap(), &site_name, &user_identifier)?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
             .show(context, button, &mut self.window_open_list.remove_user_password);
     }
 
-    fn get_user_password(&mut self, context: &Context, button: egui::Response) {
-        CommandBuilder::new().title("get user password").screen_name("get user password")
-            .input("site name", &mut self.string_values.get_user_password_site_name)
-            .input("user identifier", &mut self.string_values.get_user_password_user_identifier)
+    fn graphical_user_interface_get_user_password(&mut self, context: &Context, button: egui::Response) {
+        CommandBuilder::new("get user password", "get user password")
+            .input("site name", &mut self.string_values.command_value.get_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.get_user_password.identifier)
             .database(&mut self.data_base).user_key(&self.wrapped_user_key)
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
@@ -515,14 +314,14 @@ impl GraphicalUserInterface {
             .on_success(|password| {
                 self.get_user_password_user_password = Some(password);
             })
-            .error_message(&mut self.string_values.error_message)
+            .error_message(&mut self.string_values.global_error_message)
             .show(context, button, &mut self.window_open_list.get_user_password);
     }
 
-    fn change_master_password(&mut self, context: &Context, button: egui::Response) {
-        CommandBuilder::new().title("change master password").screen_name("change master password")
-            .sensitive_input("master password", &mut self.string_values.change_master_password_master_password)
-            .database(&mut self.data_base).user_key(&mut self.wrapped_user_key)
+    fn graphical_user_interface_change_master_password(&mut self, context: &Context, button: egui::Response) {
+        CommandBuilder::new("change master password", "change master password")
+            .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password)
+            .database(&mut self.data_base).user_key_mut(&mut self.wrapped_user_key)
             .execute(|inputs, data_base, _, wrapped_user_key_mut| {
                 if let Err(error) = master_pw_validation(inputs[0].value) {
                     return Err(error.into());
@@ -532,12 +331,28 @@ impl GraphicalUserInterface {
                 self.data_base_header.unwrap().master_pw_salt = salt;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
             .show(context, button, &mut self.window_open_list.change_master_password);
     }
 
-    fn save_data_base(&mut self, context: &Context, button: egui::Response) {
+    fn graphical_user_interface_save_data_base(&self) -> Result<(), FileIOError> {
+        let mut encrypt_data_base = encrypt_db(&self.data_base, self.public_key.as_ref().unwrap());
+        save_db(&mut self.data_base_header.unwrap(), &mut encrypt_data_base)
+    }
 
+    fn graphical_user_interface_exit_application_with_save_data_base(&mut self) -> String {
+        let mut encrypt_data_base = encrypt_db(&self.data_base, self.public_key.as_ref().unwrap());
+        match save_db(&mut self.data_base_header.unwrap(), &mut encrypt_data_base) {
+            Ok(_) => {
+                self.window_open_list.root = false;
+                "Successfully saved the database".to_string()
+            },
+            Err(error) => error.to_string(),
+        }
+    }
+
+    fn graphical_user_interface_exit_application_with_out_save_data_base(&mut self) {
+        self.window_open_list.root = false;
     }
 
     /*
@@ -573,8 +388,8 @@ impl Default for GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if !self.window_open_list.root {
-            let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.take().unwrap());
-            save_db(self.data_base_header.unwrap(), encrypted_data_base).unwrap();
+            let mut encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.take().unwrap());
+            save_db(&mut self.data_base_header.unwrap(), &mut encrypted_data_base).unwrap();
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
 
@@ -637,9 +452,17 @@ impl eframe::App for GraphicalUserInterface {
             };
         } else {
             egui::CentralPanel::default().show(ctx, |ui| {
-                egui::Grid::new("user_input").show(ui, |ui| {
-                    let button = ui.button("add password").on_hover_text("add password");
-                    self.graphical_user_interface_add_user_password(ctx, button);
+                ui.horizontal(|ui| {
+                    let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
+                    let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
+                    let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
+                    let get_user_password_button = ui.button("get user password").on_hover_text("get user password");
+                    let change_master_password_button = ui.button("change master password").on_hover_text("change master password");
+                    self.graphical_user_interface_add_user_password(ctx, add_user_password_button);
+                    self.graphical_user_interface_change_user_password(ctx, change_user_password_button);
+                    self.graphical_user_interface_remove_user_password(ctx, remove_user_password_button);
+                    self.graphical_user_interface_get_user_password(ctx, get_user_password_button);
+                    self.graphical_user_interface_change_master_password(ctx, change_master_password_button);
                 });
                 ui.label("search");
                 ui.add(egui::TextEdit::singleline(&mut self.string_values.search_data_base));
