@@ -118,6 +118,7 @@ impl Error for UserIDError {}
 
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::io;
 use clap::builder::TypedValueParser;
 use url::Url;
 
@@ -245,6 +246,7 @@ pub enum DBIOError {
     UserAlreadyExists,
 
     InvalidSession,
+    MemoryLockUnable(String)
 }
 
 impl Display for DBIOError {
@@ -261,6 +263,9 @@ impl Display for DBIOError {
             }
             DBIOError::InvalidSession => {
                 write!(f, "Invalid session")
+            }
+            DBIOError::MemoryLockUnable(e) => {
+                write!(f, "Memory lock is unavailable: {}", e)
             }
         }
     }
@@ -286,10 +291,12 @@ pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: U
 
 pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
                       -> Result<(), DBIOError> {
-    let users = db.get_mut(site_name).ok_or(DBIOError::SiteNotFound)?;
-    let password = users.get_mut(user_id).ok_or(DBIOError::UserNotFound)?;
+    let users = db.get_mut(site_name)
+        .ok_or(DBIOError::SiteNotFound)?;
+    let password = users.get_mut(user_id)
+        .ok_or(DBIOError::UserNotFound)?;
     password.zeroize();
-    *password = encrypt_user_pw(site_name, user_id, new_pw, wrapped_key)?;;
+    *password = encrypt_user_pw(site_name, user_id, new_pw, wrapped_key)?;
     Ok(())
 }
 
