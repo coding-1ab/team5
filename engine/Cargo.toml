@@ -21,4 +21,5 @@ clap = { version = "*", features = ["derive"] }
 psl = "*"
 
 url = { path = "libs/url-2.5.8-fork" }
-ecies = { path = "libs/ecies-0.2.8-fork" }
+#ecies = { path = "libs/ecies-0.2.8-fork" }
+ecies = "*"
