@@ -131,7 +131,7 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
     Ok( (Some(FileIOWarn::ResetDBForCorruptedFile), DBHeader::empty_valid(), None) )
 }
 
-pub fn save_db(header: &mut DBHeader, ciphertext: &mut EncryptedDB) -> Result<(), FileIOError> {
+pub fn save_db(header: &mut DBHeader, ciphertext: EncryptedDB) -> Result<(), FileIOError> {
     let db_path = Path::new(DB_FILE);
     let bak_path = Path::new(DB_BAK_FILE);
 
@@ -169,7 +169,7 @@ pub fn save_db(header: &mut DBHeader, ciphertext: &mut EncryptedDB) -> Result<()
 
     let mut bytes = Vec::with_capacity(HEADER_LEN + header.ciphertext_len);
     header.write_to(&mut bytes);
-    bytes.append(ciphertext);
+    bytes.extend(ciphertext);
 
     let write_trials = 2;
     let check_counters = 3;
