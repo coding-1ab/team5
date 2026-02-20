@@ -3,6 +3,8 @@ use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith, Skip};
 use rkyv::with::Lock;
 use sha3::{Digest};
 use std::cell::RefCell;
+use crossbeam_utils::atomic::AtomicCell;
+use std::ops::Deref;
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::master_secrets::{__manual_zeroize};
 use crate::manual_zeroize;
@@ -15,6 +17,7 @@ use sysinfo::{Pid, System};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rkyv::{Archive, Archived, Deserialize, Place, Serialize};
 use std::pin::Pin;
+use std::sync::{LazyLock, OnceLock};
 use region::Region;
 use rkyv::rancor::Fallible;
 use rkyv::vec::{ArchivedVec, VecResolver};
@@ -55,16 +58,18 @@ impl<D: Fallible + ?Sized> DeserializeWith<Archived<Vec<u8>>, SecretBox<[u8]>, D
 #[derive(Archive, Deserialize, Serialize)]
 pub struct EncryptedUserPW (
     #[rkyv(with = SecretBoxRef)]
-    SecretBox<[u8]>
+    SecretBox<[u8]>,
+    #[rkyv(with = Skip)]
+    Option<LockGuard>
 );
 impl EncryptedUserPW {
+    pub fn from_vec(v: Vec<u8>) -> EncryptedUserPW {
+        let lock = region::lock(v.as_ptr(), v.len()).ok();
+        let secret_boxed = SecretBox::new(v.into_boxed_slice());
+        EncryptedUserPW (secret_boxed, lock)
+    }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret()
-    }
-}
-impl From<Vec<u8>> for EncryptedUserPW {
-    fn from(v: Vec<u8>) -> EncryptedUserPW {
-        EncryptedUserPW (SecretBox::from(v.into_boxed_slice()))
     }
 }
 impl Zeroize for EncryptedUserPW {
@@ -72,15 +77,18 @@ impl Zeroize for EncryptedUserPW {
         self.0.zeroize()
     }
 }
-impl Drop for EncryptedUserPW {
-    fn drop(&mut self) {
-        self.zeroize()
-    }
-}
+impl ZeroizeOnDrop for EncryptedUserPW {}
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct UserPWNonce (SecretBox<[u8; 12]>);
+pub struct UserPWNonce (
+    SecretBox<[u8; 12]>,
+    Option<LockGuard>
+);
 impl UserPWNonce {
+    pub fn new() -> Self {
+        let boxed = Box::new([0u8; _]);
+        let lock = region::lock(&*boxed, boxed.len()).ok();
+        UserPWNonce (SecretBox::from(boxed), lock)
+    }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
     }
@@ -88,19 +96,23 @@ impl UserPWNonce {
         self.0.expose_secret_mut().as_mut_slice()
     }
 }
-impl Default for UserPWNonce {
-    fn default() -> UserPWNonce {
-        UserPWNonce (SecretBox::new(Box::from([0u8; _])))
+impl Zeroize for UserPWNonce {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
     }
 }
+impl ZeroizeOnDrop for UserPWNonce {}
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-struct UserKeyNonce (SecretBox<[u8; 12]>);
+struct UserKeyNonce (
+    SecretBox<[u8; 12]>,
+    Option<LockGuard>
+);
 impl UserKeyNonce {
     pub fn new() -> Self {
-        let mut boxed = SecretBox::new(Box::new([0u8; 12]));
-        OsRng.fill_bytes(boxed.expose_secret_mut().as_mut_slice());
-        UserKeyNonce(boxed)
+        let mut secret_boxed = SecretBox::new(Box::new([0u8; _]));
+        let lock = region::lock(secret_boxed.expose_secret(), secret_boxed.expose_secret().len()).ok();
+        OsRng.fill_bytes(secret_boxed.expose_secret_mut().as_mut_slice());
+        UserKeyNonce (secret_boxed, lock)
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
@@ -109,11 +121,12 @@ impl UserKeyNonce {
     //     self.0.as_mut_slice()
     // }
 }
-impl Default for UserKeyNonce {
-    fn default() -> Self {
-        UserKeyNonce (SecretBox::new(Box::from([0u8; _])))
+impl Zeroize for UserKeyNonce {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
     }
 }
+impl ZeroizeOnDrop for UserKeyNonce {}
 // impl AsRef<aes_gcm::Nonce<U12>> for UserKeyNonce {
 //     fn as_ref(&self) -> &aes_gcm::Nonce<U12> {
 //         let array_ref: &[u8; 12] = self.0.as_ref();
@@ -123,9 +136,16 @@ impl Default for UserKeyNonce {
 //     }
 // }
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct UserKeyWrapper (SecretBox<[u8; 32]>);
+pub struct UserKeyWrapper (
+    SecretBox<[u8; 32]>,
+    Option<LockGuard>
+);
 impl UserKeyWrapper {
+    pub fn new() -> Self {
+        let boxed = Box::new([0u8; _]);
+        let lock = region::lock(&*boxed, boxed.len()).ok();
+        UserKeyWrapper (SecretBox::new(boxed), lock)
+    }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
     }
@@ -133,26 +153,25 @@ impl UserKeyWrapper {
         self.0.expose_secret_mut().as_mut_slice()
     }
 }
-impl Default for UserKeyWrapper {
-    fn default() -> UserKeyWrapper {
-        UserKeyWrapper (SecretBox::new(Box::new([0u8; _])))
+impl Zeroize for UserKeyWrapper {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
     }
 }
+impl ZeroizeOnDrop for UserKeyWrapper {}
 
-pub struct WrappedUserKey (SecretBox<[u8]>);
+pub struct WrappedUserKey (
+    SecretBox<[u8]>,
+    Option<LockGuard>
+);
 impl WrappedUserKey {
+    pub fn from_vec(v: Vec<u8>) -> Self {
+        let lock = region::lock(v.as_ptr(), v.len()).ok();
+        let secret_boxed = SecretBox::new(v.into_boxed_slice());
+        WrappedUserKey (secret_boxed, lock)
+    }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret()
-    }
-}
-impl From<Vec<u8>> for WrappedUserKey {
-    fn from(v: Vec<u8>) -> WrappedUserKey {
-        WrappedUserKey (SecretBox::new(v.into_boxed_slice()))
-    }
-}
-impl Default for WrappedUserKey {
-    fn default() -> WrappedUserKey {
-        WrappedUserKey (SecretBox::new(Box::new([0; 0])))
     }
 }
 impl Zeroize for WrappedUserKey {
@@ -160,15 +179,24 @@ impl Zeroize for WrappedUserKey {
         self.0.zeroize()
     }
 }
-impl Drop for WrappedUserKey {
-    fn drop(&mut self) {
-        self.zeroize()
-    }
-}
+impl ZeroizeOnDrop for WrappedUserKey {}
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct UserKey (SecretBox<[u8; 32]>);
+pub struct UserKey (
+    SecretBox<[u8; 32]>,
+    Option<LockGuard>
+);
 impl UserKey {
+    pub fn new() -> Self {
+        let boxed = Box::new([0u8; _]);
+        let lock = region::lock(&boxed, boxed.len()).ok();
+        UserKey (SecretBox::new(boxed), lock)
+    }
+    pub fn from_arr(mut arr: [u8; 32]) -> Self {
+        let boxed = Box::new(arr);
+        arr.zeroize();
+        let lock = region::lock(&boxed, boxed.len()).ok();
+        UserKey ( SecretBox::new(boxed), lock )
+    }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
     }
@@ -176,18 +204,13 @@ impl UserKey {
         self.0.expose_secret_mut().as_mut_slice()
     }
 }
-impl From<[u8; 32]> for UserKey {
-    fn from(mut arr: [u8; 32]) -> UserKey {
-        let key = UserKey (SecretBox::new(Box::new(arr)));
-        arr.zeroize();
-        key
+impl Zeroize for UserKey {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
     }
 }
-impl Default for UserKey {
-    fn default() -> Self {
-        UserKey (SecretBox::new(Box::from([0u8; 32])))
-    }
-}
+impl ZeroizeOnDrop for UserKey {}
+
 pub fn get_user_key_wrapper() -> UserKeyWrapper {
     let mut hasher = Sha3_256::new();
     Update::update(&mut hasher, &[248, 106, 27, 141, 130, 70, 18, 189, 65, 15, 132, 220, 144, 144, 143, 196, 57, 128, 134, 145, 197, 235, 192, 209, 150, 152, 201, 113, 12, 189, 100, 93, 92, 69, 244, 146, 157, 57, 131, 56, 143, 160, 17, 233, 114, 23, 32, 13, 68, 9, 116, 95, 26, 104, 73, 81, 7, 7, 103, 206, 63, 251, 161, 223, 226, 125, 184, 225, 6, 164, 65, 13]);
@@ -225,11 +248,12 @@ pub fn get_user_key_wrapper() -> UserKeyWrapper {
     Update::update(&mut hasher, &combined_hw.to_le_bytes());
     combined_hw.zeroize();
 
-    let mut result = UserKeyWrapper::default();
+    let mut result = UserKeyWrapper::new();
     hasher.finalize_into_reset(GenericArray::from_mut_slice(result.as_mut_bytes()));
     result
 }
-fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
+fn get_user_pw_nonce(site: &SiteName, id: &UserID)
+    -> UserPWNonce {
     let mut processed_id = id.as_str().to_owned().into_bytes();
     let halo = [203u8, 118, 6, 1, 225, 226, 197, 127, 221, 214, 24, 5, 239, 38, 75, 82, 65, 111, 91, 110, 158, 25, 48, 178, 116, 137, 136, 49, 57, 192, 56, 52];
 
@@ -249,7 +273,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
         params
     );
 
-    let mut nonce = UserPWNonce::default();
+    let mut nonce = UserPWNonce::new();
     argon2.hash_password_into(&processed_id, &halo, nonce.as_mut_bytes())
         .unwrap();
     processed_id.zeroize();
@@ -259,24 +283,23 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID) -> UserPWNonce {
 
 
 thread_local! {
-    static USER_KEY_NONCE: RefCell<UserKeyNonce> = RefCell::new(UserKeyNonce::default());
+    static USER_KEY_NONCE: RefCell<UserKeyNonce> = RefCell::new(UserKeyNonce::new());
 }
 
 pub fn wrap_user_key(mut user_key: UserKey)
-                     -> Result<WrappedUserKey, DBIOError> {
+                     -> WrappedUserKey {
     let mut wrapper = get_user_key_wrapper();
-    USER_KEY_NONCE.with_borrow_mut(|v| *v = UserKeyNonce::new());
+    USER_KEY_NONCE.with_borrow_mut(|v| *v = UserKeyNonce::new() );
     let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
-    let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes())
-        .map_err(|_| DBIOError::InvalidSession)?;
+    let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes()).unwrap();
     let ciphertext =
         cipher
-            .encrypt(&nonce, user_key.as_bytes())
-            .map_err(|_| DBIOError::InvalidSession)?;
+            .encrypt(&nonce, user_key.as_bytes()).unwrap();
     wrapper.zeroize();
     user_key.zeroize();
+    let wrapped_key = WrappedUserKey::from_vec(ciphertext);
 
-    Ok( ciphertext.into() )
+    wrapped_key
 }
 
 pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
@@ -287,20 +310,20 @@ pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
     let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
     let plaintext =
         cipher
-        .decrypt(&nonce, wrapped_key.as_bytes())
-        .map_err(|_| DBIOError::InvalidSession)?;
-    let user_key: [u8;32] = plaintext.try_into()
+            .decrypt(&nonce, wrapped_key.as_bytes())
+            .map_err(|_| DBIOError::InvalidSession)?;
+    let user_key_arr: [u8; _] = plaintext.try_into()
             .map_err(|_| DBIOError::InvalidSession)?;
     wrapper.zeroize();
-    Ok( user_key.into() )
+    let user_key = UserKey::from_arr(user_key_arr);
+    Ok( user_key )
 }
 
-#[inline(always)]
+#[inline]
 pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
                        -> Result<EncryptedUserPW, DBIOError> {
     let mut nonce = get_user_pw_nonce(site, id);
     let mut user_key = unwrap_user_key(wrapped_key)?;
-    let p_user_key = Pin::new(&mut user_key);
     let cipher = Aes256Gcm::new_from_slice(user_key.as_mut_bytes())
         .map_err(|_| DBIOError::InvalidSession)?;
     let ciphertext =
@@ -309,10 +332,12 @@ pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_ke
             .map_err(|_| DBIOError::InvalidSession)?;
     user_key.zeroize();
     nonce.zeroize();
-    Ok( ciphertext.into() )
+    let encrypted_pw = EncryptedUserPW::from_vec(ciphertext);
+
+    Ok( encrypted_pw )
 }
 
-#[inline(always)]
+#[inline]
 pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUserPW, wrapped_key: &WrappedUserKey)
                        -> Result<UserPW, DBIOError> {
     let mut nonce = get_user_pw_nonce(site, id);
@@ -329,5 +354,6 @@ pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUse
         String::from_utf8(plaintext)
             .map_err(|_| DBIOError::InvalidSession)?
     );
+
     Ok( user_pw )
 }

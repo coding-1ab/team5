@@ -246,7 +246,6 @@ pub enum DBIOError {
     UserAlreadyExists,
 
     InvalidSession,
-    MemoryLockUnable(String)
 }
 
 impl Display for DBIOError {
@@ -263,9 +262,6 @@ impl Display for DBIOError {
             }
             DBIOError::InvalidSession => {
                 write!(f, "Invalid session")
-            }
-            DBIOError::MemoryLockUnable(e) => {
-                write!(f, "Memory lock is unavailable: {}", e)
             }
         }
     }

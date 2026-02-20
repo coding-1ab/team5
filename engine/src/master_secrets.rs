@@ -10,10 +10,11 @@ use rand_core::RngCore;
 use std::ptr;
 use rkyv::rancor::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use crate::data_base::{change_user_pw, get_user_pw, DB};
+use crate::data_base::{change_user_pw, get_user_pw, DBIOError, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
-use secrecy::{ExposeSecret, SecretBox};
+use region::LockGuard;
+use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MasterPWError {
@@ -66,34 +67,53 @@ impl Display for MasterPWError {
 
 impl StdError for MasterPWError {}
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct PubKey(SecretBox<[u8; 65]>);
+pub struct PubKey(
+    SecretBox<[u8; 65]>,
+    Option<LockGuard>
+);
 impl PubKey {
     pub fn from_sec_key(sk: &SecKey) -> Self {
         let mut sk_obj = SecretKey::parse(sk.as_array()).unwrap();
         let mut pk_obj = PublicKey::from_secret_key(&sk_obj);
         manual_zeroize!(sk_obj);
-        let pk = SecretBox::new(Box::new(pk_obj.serialize()));
+        let boxed_pk = Box::new(pk_obj.serialize());
+        let lock = region::lock(&boxed_pk, boxed_pk.len()).ok();
         manual_zeroize!(pk_obj);
-        Self ( pk )
+        Self (SecretBox::new(boxed_pk), lock)
     }
     pub fn as_array(&self) -> &[u8; 65] {
         self.0.expose_secret()
     }
 }
+impl Zeroize for PubKey {
+    fn zeroize(&mut self) {
+        self.0.expose_secret_mut().zeroize();
+    }
+}
+impl ZeroizeOnDrop for PubKey {}
 
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct SecKey(SecretBox<[u8; 32]>);
+pub struct SecKey(
+    SecretBox<[u8; 32]>,
+    Option<LockGuard>
+);
 impl SecKey {
     pub fn from_array(mut sk: [u8; 32]) -> SecKey {
-        let boxed = SecretBox::new(Box::new(sk));
+        let boxed = Box::new(sk);
         sk.zeroize();
-        Self ( boxed )
+        let lock = region::lock(&boxed, boxed.len()).ok();
+        Self (SecretBox::new(boxed), lock)
     }
     pub fn as_array(&self) -> &[u8; 32] {
         self.0.expose_secret()
     }
 }
+impl Zeroize for SecKey {
+    fn zeroize(&mut self) {
+        self.0.expose_secret_mut().zeroize();
+    }
+}
+impl ZeroizeOnDrop for SecKey {}
+
 
 #[inline]
 fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
@@ -111,12 +131,12 @@ fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
         params
     );
 
-    let mut user_key = UserKey::default();
+    let mut user_key = UserKey::new();
     argon2
         .hash_password_into(&sec_key.as_array().as_slice(), &halo, user_key.as_mut_bytes())
         .unwrap();
 
-    let wrapped_user_key = wrap_user_key(user_key).unwrap();
+    let wrapped_user_key = wrap_user_key(user_key);
     wrapped_user_key
 }
 
@@ -234,8 +254,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 
 pub type EncryptedDB = Vec<u8>;
 
-pub fn encrypt_db(db: &DB, pk: &PubKey,)
-                  -> EncryptedDB {
+pub fn encrypt_db(db: &DB, pk: &PubKey,) -> EncryptedDB {
     let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
     let encrypted = ecies::encrypt(pk.as_array(), &serialized).unwrap();
     serialized.zeroize();
@@ -243,8 +262,7 @@ pub fn encrypt_db(db: &DB, pk: &PubKey,)
     encrypted
 }
 
-pub fn decrypt_db(bytes: &[u8], mut sk: SecKey,
-) -> Result<DB, MasterPWError> {
+pub fn decrypt_db(bytes: &[u8], mut sk: SecKey, ) -> Result<DB, MasterPWError> {
     let mut decrypted = match ecies::decrypt(sk.as_array(), &bytes) {
         Ok(v) => {v}
         Err(_) => {

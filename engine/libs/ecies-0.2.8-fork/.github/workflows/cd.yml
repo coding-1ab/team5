@@ -1,0 +1,32 @@
+name: CD
+
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
+      - run: cargo generate-lockfile
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Publish cargo package
+        run: cargo login $CARGO_LOGIN_TOKEN && cargo publish
+        env:
+          CARGO_LOGIN_TOKEN: ${{ secrets.CARGO_LOGIN_TOKEN }}
