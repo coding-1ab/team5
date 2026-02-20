@@ -72,8 +72,8 @@ pub fn cli_app() -> () {
 
         db = DB::new();
         loop {
-            let encrypted_db = encrypt_db(&db, &pub_key);
-            if let Err(e) = save_db(&mut db_header, encrypted_db) {
+            let mut encrypted_db = encrypt_db(&db, &pub_key);
+            if let Err(e) = save_db(&mut db_header, &mut encrypted_db) {
                 println!("Error saving db: {}", e);
                 println!("Please press <Enter> to try again after check your system, or enter <C> to exit this app");
                 let mut buf = [u8::default()];
@@ -248,9 +248,9 @@ pub fn cli_app() -> () {
                             }
                         };
 
-                        let encrypted_db = encrypt_db(&db, &pub_key);
+                        let mut encrypted_db = encrypt_db(&db, &pub_key);
 
-                        if let Err(e) = save_db(db_header, encrypted_db) {
+                        if let Err(e) = save_db(&mut db_header, &mut encrypted_db) {
                             println!("Error saving db: {}", e);
                             continue;
                         }
