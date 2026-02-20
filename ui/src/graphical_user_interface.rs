@@ -235,7 +235,7 @@ impl GraphicalUserInterface {
                             self.data_base_header = Some(*data_base_header);
                             self.wrapped_user_key = Some(wrapped_user_key);
                             self.data_base = DB::default();
-                            save_db(data_base_header, encrypt_db(&DB::default(), &public_key));
+                            save_db(data_base_header, encrypt_db(&DB::default(), &public_key)).unwrap();
                             self.public_key = Some(public_key);
                             self.window_open_list.login = true;
                             self.login = true;
@@ -336,13 +336,11 @@ impl GraphicalUserInterface {
     }
 
     fn graphical_user_interface_save_data_base(&self) -> Result<(), FileIOError> {
-        let mut encrypt_data_base = encrypt_db(&self.data_base, self.public_key.as_ref().unwrap());
-        save_db(&mut self.data_base_header.unwrap(), encrypt_data_base)
+        save_db(&mut self.data_base_header.unwrap(), encrypt_db(&self.data_base, self.public_key.as_ref().unwrap()))
     }
 
     fn graphical_user_interface_exit_application_with_save_data_base(&mut self) -> String {
-        let mut encrypt_data_base = encrypt_db(&self.data_base, self.public_key.as_ref().unwrap());
-        match save_db(&mut self.data_base_header.unwrap(), encrypt_data_base) {
+        match save_db(&mut self.data_base_header.unwrap(), encrypt_db(&self.data_base, self.public_key.as_ref().unwrap())) {
             Ok(_) => {
                 self.window_open_list.root = false;
                 "Successfully saved the database".to_string()
