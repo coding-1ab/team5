@@ -1,22 +1,25 @@
+use std::panic::panic_any;
 use crate::file_io::FileIOError;
 use bytemuck::{Pod, Zeroable};
 
 const SALT_LEN: usize = 32;
-const MAGIC_LEN: usize = 28;
-const VERSION_DIGITS: usize = 4;
-
+const MAGIC_LEN: usize = 78;
+const VERSION_LEN: usize = 18;
+const _: () = {
+    const _TEST: usize = SALT_LEN + MAGIC_LEN + VERSION_LEN;
+    assert!(_TEST == 128)
+};
 
 type Magic = [u8; MAGIC_LEN];
-type Version = [u8; VERSION_DIGITS];
+type Version = [u8; VERSION_LEN];
 pub type Salt = [u8; SALT_LEN];
 pub type CiphTxtChecksum = [u8; 64];
 pub type CipherTextLen = usize;
 
 /// Program internal magic literal
-const DB_MAGIC: Magic = *b"<<DB file of team5 project>>";
+const DB_MAGIC: Magic = *b"This is DB file of PW Manager, A Project Created By Team5 of 2025 Rust Study. ";
 /// Program-internal DB format version
-const DB_VERSION: Version = [0,1,0,0];
-
+const DB_VERSION: Version = *b"DB Ver: 0.1.1.002\n";
 pub type EncryptedDB = Vec<u8>;
 
 #[repr(C)]
