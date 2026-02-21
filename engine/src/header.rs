@@ -44,7 +44,7 @@ impl DBHeader {
 
         let header: DBHeader = *bytemuck::from_bytes::<DBHeader>(head);
 
-        if &header.magic != &DB_MAGIC {
+        if header.magic != DB_MAGIC {
             return Err(FileIOError::InvalidHeader);
         }
 

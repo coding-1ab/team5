@@ -100,11 +100,15 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
         .create(true)
         .open(db_path)
         .map_err(|err| FileIOError::FileOpenFailed(err))?;
-    match db_file.try_lock_exclusive() {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::WouldBlock => { return Err(FileIOError::LockWouldBlock(err)) },
-        Err(err) => { return Err(FileIOError::LockUnavailable(err)) }
-    }
+    // match db_file.try_lock_exclusive() {
+    //     Ok(()) => {}
+    //     Err(err) if err.kind() == io::ErrorKind::WouldBlock => { return Err(FileIOError::LockWouldBlock(err)) },
+    //     Err(err) => { return Err(FileIOError::LockUnavailable(err)) }
+    // }
+    let _ = db_file.unlock();
+    if let Err(err) = db_file.try_lock_exclusive() {
+        return Err(FileIOError::LockUnavailable(err));
+    };
 
     let read_trials = 3;
     for _ in 0..read_trials {
@@ -159,7 +163,7 @@ pub fn save_db(header: &mut DBHeader, ciphertext: EncryptedDB) -> Result<(), Fil
 
     // if db_file.set_len(db_file.metadata().map_err(|err| FileIOError::FileReadFailed(err))?
     //         .len()).map_err(|err| FileIOError::FileWriteFailed(err)).is_err() {
-    let _ = db_file.unlock().ok();
+    let _ = db_file.unlock();
     if let Err(err) = db_file.try_lock_exclusive() {
         return Err(FileIOError::LockUnavailable(err));
     };
