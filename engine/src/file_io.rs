@@ -1,6 +1,6 @@
 use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
 use fs2::FileExt;
-use std::fs::{self, remove_file, rename, File, OpenOptions};
+use std::fs::{self, remove_file, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};

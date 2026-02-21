@@ -1,5 +1,4 @@
 use std::string::String;
-use std::cell::RefCell;
 use std::io;
 use std::io::{stdin, Read, Write};
 use std::process::exit;
@@ -7,11 +6,9 @@ use arboard::Clipboard;
 use zeroize::*;
 use clap::*;
 use single_instance::SingleInstance;
-use zeroize::__internal::AssertZeroize;
 use engine::data_base::*;
 use engine::master_secrets::*;
 use engine::file_io::*;
-use engine::manual_zeroize;
 
 pub fn cli_app() -> () {
     let instance = SingleInstance::new("team5").unwrap();
@@ -72,7 +69,7 @@ pub fn cli_app() -> () {
 
         db = DB::new();
         loop {
-            let mut encrypted_db = encrypt_db(&db, &pub_key);
+            let encrypted_db = encrypt_db(&db, &pub_key);
             if let Err(e) = save_db(&mut db_header, encrypted_db) {
                 println!("Error saving db: {}", e);
                 println!("Please press <Enter> to try again after check your system, or enter <C> to exit this app");
@@ -248,7 +245,7 @@ pub fn cli_app() -> () {
                             }
                         };
 
-                        let mut encrypted_db = encrypt_db(&db, &pub_key);
+                        let encrypted_db = encrypt_db(&db, &pub_key);
 
                         if let Err(e) = save_db(&mut db_header, encrypted_db) {
                             println!("Error saving db: {}", e);
@@ -261,7 +258,7 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::SaveDB => {
                         // if should_save_db {
-                        let mut encrypted_db = encrypt_db(&db, &pub_key);
+                        let encrypted_db = encrypt_db(&db, &pub_key);
 
                         if let Err(e) = save_db(&mut db_header, encrypted_db) {
                             println!("Error saving db: {}", e);
@@ -275,7 +272,7 @@ pub fn cli_app() -> () {
                     }
                     UserRequest::ExitAppWithSave => {
                         // if should_save_db {
-                        let mut encrypted_db = encrypt_db(&db, &pub_key);
+                        let encrypted_db = encrypt_db(&db, &pub_key);
 
                         if let Err(e) = save_db(&mut db_header, encrypted_db) {
                             println!("Error saving db: {}", e);

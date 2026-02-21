@@ -58,7 +58,6 @@ impl Display for UserPWError {
 impl Error for UserPWError {}
 
 use std::fmt::{Display, Formatter};
-use clap::ValueEnum;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // const MAX_USER_ID_LEN: usize = 32;
@@ -118,8 +117,6 @@ impl Error for UserIDError {}
 
 use std::borrow::Borrow;
 use std::cmp::Ordering;
-use std::io;
-use clap::builder::TypedValueParser;
 use url::Url;
 
 #[derive(Zeroize, ZeroizeOnDrop, Archive, Serialize, Deserialize, Debug, Clone, )]

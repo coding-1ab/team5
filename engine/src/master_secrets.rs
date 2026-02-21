@@ -9,8 +9,8 @@ use rand_core::OsRng;
 use rand_core::RngCore;
 use std::ptr;
 use rkyv::rancor::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use crate::data_base::{change_user_pw, get_user_pw, DBIOError, DB};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+use crate::data_base::{change_user_pw, get_user_pw, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
@@ -28,7 +28,7 @@ pub enum MasterPWError {
     // 프로세스 유효성
     InvalidSession
 }
-pub fn master_pw_validation(mut raw_pw: &String) -> Result<(), MasterPWError> {
+pub fn master_pw_validation(raw_pw: &String) -> Result<(), MasterPWError> {
 
     if raw_pw.is_empty() {
         return Err(MasterPWError::Empty);
@@ -236,7 +236,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 
         let user_pw = get_user_pw(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
 
-        if let Err(err) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key) {
+        if let Err(_) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key) {
             pub_key.zeroize();
             new_wrapped_user_key.zeroize();
             return Err(MasterPWError::InvalidSession);

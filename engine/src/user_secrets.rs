@@ -1,5 +1,4 @@
-use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith, Skip};
-use rkyv::with::Lock;
+use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use sha3::{Digest};
 use std::cell::RefCell;
 use crossbeam_utils::atomic::AtomicCell;
@@ -242,7 +241,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID)
         *t ^= *s;
     }
 
-    let mut params = Params::new(
+    let params = Params::new(
         64*1024, // 메모리 요구량 (KB 단위)
         1,        // 반복 횟수
         1,       // 병렬 처리 수준
