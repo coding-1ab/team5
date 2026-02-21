@@ -11,15 +11,14 @@ debug = true
 opt-level = 3
 lto = "fat"
 codegen-units = 1
+debug = false
 
 [workspace]
 members = ["engine", "cli", "ui"]
 
 [dependencies]
-
 cli = {path = "./cli"}
 single-instance = "*"
-
 
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }

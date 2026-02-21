@@ -242,9 +242,9 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID)
     }
 
     let params = Params::new(
-        64*1024, // 메모리 요구량 (KB 단위)
+        32*1024, // 메모리 요구량 (KB 단위)
         1,        // 반복 횟수
-        1,       // 병렬 처리 수준
+        2,       // 병렬 처리 수준
         Some(12),       // 출력 길이
     ).unwrap();
     let argon2 = Argon2::new(
