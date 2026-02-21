@@ -13,7 +13,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::data_base::{change_user_pw, get_user_pw, DBIOError, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
-use region::LockGuard;
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -67,9 +66,9 @@ impl Display for MasterPWError {
 
 impl StdError for MasterPWError {}
 
-pub struct PubKey(
+
+pub struct PubKey (
     SecretBox<[u8; 65]>,
-    Option<LockGuard>
 );
 impl PubKey {
     pub fn from_sec_key(sk: &SecKey) -> Self {
@@ -77,9 +76,8 @@ impl PubKey {
         let mut pk_obj = PublicKey::from_secret_key(&sk_obj);
         manual_zeroize!(sk_obj);
         let boxed_pk = Box::new(pk_obj.serialize());
-        let lock = region::lock(&boxed_pk, boxed_pk.len()).ok();
         manual_zeroize!(pk_obj);
-        Self (SecretBox::new(boxed_pk), lock)
+        Self (SecretBox::new(boxed_pk))
     }
     pub fn as_array(&self) -> &[u8; 65] {
         self.0.expose_secret()
@@ -92,16 +90,15 @@ impl Zeroize for PubKey {
 }
 impl ZeroizeOnDrop for PubKey {}
 
-pub struct SecKey(
+pub struct SecKey (
     SecretBox<[u8; 32]>,
-    Option<LockGuard>
 );
 impl SecKey {
     pub fn from_array(mut sk: [u8; 32]) -> SecKey {
         let boxed = Box::new(sk);
         sk.zeroize();
-        let lock = region::lock(&boxed, boxed.len()).ok();
-        Self (SecretBox::new(boxed), lock)
+
+        Self (SecretBox::new(boxed))
     }
     pub fn as_array(&self) -> &[u8; 32] {
         self.0.expose_secret()
@@ -120,10 +117,10 @@ fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
     let halo = [40u8, 167, 39, 179, 72, 65, 122, 230, 190, 236, 125, 99, 81, 178, 50, 71, 35, 205, 141, 170, 74, 54, 227, 7, 92, 208, 212, 206, 126, 216, 55, 37];
 
     let params = Params::new(
-        64*1024, // 메모리 요구량 (KB 단위)
-        1,      // 반복 횟수
-        2,     // 병렬 처리 수준
-        Some(32),     // 출력 길이f
+        64*1024,// 메모리 요구량 (KB 단위)
+        1,       // 반복 횟수
+        2,       // 병렬 처리 수준
+        Some(32),      // 출력 길이f
     ).unwrap();
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,

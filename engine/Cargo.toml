@@ -14,7 +14,6 @@ sha2 = "*"
 sha3 = "*"
 sysinfo = "0.30"
 secrecy = "*"
-region = { workspace = true }
 zeroize = { workspace = true }
 crossbeam-utils = "0.8.21"
 clap = { version = "*", features = ["derive"] }

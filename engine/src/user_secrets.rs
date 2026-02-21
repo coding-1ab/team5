@@ -1,24 +1,19 @@
-use region::LockGuard;
 use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith, Skip};
 use rkyv::with::Lock;
 use sha3::{Digest};
 use std::cell::RefCell;
 use crossbeam_utils::atomic::AtomicCell;
-use std::ops::Deref;
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::master_secrets::{__manual_zeroize};
 use crate::manual_zeroize;
 use aes_gcm::aead::{Aead, Nonce, OsRng};
 use aes_gcm::{ Aes256Gcm, Key, KeyInit};
-use argon2::{Argon2, ParamsBuilder, Params};
+use argon2::{Argon2, Params};
 use std::process;
 use rand::prelude::*;
 use sysinfo::{Pid, System};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use rkyv::{Archive, Archived, Deserialize, Place, Serialize};
-use std::pin::Pin;
-use std::sync::{LazyLock, OnceLock};
-use region::Region;
 use rkyv::rancor::Fallible;
 use rkyv::vec::{ArchivedVec, VecResolver};
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
@@ -59,14 +54,11 @@ impl<D: Fallible + ?Sized> DeserializeWith<Archived<Vec<u8>>, SecretBox<[u8]>, D
 pub struct EncryptedUserPW (
     #[rkyv(with = SecretBoxRef)]
     SecretBox<[u8]>,
-    #[rkyv(with = Skip)]
-    Option<LockGuard>
 );
 impl EncryptedUserPW {
     pub fn from_vec(v: Vec<u8>) -> EncryptedUserPW {
-        let lock = region::lock(v.as_ptr(), v.len()).ok();
         let secret_boxed = SecretBox::new(v.into_boxed_slice());
-        EncryptedUserPW (secret_boxed, lock)
+        EncryptedUserPW (secret_boxed)
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret()
@@ -81,13 +73,11 @@ impl ZeroizeOnDrop for EncryptedUserPW {}
 
 pub struct UserPWNonce (
     SecretBox<[u8; 12]>,
-    Option<LockGuard>
 );
 impl UserPWNonce {
     pub fn new() -> Self {
         let boxed = Box::new([0u8; _]);
-        let lock = region::lock(&*boxed, boxed.len()).ok();
-        UserPWNonce (SecretBox::from(boxed), lock)
+        UserPWNonce (SecretBox::from(boxed))
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
@@ -105,14 +95,12 @@ impl ZeroizeOnDrop for UserPWNonce {}
 
 struct UserKeyNonce (
     SecretBox<[u8; 12]>,
-    Option<LockGuard>
 );
 impl UserKeyNonce {
     pub fn new() -> Self {
         let mut secret_boxed = SecretBox::new(Box::new([0u8; _]));
-        let lock = region::lock(secret_boxed.expose_secret(), secret_boxed.expose_secret().len()).ok();
         OsRng.fill_bytes(secret_boxed.expose_secret_mut().as_mut_slice());
-        UserKeyNonce (secret_boxed, lock)
+        UserKeyNonce (secret_boxed)
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
@@ -138,13 +126,11 @@ impl ZeroizeOnDrop for UserKeyNonce {}
 
 pub struct UserKeyWrapper (
     SecretBox<[u8; 32]>,
-    Option<LockGuard>
 );
 impl UserKeyWrapper {
     pub fn new() -> Self {
         let boxed = Box::new([0u8; _]);
-        let lock = region::lock(&*boxed, boxed.len()).ok();
-        UserKeyWrapper (SecretBox::new(boxed), lock)
+        UserKeyWrapper (SecretBox::new(boxed))
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
@@ -162,13 +148,11 @@ impl ZeroizeOnDrop for UserKeyWrapper {}
 
 pub struct WrappedUserKey (
     SecretBox<[u8]>,
-    Option<LockGuard>
 );
 impl WrappedUserKey {
     pub fn from_vec(v: Vec<u8>) -> Self {
-        let lock = region::lock(v.as_ptr(), v.len()).ok();
         let secret_boxed = SecretBox::new(v.into_boxed_slice());
-        WrappedUserKey (secret_boxed, lock)
+        WrappedUserKey (secret_boxed)
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret()
@@ -183,19 +167,16 @@ impl ZeroizeOnDrop for WrappedUserKey {}
 
 pub struct UserKey (
     SecretBox<[u8; 32]>,
-    Option<LockGuard>
 );
 impl UserKey {
     pub fn new() -> Self {
         let boxed = Box::new([0u8; _]);
-        let lock = region::lock(&boxed, boxed.len()).ok();
-        UserKey (SecretBox::new(boxed), lock)
+        UserKey (SecretBox::new(boxed))
     }
     pub fn from_arr(mut arr: [u8; 32]) -> Self {
         let boxed = Box::new(arr);
         arr.zeroize();
-        let lock = region::lock(&boxed, boxed.len()).ok();
-        UserKey ( SecretBox::new(boxed), lock )
+        UserKey ( SecretBox::new(boxed))
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_slice()
