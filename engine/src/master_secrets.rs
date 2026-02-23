@@ -140,7 +140,7 @@ fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
 fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
     let params = Params::new(
         128*1024, // 메모리 요구량 (KB 단위)
-        2,         // 반복 횟수
+        1,         // 반복 횟수
         12,       // 병렬 처리 수준
         Some(32),       // 출력 길이
     ).unwrap();

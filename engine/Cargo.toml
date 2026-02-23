@@ -13,7 +13,11 @@ rand = "0.8"
 sha2 = "*"
 sha3 = "*"
 sysinfo = "0.30"
-secrecy = "*"
+secrecy = "*"#?
+libsodium-sys = "*"
+dryoc = '*'
+ring = "*"
+x25519-dalek = "*"
 zeroize = { workspace = true }
 crossbeam-utils = "0.8.21"
 clap = { version = "*", features = ["derive"] }
