@@ -5,7 +5,6 @@
 
 // 흠 뭐부터 하지
 
-use std::marker::PhantomData;
 use engine::data_base::DB;
 
 #[cfg(feature = "gui")]

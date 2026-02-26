@@ -5,31 +5,21 @@
 
 // 흠 뭐부터 하지
 
-use std::{collections::HashMap, fs, io, num::NonZeroU64};
+use std::num::NonZeroU64;
 use eframe::{
-    egui::{Context, ViewportCommand, self, FontData},
-    epaint::text::{FontInsert, FontPriority, InsertFontFamily},
-    egui::TextBuffer
+    egui::TextBuffer,
+    egui::{Context, ViewportCommand, self},
 };
 use zeroize::Zeroize;
 use engine::{
-    data_base::prefix_range,
-    file_io::load_db,
     header::DBHeader,
+    file_io::FileIOError,
     user_secrets::WrappedUserKey,
-    file_io::save_db,
-    master_secrets::{change_master_pw, encrypt_db},
-    data_base::{add_user_pw, change_user_pw, get_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
-    master_secrets::{decrypt_db, master_pw_validation, first_login, PubKey, SecKey, general_login, EncryptedDB},
+    file_io::{load_db, save_db},
+    data_base::{prefix_range, add_user_pw, change_user_pw, get_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
+    master_secrets::{change_master_pw, encrypt_db, decrypt_db, master_pw_validation, first_login, general_login, EncryptedDB, PubKey, SecKey},
 };
-use engine::file_io::FileIOError;
 use crate::command_builder::{CommandBuilder, CommandValue};
-
-type TryCountRamming = i64;
-type FontLoadState = (TryCountRamming, bool);
-type FontLoadList = HashMap<&'static str, FontLoadState>;
-
-const CAN_TRY_LOAD_COUNT: NonZeroU64 = NonZeroU64::new(5).unwrap();
 
 struct WindowOpenList {
     root: bool,
@@ -78,9 +68,7 @@ ExitAppWithoutSave,
 */
 
 pub struct GraphicalUserInterface {
-    first_run: bool,
     login: bool,
-    font_load_list: FontLoadList,
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
@@ -92,73 +80,10 @@ pub struct GraphicalUserInterface {
 }
 
 impl GraphicalUserInterface {
-    fn font_load(&mut self, context: &Context, name: &'static str, font_data: FontData, insert_font_family: InsertFontFamily) -> Result<(), io::Error> {
-        let (font_try_count_ramming, is_font_load) = self.font_load_list.entry(name).or_default();
-        font_load(context, name, font_data, insert_font_family, is_font_load, font_try_count_ramming)
-    }
-
-    fn font_load_malgun_gothic_font(&mut self, context: &Context) -> Result<(), io::Error> {
-        let font_file_contents = match fs::read(r"C:\Windows\Fonts\malgun.ttf") {
-            Ok(contents) => contents,
-            Err(error) => {
-                return Err(error);
-            }
-        };
-        let font_data = FontData::from_owned(font_file_contents);
-
-        match self.font_load(
-            context, "malgun_gothic", font_data,
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Highest,
-            },
-        ) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(error),
-        }
-    }
-
-    fn font_load_nanum_gothic_font(&mut self, context: &Context) {
-        let font_data = FontData::from_static(include_bytes!("../NanumGothic.ttf"));
-
-        match self.font_load(
-            context, "nanum_gothic", font_data,
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Highest,
-            },
-        ) {
-            Ok(_) => println!("Successfully loaded nanum gothic"),
-            Err(e) => println!("Error loading nanum gothic: {:?}", e),
-        }
-    }
-
-    fn font_load_emoji_font(&mut self, context: &Context) {
-        let font_file_contents = match fs::read(r"C:\Windows\Fonts\seguiemj.ttf") {
-            Ok(contents) => contents,
-            Err(e) => {
-                eprintln!("Error loading emoji_font: {:?}", e);
-                return;
-            }
-        };
-        let font_data = FontData::from_owned(font_file_contents);
-
-        match self.font_load(
-            context, "windows_emoji", font_data,
-            InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: FontPriority::Highest,
-            },
-        ) {
-            Ok(_) => println!("Successfully loaded emoji_font"),
-            Err(e) => println!("Error loading emoji_font: {:?}", e),
-        }
-    }
-
     fn graphical_user_interface_not_first_login(&mut self, context: &Context, encrypted_data_base: &EncryptedDB) {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of("master_login"),
-            egui::ViewportBuilder::default().with_title("마스터 로그인"),
+            egui::ViewportBuilder::default().with_title("마스터 로그인").with_inner_size([300.0, 150.0]),
             |ctx, _| {
                 if ctx.input(|i| i.viewport().close_requested()) {
                     self.window_open_list.root = false;
@@ -208,7 +133,7 @@ impl GraphicalUserInterface {
     fn graphical_user_interface_first_login(&mut self, context: &Context, data_base_header: &mut DBHeader) {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of("first_master_login"),
-            egui::ViewportBuilder::default().with_title("first_master_login").with_always_on_top().with_inner_size([300.0, 150.0]),
+            egui::ViewportBuilder::default().with_title("첫 마스터 로그인").with_inner_size([300.0, 150.0]),
             |ctx, _| {
                 if ctx.input(|input_state| input_state.viewport().close_requested()) {
                     self.window_open_list.root = false;
@@ -368,9 +293,7 @@ impl GraphicalUserInterface {
 impl Default for GraphicalUserInterface {
     fn default() -> Self {
         Self {
-            first_run: true,
             login: false,
-            font_load_list: HashMap::new(),
             string_values: Default::default(),
             window_open_list: Default::default(),
             data_base: Default::default(),
@@ -386,22 +309,9 @@ impl Default for GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if !self.window_open_list.root {
-            let mut encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.take().unwrap());
+            let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().unwrap());
             save_db(&mut self.data_base_header.unwrap(), encrypted_data_base).unwrap();
             ctx.send_viewport_cmd(ViewportCommand::Close);
-        }
-
-        if self.first_run {
-            match try_until(|| self.font_load_malgun_gothic_font(ctx), CAN_TRY_LOAD_COUNT) {
-                Ok(_) => (),
-                Err(error) => {
-                    println!("Error loading malgun gothic");
-                    println!("Error: {}", error);
-                }
-            };
-            self.font_load_nanum_gothic_font(ctx);
-            self.font_load_emoji_font(ctx);
-            self.first_run = false;
         }
 
         if !self.login {
@@ -449,6 +359,8 @@ impl eframe::App for GraphicalUserInterface {
                 }
             };
         } else {
+            ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
+            ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
             egui::CentralPanel::default().show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
@@ -465,13 +377,27 @@ impl eframe::App for GraphicalUserInterface {
                 ui.label("search");
                 ui.add(egui::TextEdit::singleline(&mut self.string_values.search_data_base));
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    for user_data in prefix_range(&self.data_base, &self.string_values.search_data_base) {
+                    for (site_name, user_data) in prefix_range(&self.data_base, &self.string_values.search_data_base) {
                         egui::Grid::new("user_data").show(ui, |ui| {
-                            let (site_name, user_data) = user_data;
                             ui.label(&*site_name.as_str());
-                            for (user_id, password) in user_data {
-                                ui.label(user_id.as_str());
+                            let button = ui.button(format!("{}", site_name.as_str()));
+                            if button.hovered() {
+
                             }
+                            if button.clicked() {
+                            }
+                            ctx.show_viewport_immediate(
+                                egui::ViewportId::from_hash_of(format!("{}_user_data", site_name.as_str())),
+                                egui::ViewportBuilder::default().with_title(format!("{}_user_data", site_name.as_str())),
+                                |ctx, _| {
+                                    egui::Grid::new(format!("{}_user_data", site_name.as_str())).show(ui, |ui| {
+                                        ui.label(format!("{}", site_name.as_str()));
+                                        for (user_identifier, encrypted_password) in user_data {
+                                            ui.label(format!("User identifier: {}", user_identifier.as_str()));
+                                        }
+                                    })
+                                }
+                            );
                         });
                     }
                 });
@@ -479,41 +405,3 @@ impl eframe::App for GraphicalUserInterface {
         }
     }
 }
-
-fn add_font(context: &Context, name: &str, font_data: FontData, font_family: InsertFontFamily) {
-    let font = FontInsert::new(name, font_data, vec![font_family]);
-    context.add_font(font);
-}
-
-pub fn font_load(
-    context: &Context,
-    name: &str,
-    font_data: FontData,
-    insert_font_family: InsertFontFamily,
-    is_font_load: &mut bool,
-    try_load_count: &mut i64,
-) -> Result<(), io::Error> {
-    if !*is_font_load {
-        *try_load_count += 1;
-        add_font(context, name, font_data, insert_font_family);
-        *is_font_load = true;
-    }
-    Ok(())
-}
-
-fn try_until<T, E>(mut to_try: impl FnMut() -> Result<T, E>, try_count: NonZeroU64) -> Result<T, E> {
-    for i in 1..=try_count.get() {
-        match to_try() {
-            Ok(v) => return Ok(v),
-            Err(e) => {
-                if i == try_count.get() {
-                    return Err(e);
-                }
-            }
-        }
-    };
-
-    unreachable!()
-}
-
-

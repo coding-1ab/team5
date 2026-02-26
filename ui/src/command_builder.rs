@@ -1,10 +1,9 @@
 use anyhow::Error;
 use eframe::egui;
-use eframe::egui::{TextEdit, ViewportBuilder, ViewportId};
+use eframe::egui::TextEdit;
 use zeroize::Zeroize;
 use engine::data_base::DB;
 use engine::user_secrets::WrappedUserKey;
-use crate::viewport_error::ViewportError;
 
 // 하나의 입력 필드를 표현
 pub struct InputField<'a> {
