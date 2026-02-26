@@ -3,8 +3,6 @@ use crate::header::{Salt};
 use crate::user_secrets::{wrap_user_key, UserKey, WrappedUserKey};
 use argon2::password_hash::rand_core;
 use argon2::{Argon2, Params};
-use ecies::PublicKey;
-use ecies::SecretKey;
 use rand_core::OsRng;
 use rand_core::RngCore;
 use std::ptr;
@@ -67,17 +65,37 @@ impl Display for MasterPWError {
 impl StdError for MasterPWError {}
 
 
+unsafe extern "C" {
+    fn sodium_init() -> i32;
+
+    fn crypto_scalarmult_base(
+        q: *mut u8,
+        n: *const u8,
+    ) -> i32;
+
+    fn crypto_scalarmult(
+        q: *mut u8,
+        n: *const u8,
+        p: *const u8,
+    ) -> i32;
+
+    fn sodium_memzero(p: *mut core::ffi::c_void, len: usize);
+}
+
+
 pub struct PubKey (
     SecretBox<[u8; 65]>,
 );
 impl PubKey {
     pub fn from_sec_key(sk: &SecKey) -> Self {
-        let mut sk_obj = SecretKey::parse(sk.as_array()).unwrap();
-        let mut pk_obj = PublicKey::from_secret_key(&sk_obj);
-        manual_zeroize!(sk_obj);
-        let boxed_pk = Box::new(pk_obj.serialize());
-        manual_zeroize!(pk_obj);
-        Self (SecretBox::new(boxed_pk))
+        let mut pk = SecretBox::new(Box::new([0u8; 65]));
+
+        let rc = unsafe {
+            crypto_scalarmult_base(pk.expose_secret_mut().as_mut_ptr(), sk.0.expose_secret().as_ptr())
+        };
+        assert_eq!(rc, 0);
+
+        PubKey (pk)
     }
     pub fn as_array(&self) -> &[u8; 65] {
         self.0.expose_secret()
@@ -85,7 +103,9 @@ impl PubKey {
 }
 impl Zeroize for PubKey {
     fn zeroize(&mut self) {
-        self.0.expose_secret_mut().zeroize();
+        unsafe {
+            sodium_memzero(self.0.expose_secret_mut().as_mut_ptr() as _, 65);;
+        }
     }
 }
 impl ZeroizeOnDrop for PubKey {}
@@ -111,6 +131,28 @@ impl Zeroize for SecKey {
 }
 impl ZeroizeOnDrop for SecKey {}
 
+struct SharedSecret (
+    SecretBox<[u8; 32]>
+);
+impl SharedSecret {}
+
+pub fn diffie_hellman(
+    sk: &SecKey,
+    peer_pk: &PubKey,
+) -> [u8; 32] {
+    let mut shared = [0u8; 32];
+
+    let rc = unsafe {
+        crypto_scalarmult(
+            shared.as_mut_ptr(),
+            sk.0.as_ptr(),
+            peer_pk.0.as_ptr(),
+        )
+    };
+    assert_eq!(rc, 0);
+
+    shared
+}
 
 #[inline]
 fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {

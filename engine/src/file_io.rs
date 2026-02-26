@@ -113,10 +113,12 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
     let read_trials = 3;
     for _ in 0..read_trials {
         let mut data = Vec::new();
-        (&db_file).seek(SeekFrom::Start(0)).map_err(|e| FileIOError::FileReadFailed(e))?;
+        (&db_file).seek(SeekFrom::Start(0))
+            .map_err(|e| FileIOError::FileReadFailed(e))?;
         (&db_file).take(u64::MAX).read_to_end(&mut data)
             .map_err(|err| FileIOError::FileReadFailed(err))?;
-        (&db_file).seek(SeekFrom::Start(0)).map_err(|e| FileIOError::FileReadFailed(e))?;
+        (&db_file).seek(SeekFrom::Start(0))
+            .map_err(|e| FileIOError::FileReadFailed(e))?;
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
