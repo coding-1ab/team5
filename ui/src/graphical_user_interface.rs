@@ -5,11 +5,14 @@
 
 // 흠 뭐부터 하지
 
+use std::collections::{BTreeMap, HashMap};
+use std::collections::btree_map::Entry;
 use std::num::NonZeroU64;
 use eframe::{
     egui::TextBuffer,
     egui::{Context, ViewportCommand, self},
 };
+use eframe::egui::UserData;
 use zeroize::Zeroize;
 use engine::{
     header::DBHeader,
@@ -19,7 +22,46 @@ use engine::{
     data_base::{prefix_range, add_user_pw, change_user_pw, get_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
     master_secrets::{change_master_pw, encrypt_db, decrypt_db, master_pw_validation, first_login, general_login, EncryptedDB, PubKey, SecKey},
 };
+use engine::data_base::DBIOError;
+use engine::user_secrets::decrypt_user_pw;
 use crate::command_builder::{CommandBuilder, CommandValue};
+
+#[derive(Default)]
+struct UserState {
+    site_name: BTreeMap<SiteName, bool>,
+    user_data: BTreeMap<SiteName, HashMap<UserID, bool>>,
+}
+
+impl UserState {
+    fn update_site_name(&mut self, site_name: SiteName, value: bool) {
+        self.site_name.insert(site_name, value);
+    }
+
+    fn get_site_name(&self, site_name: &SiteName) -> Option<&bool> {
+        self.site_name.get(site_name)
+    }
+
+    fn get_mut_site_name(&mut self, site_name: &SiteName) -> Option<&mut bool> {
+        self.site_name.get_mut(site_name)
+    }
+
+    fn entry_site_name(&mut self, site_name: SiteName) -> Entry<'_, SiteName, bool> {
+        self.site_name.entry(site_name)
+    }
+
+    fn update_user_data(&mut self, site_name: SiteName, user_id: UserID, value: bool) {
+        if let Some(data) = self.user_data.get_mut(&site_name) {
+            if value {
+                self.site_name.insert(site_name.clone(), true);
+            }
+            data.insert(user_id, value);
+        }
+    }
+
+    fn get_user_data(&self, site_name: &SiteName, user_id: &UserID) -> Option<&bool> {
+        self.user_data.get(site_name).and_then(|data| data.get(user_id))
+    }
+}
 
 struct WindowOpenList {
     root: bool,
@@ -29,7 +71,8 @@ struct WindowOpenList {
     change_user_password: bool,
     remove_user_password: bool,
     get_user_password: bool,
-    change_master_password: bool
+    change_master_password: bool,
+    user_state: UserState,
 }
 
 impl Default for WindowOpenList {
@@ -43,6 +86,7 @@ impl Default for WindowOpenList {
             remove_user_password: false,
             get_user_password: false,
             change_master_password: false,
+            user_state: Default::default()
         }
     }
 }
@@ -114,7 +158,7 @@ impl GraphicalUserInterface {
                         };
                         let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
                             Ok(decrypted_data_base) => decrypted_data_base,
-                            Err(error) => { 
+                            Err(error) => {
                                 self.string_values.global_error_message = error.to_string();
                                 return;
                             }
@@ -358,50 +402,78 @@ impl eframe::App for GraphicalUserInterface {
                     return;
                 }
             };
-        } else {
-            ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
-            ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
-            egui::CentralPanel::default().show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
-                    let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
-                    let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
-                    let get_user_password_button = ui.button("get user password").on_hover_text("get user password");
-                    let change_master_password_button = ui.button("change master password").on_hover_text("change master password");
-                    self.graphical_user_interface_add_user_password(ctx, add_user_password_button);
-                    self.graphical_user_interface_change_user_password(ctx, change_user_password_button);
-                    self.graphical_user_interface_remove_user_password(ctx, remove_user_password_button);
-                    self.graphical_user_interface_get_user_password(ctx, get_user_password_button);
-                    self.graphical_user_interface_change_master_password(ctx, change_master_password_button);
-                });
-                ui.label("search");
-                ui.add(egui::TextEdit::singleline(&mut self.string_values.search_data_base));
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for (site_name, user_data) in prefix_range(&self.data_base, &self.string_values.search_data_base) {
-                        egui::Grid::new("user_data").show(ui, |ui| {
-                            ui.label(&*site_name.as_str());
-                            let button = ui.button(format!("{}", site_name.as_str()));
-                            if button.hovered() {
-
+            return;
+        }
+        ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
+                let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
+                let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
+                let get_user_password_button = ui.button("get user password").on_hover_text("get user password");
+                let change_master_password_button = ui.button("change master password").on_hover_text("change master password");
+                self.graphical_user_interface_add_user_password(ctx, add_user_password_button);
+                self.graphical_user_interface_change_user_password(ctx, change_user_password_button);
+                self.graphical_user_interface_remove_user_password(ctx, remove_user_password_button);
+                self.graphical_user_interface_get_user_password(ctx, get_user_password_button);
+                self.graphical_user_interface_change_master_password(ctx, change_master_password_button);
+            });
+            ui.label("search");
+            ui.add(egui::TextEdit::singleline(&mut self.string_values.search_data_base));
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for (site_name, user_data) in prefix_range(&self.data_base, &self.string_values.search_data_base) {
+                    egui::Grid::new("user_data").show(ui, |ui| {
+                        ui.label(site_name.as_str());
+                        let button = ui.button(format!("{}", site_name.as_str()));
+                        if button.hovered() {
+                            ui.label(format!("{}", site_name.as_str()));
+                        }
+                        if button.clicked() {
+                            match self.window_open_list.user_state.entry_site_name(site_name.clone()) {
+                                Entry::Occupied(mut entry) => *entry.get_mut() = true,
+                                Entry::Vacant(entry) => { entry.insert(true); }
                             }
-                            if button.clicked() {
-                            }
+                        }
+                        if *self.window_open_list.user_state.get_site_name(site_name).unwrap_or(&false) {
                             ctx.show_viewport_immediate(
                                 egui::ViewportId::from_hash_of(format!("{}_user_data", site_name.as_str())),
-                                egui::ViewportBuilder::default().with_title(format!("{}_user_data", site_name.as_str())),
+                                egui::ViewportBuilder::default().with_title(format!("{} user data", site_name.as_str())),
                                 |ctx, _| {
-                                    egui::Grid::new(format!("{}_user_data", site_name.as_str())).show(ui, |ui| {
+                                    if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                                        match self.window_open_list.user_state.entry_site_name(site_name.clone()) {
+                                            Entry::Occupied(mut entry) => *entry.get_mut() = false,
+                                            Entry::Vacant(entry) => { entry.insert(false); }
+                                        }
+                                    }
+
+                                    egui::CentralPanel::default().show(ctx, |ui| {
                                         ui.label(format!("{}", site_name.as_str()));
                                         for (user_identifier, encrypted_password) in user_data {
-                                            ui.label(format!("User identifier: {}", user_identifier.as_str()));
+                                            egui::Grid::new(format!("{}", user_identifier.as_str())).show(ui, |ui| {
+                                                ui.label(format!("User identifier: {}", user_identifier.as_str()));
+                                                let button = ui.button(format!("{}", user_identifier.as_str()));
+                                                if button.hovered() {}
+                                                if button.clicked() {
+                                                    let mut user_password = match decrypt_user_pw(site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().unwrap()) {
+                                                        Ok(password) => password,
+                                                        Err(error) => {
+                                                            ui.label(format!("error: {}", error));
+                                                            return;
+                                                        }
+                                                    };
+                                                    ui.label(format!("user password: {}", user_password.as_str()));
+                                                    user_password.zeroize();
+                                                }
+                                            });
                                         }
                                     })
                                 }
                             );
-                        });
-                    }
-                });
+                        }
+                    });
+                }
             });
-        }
+        });
     }
 }
