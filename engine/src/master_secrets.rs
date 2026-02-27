@@ -8,9 +8,11 @@ use rand_core::RngCore;
 use std::ptr;
 use rkyv::rancor::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::data_base::{change_user_pw, get_user_pw, DB};
+use crate::data_base::{change_user_pw, get_user_pw, DBIOError, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
+use aes_gcm::{Aes256Gcm, KeyInit};
+use aes_gcm::aead::Aead;
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -65,95 +67,6 @@ impl Display for MasterPWError {
 impl StdError for MasterPWError {}
 
 
-unsafe extern "C" {
-    fn sodium_init() -> i32;
-
-    fn crypto_scalarmult_base(
-        q: *mut u8,
-        n: *const u8,
-    ) -> i32;
-
-    fn crypto_scalarmult(
-        q: *mut u8,
-        n: *const u8,
-        p: *const u8,
-    ) -> i32;
-
-    fn sodium_memzero(p: *mut core::ffi::c_void, len: usize);
-}
-
-
-pub struct PubKey (
-    SecretBox<[u8; 65]>,
-);
-impl PubKey {
-    pub fn from_sec_key(sk: &SecKey) -> Self {
-        let mut pk = SecretBox::new(Box::new([0u8; 65]));
-
-        let rc = unsafe {
-            crypto_scalarmult_base(pk.expose_secret_mut().as_mut_ptr(), sk.0.expose_secret().as_ptr())
-        };
-        assert_eq!(rc, 0);
-
-        PubKey (pk)
-    }
-    pub fn as_array(&self) -> &[u8; 65] {
-        self.0.expose_secret()
-    }
-}
-impl Zeroize for PubKey {
-    fn zeroize(&mut self) {
-        unsafe {
-            sodium_memzero(self.0.expose_secret_mut().as_mut_ptr() as _, 65);;
-        }
-    }
-}
-impl ZeroizeOnDrop for PubKey {}
-
-pub struct SecKey (
-    SecretBox<[u8; 32]>,
-);
-impl SecKey {
-    pub fn from_array(mut sk: [u8; 32]) -> SecKey {
-        let boxed = Box::new(sk);
-        sk.zeroize();
-
-        Self (SecretBox::new(boxed))
-    }
-    pub fn as_array(&self) -> &[u8; 32] {
-        self.0.expose_secret()
-    }
-}
-impl Zeroize for SecKey {
-    fn zeroize(&mut self) {
-        self.0.expose_secret_mut().zeroize();
-    }
-}
-impl ZeroizeOnDrop for SecKey {}
-
-struct SharedSecret (
-    SecretBox<[u8; 32]>
-);
-impl SharedSecret {}
-
-pub fn diffie_hellman(
-    sk: &SecKey,
-    peer_pk: &PubKey,
-) -> [u8; 32] {
-    let mut shared = [0u8; 32];
-
-    let rc = unsafe {
-        crypto_scalarmult(
-            shared.as_mut_ptr(),
-            sk.0.as_ptr(),
-            peer_pk.0.as_ptr(),
-        )
-    };
-    assert_eq!(rc, 0);
-
-    shared
-}
-
 #[inline]
 fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
     let halo = [40u8, 167, 39, 179, 72, 65, 122, 230, 190, 236, 125, 99, 81, 178, 50, 71, 35, 205, 141, 170, 74, 54, 227, 7, 92, 208, 212, 206, 126, 216, 55, 37];
@@ -201,31 +114,11 @@ fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
     sec_key
 }
 
-// secp256k1 곡선의 유효 범위 (N)
-const SECP256K1_ORDER: [u8; 32] = [
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
-    0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
-    0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
-];
-fn is_valid_sec_key(key: &[u8; 32]) -> bool {
-    let is_zero = key.iter().all(|&b| b == 0);
-    if is_zero { return false; }
-    for i in 0..32 {
-        if key[i] < SECP256K1_ORDER[i] { return true; }
-        if key[i] > SECP256K1_ORDER[i] { return false; }
-    }
-    false
-}
 
 pub fn general_login(master_pw: &mut String, salt: &Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
     let mut sec_key = master_pw_kdf(master_pw, salt);
     master_pw.zeroize();
-    if !is_valid_sec_key(sec_key.as_array()) {
-        sec_key.zeroize();
-        return Err(MasterPWError::IncorrectPW);
-    }
 
     let pub_key = PubKey::from_sec_key(&sec_key);
     let wrapped_user_key = get_wrapped_user_key(&sec_key);
@@ -233,38 +126,28 @@ pub fn general_login(master_pw: &mut String, salt: &Salt)
 }
 pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
     let mut salt = Salt::default();
-    let mut sec_key;
-    loop {
         OsRng.fill_bytes(salt.as_mut_slice());
-        sec_key = master_pw_kdf(&master_pw, &salt);
-        if is_valid_sec_key(sec_key.as_array()) {
-            break;
-        }
-    }
+        let sec_key = master_pw_kdf(&master_pw, &salt);
+
     master_pw.zeroize();
 
     let pub_key = PubKey::from_sec_key(&sec_key);
     let wrapped_user_key = get_wrapped_user_key(&sec_key);
-    sec_key.zeroize();
+    drop(sec_key);
 
     (pub_key, salt, wrapped_user_key)
 }
 pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: &mut WrappedUserKey)
                         -> Result<(PubKey, Salt), MasterPWError> {
     let mut salt = Salt::default();
-    let mut sec_key;
-    loop {
-        OsRng.fill_bytes(salt.as_mut_slice());
-        sec_key = master_pw_kdf(&new_master_pw, &salt);
-        if is_valid_sec_key(sec_key.as_array()) {
-            break;
-        }
-    }
+    OsRng.fill_bytes(salt.as_mut_slice());
+    let sec_key = master_pw_kdf(&new_master_pw, &salt);
+
     new_master_pw.zeroize();
 
     let mut pub_key = PubKey::from_sec_key(&sec_key);
     let mut new_wrapped_user_key = get_wrapped_user_key(&sec_key);
-    sec_key.zeroize();
+    drop(sec_key);
 
     let mut users_archive = vec![];
     for site in &mut *db {
@@ -279,8 +162,8 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
         let user_pw = get_user_pw(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
 
         if let Err(_) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key) {
-            pub_key.zeroize();
-            new_wrapped_user_key.zeroize();
+            drop(pub_key);
+            drop(new_wrapped_user_key);
             return Err(MasterPWError::InvalidSession);
         }
     }
@@ -291,27 +174,201 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 }
 
 
+#[link(name = "sodium", kind = "static")]
+unsafe extern "C" {
+    fn sodium_init() -> i32;
+    fn crypto_scalarmult_base(q: *mut u8, n: *const u8, ) -> i32;
+    fn crypto_scalarmult(q: *mut u8, n: *const u8, p: *const u8, ) -> i32;
+    fn sodium_memzero(p: *const u8, len: usize);
+}
+
+
+const ECIES_PK_SIZE: usize = 65;
+pub struct PubKey (
+    [u8; ECIES_PK_SIZE],
+);
+impl PubKey {
+    pub fn from_sec_key(sk: &SecKey) -> Self {
+        let mut pk = [0u8; 65];
+
+        let rc = unsafe {
+            crypto_scalarmult_base(pk.as_mut_ptr(), sk.0.expose_secret().as_ptr())
+        };
+        assert_eq!(rc, 0);
+
+        PubKey (pk)
+    }
+    pub fn from_slice(slice: &[u8]) -> Self {
+        let arr = slice.try_into().unwrap();
+        Self {0: arr}
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+impl Zeroize for PubKey {
+    fn zeroize(&mut self) {
+        unsafe {
+            sodium_memzero(self.0.as_mut_ptr() as _, 65);;
+        }
+    }
+}
+impl ZeroizeOnDrop for PubKey {}
+
+const ECIES_SK_SIZE: usize = 32;
+pub struct SecKey (
+    SecretBox<[u8; ECIES_SK_SIZE]>,
+);
+impl SecKey {
+    pub fn gen_rand() -> Self {
+        let mut boxed = Box::new([0u8; _]);
+        OsRng::fill_bytes(&mut OsRng, &mut *boxed);
+        SecKey (SecretBox::new(boxed))
+    }
+    pub fn from_array(mut sk: [u8; 32]) -> SecKey {
+        let boxed = Box::new(sk);
+        sk.zeroize();
+
+        Self (SecretBox::new(boxed))
+    }
+    pub fn as_array(&self) -> &[u8; 32] {
+        self.0.expose_secret()
+    }
+}
+impl Zeroize for SecKey {
+    fn zeroize(&mut self) {
+        self.0.expose_secret_mut().zeroize();
+    }
+}
+impl ZeroizeOnDrop for SecKey {}
+
+const ECIES_SHARED_SECRET_SIZE: usize = 32;
+struct SharedSecret (
+    SecretBox<[u8; ECIES_SHARED_SECRET_SIZE]>,
+);
+impl SharedSecret {
+    pub fn from_sk_pk(sk: &SecKey, pk: &PubKey) -> Self {
+        let mut shared = Box::new([0u8; _]);
+
+        let rc = unsafe {
+            crypto_scalarmult(
+                shared.as_mut_ptr(),
+                sk.0.expose_secret().as_ptr(),
+                pk.0.as_ptr(),
+            )
+        };
+        assert_eq!(rc, 0);
+
+        Self {0: SecretBox::new(shared)}
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.expose_secret()
+    }
+}
+impl Zeroize for SharedSecret {
+    fn zeroize(&mut self) {
+        unsafe {
+            sodium_memzero(self.0.expose_secret_mut().as_ptr(), 32);
+        }
+    }
+}
+impl ZeroizeOnDrop for SharedSecret {}
+
+struct AesKey {
+    key: SecretBox<[u8; 32]>,
+}
+impl AesKey {
+    pub fn from_shared_secret(shared: &SharedSecret) -> Self {
+        let halo = &[95u8, 213, 252, 194, 137, 54, 67, 46, 29, 206, 72, 249, 3, 152, 242, 90, 219, 64, 130, 21, 7, 96, 24, 187, 85, 69, 81, 233, 218, 40, 105, 233];
+        let params = Params::new(
+            8*1024, // 메모리 요구량 (KB 단위)
+            1,       // 반복 횟수
+            2,       // 병렬 처리 수준
+            Some(32),      // 출력 길이
+        ).unwrap();
+        let argon2 = Argon2::new(
+            argon2::Algorithm::Argon2id,
+            argon2::Version::V0x13,
+            params
+        );
+        let mut boxed = Box::new([0u8; 32]);
+        argon2.hash_password_into(
+            shared.as_slice(), halo,
+            boxed.as_mut()
+        ).unwrap();
+        Self {key: SecretBox::new(boxed)}
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.key.expose_secret().as_slice()
+    }
+}
+impl Zeroize for AesKey {
+    fn zeroize(&mut self) {
+        self.key.zeroize();
+    }
+}
+impl ZeroizeOnDrop for AesKey {}
+
+const AES_NONCE_BEGIN: usize = ECIES_PK_SIZE;
+const AES_NONCE_SIZE: usize = 12;
+const CIPHERTEXT_BEGIN: usize = (AES_NONCE_SIZE + ECIES_PK_SIZE).next_power_of_two();
+
+struct AesNonce {
+    nonce: [u8; AES_NONCE_SIZE]
+}
+impl AesNonce {
+    pub fn gen_rand() -> Self {
+        let mut nonce = [0u8; _];
+        OsRng::fill_bytes(&mut OsRng, nonce.as_mut_slice());
+        Self { nonce }
+    }
+    pub fn as_slice(&self) -> &[u8; AES_NONCE_SIZE] {
+        &self.nonce
+    }
+}
+
 pub type EncryptedDB = Vec<u8>;
 
 pub fn encrypt_db(db: &DB, pk: &PubKey,) -> EncryptedDB {
     let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
-    let encrypted = ecies::encrypt(pk.as_array(), &serialized).unwrap();
-    serialized.zeroize();
 
-    encrypted
+    let peer_sk = SecKey::gen_rand();
+    let shared = SharedSecret::from_sk_pk(&peer_sk, &pk);
+    let once_aes_key = AesKey::from_shared_secret(&shared);
+    drop(shared);
+    let peer_pk = PubKey::from_sec_key(&peer_sk);
+    drop(peer_sk);
+
+    let cipher = Aes256Gcm::new_from_slice(once_aes_key.as_slice()).unwrap();
+    let nonce = AesNonce::gen_rand();
+    let ciphertext =
+        cipher
+            .encrypt(aes_gcm::Nonce::from_slice(nonce.as_slice()), &*serialized).unwrap();
+    let mut result = Vec::with_capacity(CIPHERTEXT_BEGIN + ciphertext.len());
+    result[..AES_NONCE_BEGIN].copy_from_slice(peer_pk.as_slice());
+    result[AES_NONCE_BEGIN..AES_NONCE_SIZE].copy_from_slice(nonce.as_slice());
+    result[CIPHERTEXT_BEGIN..].copy_from_slice(ciphertext.as_slice());
+    result
 }
 
-pub fn decrypt_db(bytes: &[u8], mut sk: SecKey, ) -> Result<DB, MasterPWError> {
-    let mut decrypted = match ecies::decrypt(sk.as_array(), &bytes) {
-        Ok(v) => {v}
-        Err(_) => {
-            sk.zeroize();
-            return Err(MasterPWError::IncorrectPW)
-        }
-    };
-    sk.zeroize();
-    let db = rkyv::from_bytes::<DB, Error>(&decrypted).unwrap();
-    decrypted.zeroize();
+pub fn decrypt_db(bytes: &[u8], sk: SecKey, ) -> Result<DB, MasterPWError> {
+    let peer_pk = &bytes[..AES_NONCE_BEGIN];
+    let nonce = &bytes[AES_NONCE_BEGIN..AES_NONCE_SIZE];
+    let ciphertext = &bytes[CIPHERTEXT_BEGIN..];
+
+    let shared = SharedSecret::from_sk_pk(&sk, &PubKey::from_slice(peer_pk));
+    drop(sk);
+    let once_aes_key = AesKey::from_shared_secret(&shared);
+
+    let cipher = Aes256Gcm::new_from_slice(once_aes_key.as_slice()).unwrap();
+;    let nonce = aes_gcm::Nonce::from_slice(nonce);
+    let mut plaintext =
+        cipher
+            .decrypt(&nonce, ciphertext)
+            .map_err(|_| MasterPWError::IncorrectPW)?;
+    drop(once_aes_key);
+    let db = rkyv::from_bytes::<DB, Error>(&plaintext).unwrap();
+    plaintext.zeroize();
 
     Ok( db )
 }

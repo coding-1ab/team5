@@ -1,4 +1,5 @@
 #![deny(unused_must_use)]
+extern crate core;
 
 pub mod file_io;
 pub mod header;

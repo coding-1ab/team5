@@ -1,10 +1,11 @@
-use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
+use crate::header::{DBHeader, HEADER_LEN};
 use fs2::FileExt;
 use std::fs::{self, remove_file, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};
 use sha2::{Digest, Sha512};
+use crate::master_secrets::EncryptedDB;
 
 const DB_FILE: &str = "db.bin";
 const DB_BAK_FILE: &str = "db.bin.bak";

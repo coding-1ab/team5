@@ -19,8 +19,6 @@ zeroize = { workspace = true }
 crossbeam-utils = "0.8.21"
 clap = { version = "*", features = ["derive"] }
 psl = "*"
+url = { path = "libs/url-2.5.8-fork" }
 [build-dependencies]
 cc = "1.0"
-url = { path = "libs/url-2.5.8-fork" }
-#ecies = { path = "libs/ecies-0.2.8-fork" }
-#ecies = "*"
