@@ -11,8 +11,11 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::data_base::{change_user_pw, get_user_pw, DBIOError, DB};
 use std::fmt::{Display, Formatter};
 use std::error::Error as StdError;
+use std::ffi::c_uchar;
 use aes_gcm::{Aes256Gcm, KeyInit};
 use aes_gcm::aead::Aead;
+use libsodium_sys as sodium;
+use libsodium_sys::{crypto_scalarmult, crypto_scalarmult_curve25519_base, sodium_memzero};
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -174,15 +177,6 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 }
 
 
-#[link(name = "sodium", kind = "static")]
-unsafe extern "C" {
-    fn sodium_init() -> i32;
-    fn crypto_scalarmult_base(q: *mut u8, n: *const u8, ) -> i32;
-    fn crypto_scalarmult(q: *mut u8, n: *const u8, p: *const u8, ) -> i32;
-    fn sodium_memzero(p: *const u8, len: usize);
-}
-
-
 const ECIES_PK_SIZE: usize = 65;
 pub struct PubKey (
     [u8; ECIES_PK_SIZE],
@@ -192,7 +186,7 @@ impl PubKey {
         let mut pk = [0u8; 65];
 
         let rc = unsafe {
-            crypto_scalarmult_base(pk.as_mut_ptr(), sk.0.expose_secret().as_ptr())
+            crypto_scalarmult_curve25519_base(pk.as_mut_ptr(), sk.0.expose_secret().as_ptr())
         };
         assert_eq!(rc, 0);
 
@@ -268,7 +262,7 @@ impl SharedSecret {
 impl Zeroize for SharedSecret {
     fn zeroize(&mut self) {
         unsafe {
-            sodium_memzero(self.0.expose_secret_mut().as_ptr(), 32);
+            sodium_memzero(self.0.expose_secret_mut().as_mut_ptr() as *mut libc::c_uchar, 32);
         }
     }
 }
@@ -311,7 +305,8 @@ impl ZeroizeOnDrop for AesKey {}
 
 const AES_NONCE_BEGIN: usize = ECIES_PK_SIZE;
 const AES_NONCE_SIZE: usize = 12;
-const CIPHERTEXT_BEGIN: usize = (AES_NONCE_SIZE + ECIES_PK_SIZE).next_power_of_two();
+const AES_NONCE_END: usize = AES_NONCE_BEGIN + AES_NONCE_SIZE;
+const CIPHERTEXT_BEGIN: usize = AES_NONCE_END.next_power_of_two();
 
 struct AesNonce {
     nonce: [u8; AES_NONCE_SIZE]
@@ -344,16 +339,16 @@ pub fn encrypt_db(db: &DB, pk: &PubKey,) -> EncryptedDB {
     let ciphertext =
         cipher
             .encrypt(aes_gcm::Nonce::from_slice(nonce.as_slice()), &*serialized).unwrap();
-    let mut result = Vec::with_capacity(CIPHERTEXT_BEGIN + ciphertext.len());
+    let mut result = vec![0u8; CIPHERTEXT_BEGIN + ciphertext.len()];
     result[..AES_NONCE_BEGIN].copy_from_slice(peer_pk.as_slice());
-    result[AES_NONCE_BEGIN..AES_NONCE_SIZE].copy_from_slice(nonce.as_slice());
+    result[AES_NONCE_BEGIN..AES_NONCE_END].copy_from_slice(nonce.as_slice());
     result[CIPHERTEXT_BEGIN..].copy_from_slice(ciphertext.as_slice());
     result
 }
 
 pub fn decrypt_db(bytes: &[u8], sk: SecKey, ) -> Result<DB, MasterPWError> {
     let peer_pk = &bytes[..AES_NONCE_BEGIN];
-    let nonce = &bytes[AES_NONCE_BEGIN..AES_NONCE_SIZE];
+    let nonce = &bytes[AES_NONCE_BEGIN..AES_NONCE_END];
     let ciphertext = &bytes[CIPHERTEXT_BEGIN..];
 
     let shared = SharedSecret::from_sk_pk(&sk, &PubKey::from_slice(peer_pk));
