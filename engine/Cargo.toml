@@ -21,6 +21,6 @@ crossbeam-utils = "0.8.21"
 clap = { version = "*", features = ["derive"] }
 psl = "*"
 
-url = { path = "libs/url-2.5.8-fork" }
-libsodium-sys-stable = { path = "libs/libsodium-sys-stable-1.23.2-fork"}
+url = { path = "fork/url-2.5.8-fork" }
+libsodium-sys-stable = { path = "fork/libsodium-sys-stable-1.23.2-fork" }
 
