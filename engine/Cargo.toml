@@ -13,16 +13,14 @@ rand = "0.8"
 sha2 = "*"
 sha3 = "*"
 sysinfo = "0.30"
-secrecy = "*"#?
-libsodium-sys = "*"
-dryoc = '*'
-ring = "*"
-x25519-dalek = "*"
+libc = "*"
+#memsec = "*"
+secrecy = "*"
 zeroize = { workspace = true }
 crossbeam-utils = "0.8.21"
 clap = { version = "*", features = ["derive"] }
 psl = "*"
 
-url = { path = "libs/url-2.5.8-fork" }
-#ecies = { path = "libs/ecies-0.2.8-fork" }
-ecies = "*"
+url = { path = "fork/url-2.5.8-fork" }
+libsodium-sys-stable = { path = "fork/libsodium-sys-stable-1.23.2-fork" }
+

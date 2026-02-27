@@ -1,5 +1,0 @@
-[target.wasm32-unknown-unknown]
-runner = 'wasm-bindgen-test-runner'
-
-[env]
-RUST_TEST_THREADS = "1" # restrict concurrency

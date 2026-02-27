@@ -5,17 +5,9 @@ use std::error::Error;
 use std::str::FromStr;
 
 #[derive(
-    Zeroize,
-    ZeroizeOnDrop,
-    Archive,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    Debug,
-    Ord,
-    PartialOrd,
-    Clone
+    Zeroize, ZeroizeOnDrop,
+    Archive, Serialize, Deserialize,
+    PartialEq, Eq, Debug, Ord, PartialOrd, Clone
 )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct UserPW(String);
@@ -62,16 +54,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // const MAX_USER_ID_LEN: usize = 32;
 #[derive(
-    Zeroize,
-    ZeroizeOnDrop,
-    Archive,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    Debug,
-    Ord,
-    PartialOrd,
+    Zeroize, ZeroizeOnDrop,
+    Archive, Serialize, Deserialize,
+    PartialEq, Eq, Debug, Ord, PartialOrd,
 )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 #[derive(Hash)]

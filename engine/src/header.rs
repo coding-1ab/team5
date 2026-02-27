@@ -1,14 +1,13 @@
 use std::panic::panic_any;
 use crate::file_io::FileIOError;
 use bytemuck::{Pod, Zeroable};
+use crate::master_secrets::EncryptedDB;
 
 const SALT_LEN: usize = 32;
 const MAGIC_LEN: usize = 78;
 const VERSION_LEN: usize = 18;
-const _: () = {
-    const _TEST: usize = SALT_LEN + MAGIC_LEN + VERSION_LEN;
-    assert!(_TEST == 128)
-};
+const HEADER_USED_LEN: usize = SALT_LEN + MAGIC_LEN + VERSION_LEN;
+
 
 type Magic = [u8; MAGIC_LEN];
 type Version = [u8; VERSION_LEN];
@@ -20,7 +19,6 @@ pub type CipherTextLen = usize;
 const DB_MAGIC: Magic = *b"This is DB file of PW Manager. A Project Created By Team5 of 2025 Rust Study.\n";
 /// Program-internal DB format version
 const DB_VERSION: Version = *b"DB Ver: 0.1.1.004\n";
-pub type EncryptedDB = Vec<u8>;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -28,6 +26,7 @@ pub struct DBHeader {
     pub(crate) magic: Magic,
     pub(crate) version: Version,
     pub master_pw_salt: Salt,
+    _padding: [u8; HEADER_USED_LEN.next_power_of_two() - HEADER_USED_LEN],
     pub(crate) ciphertext_checksum: CiphTxtChecksum,
     pub(crate) ciphertext_len: CipherTextLen,
 }
@@ -63,6 +62,7 @@ impl DBHeader {
             magic: DB_MAGIC,
             version: DB_VERSION,
             master_pw_salt: Salt::default(),
+            _padding: [0u8; _],
             ciphertext_checksum: [0u8; _],
             ciphertext_len: 0,
         }

@@ -25,6 +25,3 @@ zeroize = { version = "*", features = ["derive"] }
 arboard = "*"
 single-instance = "*"
 
-
-[features]
-

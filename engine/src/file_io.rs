@@ -1,10 +1,11 @@
-use crate::header::{DBHeader, EncryptedDB, HEADER_LEN};
+use crate::header::{DBHeader, HEADER_LEN};
 use fs2::FileExt;
 use std::fs::{self, remove_file, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::{error::Error, fmt::{Display, Formatter}};
 use sha2::{Digest, Sha512};
+use crate::master_secrets::EncryptedDB;
 
 const DB_FILE: &str = "db.bin";
 const DB_BAK_FILE: &str = "db.bin.bak";
@@ -113,10 +114,12 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
     let read_trials = 3;
     for _ in 0..read_trials {
         let mut data = Vec::new();
-        (&db_file).seek(SeekFrom::Start(0)).map_err(|e| FileIOError::FileReadFailed(e))?;
+        (&db_file).seek(SeekFrom::Start(0))
+            .map_err(|e| FileIOError::FileReadFailed(e))?;
         (&db_file).take(u64::MAX).read_to_end(&mut data)
             .map_err(|err| FileIOError::FileReadFailed(err))?;
-        (&db_file).seek(SeekFrom::Start(0)).map_err(|e| FileIOError::FileReadFailed(e))?;
+        (&db_file).seek(SeekFrom::Start(0))
+            .map_err(|e| FileIOError::FileReadFailed(e))?;
         let (header, ciphertext) = match DBHeader::parse_header(data.as_slice()) {
             Ok(v) => v,
             Err(FileIOError::InvalidHeader) => {
