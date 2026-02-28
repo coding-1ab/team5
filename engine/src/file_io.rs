@@ -28,6 +28,7 @@ impl Display for FileIOWarn {
         }
     }
 }
+
 #[derive(Debug)]
 pub enum FileIOError {
     // Lock 관련
@@ -127,6 +128,9 @@ pub fn load_db() -> Result<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>), 
             }
             Err(err) => return Err(err)
         };
+        if header.ciphertext_len != ciphertext.len() {
+            return Ok( (Some(FileIOWarn::ResetDBForCorruptedFile), DBHeader::empty_valid(), None) )
+        }
         let hash = Sha512::digest(ciphertext.as_slice());
         if header.ciphertext_checksum.as_slice() != hash.as_slice() {
             continue;

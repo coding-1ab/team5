@@ -18,7 +18,6 @@ libc = "*"
 secrecy = "*"
 zeroize = { workspace = true }
 crossbeam-utils = "0.8.21"
-clap = { version = "*", features = ["derive"] }
 psl = "*"
 
 url = { path = "fork/url-2.5.8-fork" }
