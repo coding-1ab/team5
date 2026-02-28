@@ -51,7 +51,7 @@ impl DBHeader {
             return Err(FileIOError::DBVersionMissMatch);
         }
 
-        Ok( (header, body.into()) )
+        Ok( (header, body.to_vec()) )
     }
 
     pub fn write_to(&self, out: &mut Vec<u8>) {

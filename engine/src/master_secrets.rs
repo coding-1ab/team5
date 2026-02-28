@@ -346,7 +346,7 @@ pub fn encrypt_db(db: &DB, pk: &PubKey,) -> EncryptedDB {
     result
 }
 
-pub fn decrypt_db(bytes: &[u8], sk: SecKey) -> Result<DB, MasterPWError> {
+pub fn decrypt_db(bytes: &Vec<u8>, sk: SecKey) -> Result<DB, MasterPWError> {
     let peer_pk = &bytes[..AES_NONCE_BEGIN];
     let nonce = &bytes[AES_NONCE_BEGIN..AES_NONCE_END];
     let ciphertext = &bytes[CIPHERTEXT_BEGIN..];
