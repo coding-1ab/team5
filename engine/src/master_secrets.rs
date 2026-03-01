@@ -119,11 +119,13 @@ fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
 
 pub fn general_login(master_pw: &mut String, salt: &Salt)
                      -> Result<(SecKey, PubKey, WrappedUserKey, UserKeyNonce), MasterPWError> {
+    println!("==================================1@");
     let mut sec_key = master_pw_kdf(master_pw, salt);
     master_pw.zeroize();
-
+    println!("==================================2@");
     let pub_key = PubKey::from_sec_key(&sec_key);
     let (wrapped_user_key, user_key_nonce) = get_wrapped_user_key(&sec_key);
+    println!("==================================3@");
     Ok( (sec_key, pub_key, wrapped_user_key, user_key_nonce) )
 }
 pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey, UserKeyNonce) {
