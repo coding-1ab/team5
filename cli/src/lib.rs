@@ -231,7 +231,7 @@ pub fn cli_app() -> () {
 
                         let is_match = master_pw == master_pw_confirm;
                         master_pw.zeroize();
-                        if is_match {
+                        if !is_match {
                             println!("password is missmatch");
                             master_pw_confirm.zeroize();
                             continue;
