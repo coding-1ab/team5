@@ -284,7 +284,7 @@ pub fn wrap_user_key(mut user_key: UserKey)
 pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
                           -> Result<UserKey, DBIOError> {
     let mut wrapper = get_user_key_wrapper();
-    let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes());
+    let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes()).unwrap();
     let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
     let plaintext =
         cipher
