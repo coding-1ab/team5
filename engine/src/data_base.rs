@@ -298,8 +298,8 @@ pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key:
 
     let encrypted_pw = users.get(user_id).ok_or(DBIOError::UserNotFound)?;
 
-    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key)
-        .map_or(Err(DBIOError::InvalidSession), Ok)?;
+    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key)?;
+    
     Ok(pw)
 }
 
