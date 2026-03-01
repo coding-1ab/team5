@@ -238,7 +238,7 @@ pub fn cli_app() -> () {
                             continue;
                         }
 
-                        (pub_key, db_header.master_pw_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key, &user_key_nonce) {
+                        (pub_key, db_header.master_pw_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key, &mut user_key_nonce) {
                             Ok(v) => v,
                             Err(e) => {
                                 println!("Error setting master pw: {}", e);
