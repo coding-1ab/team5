@@ -119,14 +119,17 @@ fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
 
 pub fn general_login(master_pw: &mut String, salt: &Salt)
                      -> (SecKey, PubKey, WrappedUserKey, UserKeyNonce) {
+    let __sodium_init = sodium_init().unwrap();
     let sec_key = master_pw_kdf(master_pw, salt);
     master_pw.zeroize();
     let pub_key = PubKey::from_sec_key(&sec_key);
     let (wrapped_user_key, user_key_nonce) = get_wrapped_user_key(&sec_key);
-    
+
     (sec_key, pub_key, wrapped_user_key, user_key_nonce)
 }
-pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey, UserKeyNonce) {
+pub fn first_login(mut master_pw: String)
+    -> (PubKey, Salt, WrappedUserKey, UserKeyNonce) {
+    let __sodium_init = sodium_init().unwrap();
     let mut salt = Salt::default();
         OsRng.fill_bytes(salt.as_mut_slice());
         let sec_key = master_pw_kdf(&master_pw, &salt);
@@ -172,8 +175,6 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
     *user_key_nonce = new_user_key_nonce;
     Ok( (pub_key, salt) )
 }
-
-
 
 
 const AES_NONCE_BEGIN: usize = ECIES_PK_SIZE;
