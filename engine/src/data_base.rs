@@ -294,9 +294,11 @@ pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Re
 
 pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey)
                    -> Result<UserPW, DBIOError> {
-    let users = db.get(site_name).ok_or(DBIOError::SiteNotFound)?;
+    let users = db.get(site_name)
+        .ok_or(DBIOError::SiteNotFound)?;
 
-    let encrypted_pw = users.get(user_id).ok_or(DBIOError::UserNotFound)?;
+    let encrypted_pw = users.get(user_id)
+        .ok_or(DBIOError::UserNotFound)?;
 
     let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key)?;
     
