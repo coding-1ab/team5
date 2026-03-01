@@ -85,7 +85,7 @@ impl PubKey {
     pub fn zeroize(&mut self) {
         unsafe {
             for i in 0..ECIES_PK_SIZE {
-                write_volatile(&mut self.0[i], 0);
+                write_volatile(self.0.as_mut_ptr().add(i), 0u8);
             }
         }
     }
@@ -163,7 +163,7 @@ impl SharedSecret {
     }
     pub fn zeroize(&mut self) {
         unsafe {
-            sodium_memzero(self.ptr as *mut libc::c_uchar, Self::SIZE);
+            sodium_memzero(self.ptr, Self::SIZE);
         }
     }
 }
@@ -178,6 +178,7 @@ impl Drop for SharedSecret {
 
 // blake2b
 
+pub const BLAKE2B_BLOCK_SIZEL: usize = 128;
 pub const BLAKE2B_STATE_SIZE: usize = 384;
 struct Blake2bState<const out_len: usize> {
     ptr: *mut u8
