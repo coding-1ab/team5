@@ -317,8 +317,7 @@ pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUse
                        -> Result<UserPW, DBIOError> {
     let mut nonce = get_user_pw_nonce(site, id);
     let mut user_key = unwrap_user_key(wrapped_key)?;
-    let cipher = Aes256Gcm::new_from_slice(user_key.as_bytes())
-        .map_err(|_| DBIOError::InvalidSession)?;
+    let cipher = Aes256Gcm::new_from_slice(user_key.as_bytes()).unwrap();
     let plaintext =
         cipher
         .decrypt(aes_gcm::Nonce::from_slice(nonce.as_bytes()), encrypted_pw.as_bytes())
