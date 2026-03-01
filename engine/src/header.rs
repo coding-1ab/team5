@@ -18,7 +18,7 @@ pub type CipherTextLen = usize;
 /// Program internal magic literal
 const DB_MAGIC: Magic = *b"This is DB file of PW Manager. A Project Created By Team5 of 2025 Rust Study.\n";
 /// Program-internal DB format version
-const DB_VERSION: Version = *b"DB Ver: 0.1.1.005\n";
+const DB_VERSION: Version = *b"DB Ver: 0.1.2.000\n";
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]

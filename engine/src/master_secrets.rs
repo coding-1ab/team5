@@ -15,7 +15,7 @@ use std::ffi::c_uchar;
 use aes_gcm::{Aes256Gcm, KeyInit};
 use aes_gcm::aead::Aead;
 use libsodium_sys as sodium;
-use libsodium_sys::{crypto_scalarmult, crypto_scalarmult_curve25519_base, sodium_memzero};
+use libsodium_sys::*;
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -88,7 +88,7 @@ fn get_wrapped_user_key(sec_key: &SecKey) -> (WrappedUserKey, UserKeyNonce) {
 
     let mut user_key = UserKey::new();
     argon2
-        .hash_password_into(&sec_key.as_array().as_slice(), &halo, user_key.as_mut_bytes())
+        .hash_password_into(&sec_key.as_slice(), &halo, user_key.as_mut_bytes())
         .unwrap();
 
     wrap_user_key(user_key)

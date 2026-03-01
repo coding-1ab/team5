@@ -1,4 +1,4 @@
-use crate::user_secrets::{EncryptedUserPW, WrappedUserKey, decrypt_user_pw, encrypt_user_pw};
+use crate::user_secrets::{EncryptedUserPW, WrappedUserKey, decrypt_user_pw, encrypt_user_pw, UserKey, UserKeyNonce};
 use std::collections::{BTreeMap, HashMap};
 use rkyv::{Archive, Deserialize, Serialize};
 use std::error::Error;
@@ -252,9 +252,9 @@ impl Display for DBIOError {
 impl Error for DBIOError {}
 
 
-pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
+pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey, user_key_nonce: &UserKeyNonce)
                    -> Result<(), DBIOError> {
-    let encrypted_pw = encrypt_user_pw(&site_name, &user_id, user_pw, &wrapped_key)?;
+    let encrypted_pw = encrypt_user_pw(&site_name, &user_id, user_pw, wrapped_key, user_key_nonce)?;
 
     let users = db.entry(site_name)
         .or_insert_with(HashMap::new);
@@ -267,14 +267,14 @@ pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: U
     }
 }
 
-pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey)
+pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedUserKey, user_key_nonce: &UserKeyNonce)
                       -> Result<(), DBIOError> {
     let users = db.get_mut(site_name)
         .ok_or(DBIOError::SiteNotFound)?;
     let password = users.get_mut(user_id)
         .ok_or(DBIOError::UserNotFound)?;
     password.zeroize();
-    *password = encrypt_user_pw(site_name, user_id, new_pw, wrapped_key)?;
+    *password = encrypt_user_pw(site_name, user_id, new_pw, wrapped_key, user_key_nonce)?;
     Ok(())
 }
 
@@ -292,7 +292,7 @@ pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Re
     Ok(())
 }
 
-pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey)
+pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedUserKey, user_key_nonce: &UserKeyNonce)
                    -> Result<UserPW, DBIOError> {
     let users = db.get(site_name)
         .ok_or(DBIOError::SiteNotFound)?;
@@ -300,7 +300,7 @@ pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key:
     let encrypted_pw = users.get(user_id)
         .ok_or(DBIOError::UserNotFound)?;
 
-    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key)?;
+    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key, &user_key_nonce)?;
     
     Ok(pw)
 }
@@ -316,7 +316,7 @@ pub fn prefix_range<'a>(db: &'a DB, prefix: &str, )
     db.range(lower..upper)
 }
 
-pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) {
+pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey, user_key_nonce: UserKeyNonce) {
     let range =  prefix_range(db, &*input_site);
     for (site, credentials) in range {
         println!("Site: {}\n", site.as_str());
@@ -324,7 +324,7 @@ pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedUserKey) 
             println!(
                 "  user_id: {:?}\n  password: {:?}\n",
                 &cred.0,
-                get_user_pw(db, &site, &cred.0, &wrapped_key).ok()
+                get_user_pw(db, &site, &cred.0, &wrapped_key, &user_key_nonce).ok()
             );
         }
     }

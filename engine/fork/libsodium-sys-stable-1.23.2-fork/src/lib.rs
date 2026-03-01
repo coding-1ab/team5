@@ -6,7 +6,12 @@
 
 extern crate libc;
 
+
 mod sodium_bindings;
+
+use core::ffi::c_void;
+use core::mem::transmute;
+use libc::{c_int, ptrdiff_t};
 pub use sodium_bindings::*;
 
 /// Shared cryptographic implementations used by both WIT and WAI components
@@ -18,3 +23,7 @@ mod component;
 
 #[cfg(all(feature = "wasmer-wai", target_arch = "wasm32"))]
 mod wai_component;
+
+
+mod rust_wrappings;
+pub use rust_wrappings::*;
