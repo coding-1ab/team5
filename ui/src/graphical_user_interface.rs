@@ -5,25 +5,21 @@
 
 // 흠 뭐부터 하지
 
-use std::collections::{BTreeMap, HashMap};
-use std::collections::btree_map::Entry;
-use std::num::NonZeroU64;
+use std::collections::{BTreeMap, HashMap, btree_map::Entry};
 use eframe::{
     egui::TextBuffer,
     egui::{Context, ViewportCommand, self},
 };
-use eframe::egui::UserData;
 use zeroize::Zeroize;
 use engine::{
     header::DBHeader,
     file_io::FileIOError,
-    user_secrets::WrappedUserKey,
+    user_secrets::{decrypt_user_pw, WrappedUserKey},
     file_io::{load_db, save_db},
     data_base::{prefix_range, add_user_pw, change_user_pw, get_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
     master_secrets::{change_master_pw, encrypt_db, decrypt_db, master_pw_validation, first_login, general_login, EncryptedDB, PubKey, SecKey},
 };
-use engine::data_base::DBIOError;
-use engine::user_secrets::decrypt_user_pw;
+use engine::file_io::mark_as_graceful_exited_to_file;
 use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Default)]
@@ -92,11 +88,16 @@ impl Default for WindowOpenList {
 }
 
 #[derive(Default)]
-struct StringValues {
+struct MasterLogin {
     password: String,
     recheck_password: String,
-    global_error_message: String,
+    error_message: String,
+}
+
+#[derive(Default)]
+struct StringValues {
     search_data_base: String,
+    master_login: MasterLogin,
     command_value: CommandValue,
 }
 
@@ -134,32 +135,32 @@ impl GraphicalUserInterface {
                 }
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label("input master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.string_values.password).password(true));
+                    ui.add(egui::TextEdit::singleline(&mut self.string_values.master_login.password).password(true));
                     ui.label("input recheck master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.string_values.recheck_password).password(true));
-                    ui.label(&self.string_values.global_error_message);
+                    ui.add(egui::TextEdit::singleline(&mut self.string_values.master_login.recheck_password).password(true));
+                    ui.label(&self.string_values.master_login.error_message);
                     if ui.button("login").clicked() {
-                        if self.string_values.password != self.string_values.recheck_password {
-                            self.string_values.global_error_message = "invalid password".to_string();
+                        if self.string_values.master_login.password != self.string_values.master_login.recheck_password {
+                            self.string_values.master_login.error_message = "invalid password".to_string();
                             return;
                         }
-                        let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.password.take(), &self.data_base_header.unwrap().master_pw_salt) {
+                        let (secret_key, public_key, wrapped_user_key) = match general_login(&mut self.string_values.master_login.password.take(), &self.data_base_header.expect("unreachable").master_pw_salt) {
                             Ok(value) => {
-                                self.string_values.password.zeroize();
-                                self.string_values.recheck_password.zeroize();
+                                self.string_values.master_login.password.zeroize();
+                                self.string_values.master_login.recheck_password.zeroize();
                                 value
                             },
                             Err(error) => {
-                                self.string_values.global_error_message = error.to_string();
-                                self.string_values.password.zeroize();
-                                self.string_values.recheck_password.zeroize();
+                                self.string_values.master_login.error_message = error.to_string();
+                                self.string_values.master_login.password.zeroize();
+                                self.string_values.master_login.recheck_password.zeroize();
                                 return;
                             }
                         };
                         let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
                             Ok(decrypted_data_base) => decrypted_data_base,
                             Err(error) => {
-                                self.string_values.global_error_message = error.to_string();
+                                self.string_values.master_login.error_message = error.to_string();
                                 return;
                             }
                         };
@@ -185,33 +186,33 @@ impl GraphicalUserInterface {
                 }
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label("input new master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.string_values.password).password(true));
+                    ui.add(egui::TextEdit::singleline(&mut self.string_values.master_login.password).password(true));
                     ui.label("recheck master password");
-                    ui.add(egui::TextEdit::singleline(&mut self.string_values.recheck_password).password(true));
-                    ui.label(&self.string_values.global_error_message);
+                    ui.add(egui::TextEdit::singleline(&mut self.string_values.master_login.recheck_password).password(true));
+                    ui.label(&self.string_values.master_login.error_message);
                     if ui.button("Accept").clicked() {
-                        if let Err(err) = master_pw_validation(&self.string_values.password) {
-                            self.string_values.global_error_message = format!("Master password validation error: {}", err);
-                            self.string_values.password.zeroize();
-                            self.string_values.recheck_password.zeroize();
+                        if let Err(err) = master_pw_validation(&self.string_values.master_login.password) {
+                            self.string_values.master_login.error_message = format!("Master password validation error: {}", err);
+                            self.string_values.master_login.password.zeroize();
+                            self.string_values.master_login.recheck_password.zeroize();
                             return;
                         }
-                        if self.string_values.password == self.string_values.recheck_password {
-                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.string_values.password.take());
-                            self.string_values.password.zeroize();
-                            self.string_values.recheck_password.zeroize();
+                        if self.string_values.master_login.password == self.string_values.master_login.recheck_password {
+                            let (public_key, data_base_header_salt, wrapped_user_key) = first_login(self.string_values.master_login.password.take());
+                            self.string_values.master_login.password.zeroize();
+                            self.string_values.master_login.recheck_password.zeroize();
                             data_base_header.master_pw_salt = data_base_header_salt;
                             self.data_base_header = Some(*data_base_header);
                             self.wrapped_user_key = Some(wrapped_user_key);
                             self.data_base = DB::default();
-                            save_db(data_base_header, encrypt_db(&DB::default(), &public_key)).unwrap();
+                            save_db(data_base_header, encrypt_db(&DB::default(), &public_key)).expect("unreachable");
                             self.public_key = Some(public_key);
                             self.window_open_list.login = true;
                             self.login = true;
                         } else {
-                            self.string_values.password.zeroize();
-                            self.string_values.recheck_password.zeroize();
-                            self.string_values.global_error_message = "password is mismatch".to_string();
+                            self.string_values.master_login.password.zeroize();
+                            self.string_values.master_login.recheck_password.zeroize();
+                            self.string_values.master_login.error_message = "password is mismatch".to_string();
                             return;
                         }
                     }
@@ -225,15 +226,15 @@ impl GraphicalUserInterface {
             .input("site name", &mut self.string_values.command_value.add_user_password.site_name)
             .input("user identifier", &mut self.string_values.command_value.add_user_password.identifier)
             .sensitive_input("password", &mut self.string_values.command_value.add_user_password.password)
-            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().unwrap())
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().expect("unreachable"))
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
                 let user_password = UserPW::new(&inputs[2].value)?;
-                add_user_pw(data_base.unwrap(), site_name, user_identifier, user_password, wrapped_user_key.unwrap())?;
+                add_user_pw(data_base.expect("unreachable"), site_name, user_identifier, user_password, wrapped_user_key.expect("unreachable"))?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.add_user_password.error_message)
             .show(context, button, &mut self.window_open_list.add_user_password);
     }
 
@@ -242,15 +243,15 @@ impl GraphicalUserInterface {
             .input("site name", &mut self.string_values.command_value.change_user_password.site_name)
             .input("user identifier", &mut self.string_values.command_value.change_user_password.identifier)
             .sensitive_input("password", &mut self.string_values.command_value.change_user_password.password)
-            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().unwrap())
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().expect("unreachable"))
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
                 let user_password = UserPW::new(&inputs[2].value)?;
-                change_user_pw(data_base.unwrap(), &site_name, &user_identifier, user_password, wrapped_user_key.unwrap())?;
+                change_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"))?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.change_user_password.error_message)
             .show(context, button, &mut self.window_open_list.change_user_password);
     }
 
@@ -262,10 +263,10 @@ impl GraphicalUserInterface {
             .execute(|inputs, data_base, _, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
-                remove_user_pw(data_base.unwrap(), &site_name, &user_identifier)?;
+                remove_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier)?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.remove_user_password.error_message)
             .show(context, button, &mut self.window_open_list.remove_user_password);
     }
 
@@ -273,43 +274,49 @@ impl GraphicalUserInterface {
         CommandBuilder::new("get user password", "get user password")
             .input("site name", &mut self.string_values.command_value.get_user_password.site_name)
             .input("user identifier", &mut self.string_values.command_value.get_user_password.identifier)
-            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().unwrap())
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().expect("unreachable"))
             .execute(|inputs, data_base, wrapped_user_key, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
-                let password = get_user_pw(data_base.unwrap(), &site_name, &user_identifier, wrapped_user_key.unwrap())?;
+                let password = get_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, wrapped_user_key.expect("unreachable"))?;
                 Ok(password)
             })
             .on_success(|password| {
                 self.get_user_password_user_password = Some(password);
             })
-            .error_message(&mut self.string_values.global_error_message)
+            .error_message(&mut self.string_values.command_value.get_user_password.error_message)
             .show(context, button, &mut self.window_open_list.get_user_password);
     }
 
     fn graphical_user_interface_change_master_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("change master password", "change master password")
             .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password)
-            .database(&mut self.data_base).user_key_mut(self.wrapped_user_key.as_mut().unwrap())
+            .database(&mut self.data_base).user_key_mut(self.wrapped_user_key.as_mut().expect("unreachable"))
             .execute(|inputs, data_base, _, wrapped_user_key_mut| {
+                let data_base = data_base.expect("unreachable");
                 if let Err(error) = master_pw_validation(inputs[0].value) {
                     return Err(error.into());
                 }
-                let (public_key, salt) = change_master_pw(data_base.unwrap(), inputs[0].value.take(), wrapped_user_key_mut.unwrap())?;
+                let (public_key, salt) = change_master_pw(data_base, inputs[0].value.take(), wrapped_user_key_mut.expect("unreachable"))?;
+
+                self.data_base_header.expect("unreachable").master_pw_salt = salt;
                 self.public_key = Some(public_key);
-                self.data_base_header.unwrap().master_pw_salt = salt;
+                
+                save_db(self.data_base_header.as_mut().expect("unreachable"), encrypt_db(data_base, self.public_key.as_ref().expect("unreachable")))?;
+                mark_as_graceful_exited_to_file()?;
                 Ok(())
             })
-            .on_success(|_| {}).error_message(&mut self.string_values.global_error_message)
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.change_master_password.error_message)
             .show(context, button, &mut self.window_open_list.change_master_password);
     }
 
-    fn graphical_user_interface_save_data_base(&self) -> Result<(), FileIOError> {
-        save_db(&mut self.data_base_header.unwrap(), encrypt_db(&self.data_base, self.public_key.as_ref().unwrap()))
+    fn graphical_user_interface_save_data_base(&mut self) -> Result<(), FileIOError> {
+        save_db(self.data_base_header.as_mut().expect("unreachable"), encrypt_db(&self.data_base, self.public_key.as_ref().expect("unreachable")))?;
+        mark_as_graceful_exited_to_file()
     }
 
     fn graphical_user_interface_exit_application_with_save_data_base(&mut self) -> String {
-        match save_db(&mut self.data_base_header.unwrap(), encrypt_db(&self.data_base, self.public_key.as_ref().unwrap())) {
+        match save_db(&mut self.data_base_header.expect("unreachable"), encrypt_db(&self.data_base, self.public_key.as_ref().expect("unreachable"))) {
             Ok(_) => {
                 self.window_open_list.root = false;
                 "Successfully saved the database".to_string()
@@ -353,8 +360,8 @@ impl Default for GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if !self.window_open_list.root {
-            let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().unwrap());
-            save_db(&mut self.data_base_header.unwrap(), encrypted_data_base).unwrap();
+            let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().expect("unreachable"));
+            save_db(&mut self.data_base_header.expect("unreachable"), encrypted_data_base).expect("unreachable");
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
 
@@ -381,7 +388,7 @@ impl eframe::App for GraphicalUserInterface {
                             self.graphical_user_interface_not_first_login(ctx, &encrypted_data_base);
                         }
                         None => {
-                            self.graphical_user_interface_first_login(ctx, &mut self.data_base_header.unwrap());
+                            self.graphical_user_interface_first_login(ctx, &mut self.data_base_header.expect("unreachable"));
                         }
                     }
                 },
@@ -411,12 +418,12 @@ impl eframe::App for GraphicalUserInterface {
                 let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
                 let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
                 let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
-                let get_user_password_button = ui.button("get user password").on_hover_text("get user password");
+                // let get_user_password_button = ui.button("get user password").on_hover_text("get user password");
                 let change_master_password_button = ui.button("change master password").on_hover_text("change master password");
                 self.graphical_user_interface_add_user_password(ctx, add_user_password_button);
                 self.graphical_user_interface_change_user_password(ctx, change_user_password_button);
                 self.graphical_user_interface_remove_user_password(ctx, remove_user_password_button);
-                self.graphical_user_interface_get_user_password(ctx, get_user_password_button);
+                // self.graphical_user_interface_get_user_password(ctx, get_user_password_button);
                 self.graphical_user_interface_change_master_password(ctx, change_master_password_button);
             });
             ui.label("search");
@@ -441,6 +448,7 @@ impl eframe::App for GraphicalUserInterface {
                                 egui::ViewportBuilder::default().with_title(format!("{} user data", site_name.as_str())),
                                 |ctx, _| {
                                     if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                                        self.window_open_list.user_state.user_data.get_mut(site_name).unwrap_or(&mut HashMap::default()).clear();
                                         match self.window_open_list.user_state.entry_site_name(site_name.clone()) {
                                             Entry::Occupied(mut entry) => *entry.get_mut() = false,
                                             Entry::Vacant(entry) => { entry.insert(false); }
@@ -454,8 +462,8 @@ impl eframe::App for GraphicalUserInterface {
                                                 ui.label(format!("User identifier: {}", user_identifier.as_str()));
                                                 let button = ui.button(format!("{}", user_identifier.as_str()));
                                                 if button.hovered() {}
-                                                if button.clicked() {
-                                                    let mut user_password = match decrypt_user_pw(site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().unwrap()) {
+                                                if button.is_pointer_button_down_on() {
+                                                    let mut user_password = match decrypt_user_pw(site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().expect("unreachable")) {
                                                         Ok(password) => password,
                                                         Err(error) => {
                                                             ui.label(format!("error: {}", error));
@@ -467,7 +475,7 @@ impl eframe::App for GraphicalUserInterface {
                                                 }
                                             });
                                         }
-                                    })
+                                    });
                                 }
                             );
                         }

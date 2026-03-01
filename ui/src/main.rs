@@ -17,7 +17,7 @@ fn main() {
             "eframe example",
             options,
             Box::new(|cc| {
-                cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+                //cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
                 let malgun_gothic_font_file_contents = match fs::read(r"C:\Windows\Fonts\malgun.ttf") {
                     Ok(contents) => contents,
                     Err(error) => {

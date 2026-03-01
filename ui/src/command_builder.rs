@@ -199,6 +199,7 @@ pub struct AddUserPassword {
     pub site_name: String,
     pub identifier: String,
     pub password: String,
+    pub error_message: String,
 }
 
 #[derive(Default)]
@@ -206,23 +207,27 @@ pub struct ChangeUserPassword {
     pub site_name: String,
     pub identifier: String,
     pub password: String,
+    pub error_message: String,
 }
 
 #[derive(Default)]
 pub struct RemoveUserPassword {
     pub site_name: String,
     pub identifier: String,
+    pub error_message: String,
 }
 
 #[derive(Default)]
 pub struct GetUserPassword {
     pub site_name: String,
     pub identifier: String,
+    pub error_message: String,
 }
 
 #[derive(Default)]
 pub struct ChangeMasterPassword {
     pub password: String,
+    pub error_message: String,
 }
 
 #[derive(Default)]
