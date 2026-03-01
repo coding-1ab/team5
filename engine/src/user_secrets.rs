@@ -20,7 +20,6 @@ use sha3::digest::generic_array::GenericArray;
 use sha3::digest::Update;
 use sha3::Sha3_256;
 
-
 struct SecretBoxRef;
 
 impl ArchiveWith<SecretBox<[u8]>> for SecretBoxRef {
