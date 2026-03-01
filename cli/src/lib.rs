@@ -113,13 +113,8 @@ pub fn cli_app() -> () {
             };
 
             let sec_key;
-            (sec_key, pub_key, wrapped_user_key, user_key_nonce) = match general_login(&mut master_pw, &db_header.master_pw_salt) {
-                Ok(v) => { v }
-                Err(e) => {
-                    println!("Error checking master pw: {}", e);
-                    continue;
-                }
-            };
+
+            (sec_key, pub_key, wrapped_user_key, user_key_nonce) = general_login(&mut master_pw, &db_header.master_pw_salt);
 
             db = match decrypt_db(encrypted_db.as_ref().unwrap(), sec_key) {
                 Ok(v) => { v }

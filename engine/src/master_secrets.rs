@@ -123,6 +123,7 @@ pub fn general_login(master_pw: &mut String, salt: &Salt)
     master_pw.zeroize();
     let pub_key = PubKey::from_sec_key(&sec_key);
     let (wrapped_user_key, user_key_nonce) = get_wrapped_user_key(&sec_key);
+    
     (sec_key, pub_key, wrapped_user_key, user_key_nonce)
 }
 pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey, UserKeyNonce) {
