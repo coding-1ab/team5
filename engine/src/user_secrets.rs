@@ -172,9 +172,8 @@ impl UserKey {
         let boxed = Box::new([0u8; _]);
         UserKey (SecretBox::new(boxed))
     }
-    pub fn from_arr(mut arr: [u8; 32]) -> Self {
-        let boxed = Box::new(arr);
-        arr.zeroize();
+    pub fn from_vec(mut vec: Vec<u8>) -> Self {
+        let boxed: Box<[u8; _]> = vec.into_boxed_slice().into();
         UserKey ( SecretBox::new(boxed))
     }
     pub fn as_bytes(&self) -> &[u8] {
@@ -254,7 +253,8 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID)
     );
 
     let mut nonce = UserPWNonce::new();
-    argon2.hash_password_into(&processed_id, &halo, nonce.as_mut_bytes())
+    argon2
+        .hash_password_into(&processed_id, &halo, nonce.as_mut_bytes())
         .unwrap();
     processed_id.zeroize();
 
@@ -285,17 +285,13 @@ pub fn wrap_user_key(mut user_key: UserKey)
 pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
                           -> Result<UserKey, DBIOError> {
     let mut wrapper = get_user_key_wrapper();
-    let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes())
-        .map_err(|_| DBIOError::InvalidSession)?;
+    let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes());
     let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
     let plaintext =
         cipher
             .decrypt(&nonce, wrapped_key.as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
-    let user_key_arr: [u8; _] = plaintext.try_into()
-            .map_err(|_| DBIOError::InvalidSession)?;
-    wrapper.zeroize();
-    let user_key = UserKey::from_arr(user_key_arr);
+    let user_key = UserKey::from_vec(plaintext);
     Ok( user_key )
 }
 
@@ -330,8 +326,7 @@ pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUse
     user_key.zeroize();
     nonce.zeroize();
     let user_pw = UserPW::from_unchecked(
-        String::from_utf8(plaintext)
-            .map_err(|_| DBIOError::InvalidSession)?
+        String::from_utf8(plaintext).unwrap()
     );
 
     Ok( user_pw )
