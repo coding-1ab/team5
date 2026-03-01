@@ -1,7 +1,7 @@
 use core::error::Error;
 use core::ffi::c_void;
 use core::intrinsics::transmute;
-use core::ptr::{addr_of_mut, copy, slice_from_raw_parts};
+use core::ptr::{addr_of_mut, copy, slice_from_raw_parts, write_volatile};
 use libc::{c_uchar, c_ulonglong, malloc};
 use crate::{crypto_aead_aes256gcm_ABYTES, crypto_aead_aes256gcm_beforenm, crypto_aead_aes256gcm_decrypt, crypto_aead_aes256gcm_decrypt_afternm, crypto_aead_aes256gcm_encrypt, crypto_aead_aes256gcm_encrypt_afternm, crypto_generichash_blake2b_final, crypto_generichash_blake2b_init, crypto_generichash_blake2b_init_salt_personal, crypto_generichash_blake2b_update, crypto_scalarmult, crypto_scalarmult_curve25519_base, randombytes_buf, sodium_free, sodium_malloc, sodium_memzero};
 
@@ -82,6 +82,13 @@ impl PubKey {
     pub fn get(&self) -> &[u8; ECIES_PK_SIZE] {
         &self.0
     }
+    pub fn zeroize(&mut self) {
+        unsafe {
+            for i in 0..ECIES_PK_SIZE {
+                write_volatile(&mut self.0[i], 0);
+            }
+        }
+    }
 }
 
 pub const ECIES_SK_SIZE: usize = 32;
@@ -102,7 +109,7 @@ impl SecKey {
     pub fn from_array(arr: [u8; ECIES_SK_SIZE]) -> Self {
         unsafe {
             let ptr: *mut u8 = sodium_malloc(Self::SIZE).cast();
-            
+
             ptr.copy_from(arr.as_ptr(), Self::SIZE);
 
             Self {ptr}
