@@ -118,12 +118,12 @@ fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
 
 
 pub fn general_login(master_pw: &mut String, salt: &Salt)
-                     -> Result<(SecKey, PubKey, WrappedUserKey, UserKeyNonce), MasterPWError> {
-    let mut sec_key = master_pw_kdf(master_pw, salt);
+                     -> (SecKey, PubKey, WrappedUserKey, UserKeyNonce) {
+    let sec_key = master_pw_kdf(master_pw, salt);
     master_pw.zeroize();
     let pub_key = PubKey::from_sec_key(&sec_key);
     let (wrapped_user_key, user_key_nonce) = get_wrapped_user_key(&sec_key);
-    Ok( (sec_key, pub_key, wrapped_user_key, user_key_nonce) )
+    (sec_key, pub_key, wrapped_user_key, user_key_nonce)
 }
 pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey, UserKeyNonce) {
     let mut salt = Salt::default();
@@ -139,7 +139,7 @@ pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey, User
     (pub_key, salt, wrapped_user_key, user_key_noce)
 }
 pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: &mut WrappedUserKey, user_key_nonce: &mut UserKeyNonce)
-                        -> Result<(PubKey, Salt), MasterPWError> {
+                        -> Result<(PubKey, Salt), DBIOError> {
     let mut salt = Salt::default();
     OsRng.fill_bytes(salt.as_mut_slice());
     let sec_key = master_pw_kdf(&new_master_pw, &salt);
@@ -162,12 +162,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 
         let user_pw = get_user_pw(&db, &user.0, &user.1, &wrapped_user_key, &user_key_nonce).unwrap();
 
-        if let Err(_) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key, &new_user_key_nonce) {
-            drop(pub_key);
-            drop(new_wrapped_user_key);
-            drop(new_user_key_nonce);
-            return Err(MasterPWError::InvalidSession);
-        }
+        change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key, &new_user_key_nonce)?;
     }
 
     wrapped_user_key.zeroize();

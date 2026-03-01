@@ -3,8 +3,8 @@ use core::ffi::c_void;
 use core::intrinsics::transmute;
 use core::ptr::{addr_of_mut, copy, slice_from_raw_parts, write_volatile};
 use libc::{c_uchar, c_ulonglong, malloc};
-use crate::{crypto_aead_aes256gcm_ABYTES, crypto_aead_aes256gcm_beforenm, crypto_aead_aes256gcm_decrypt, crypto_aead_aes256gcm_decrypt_afternm, crypto_aead_aes256gcm_encrypt, crypto_aead_aes256gcm_encrypt_afternm, crypto_generichash_blake2b_final, crypto_generichash_blake2b_init, crypto_generichash_blake2b_init_salt_personal, crypto_generichash_blake2b_update, crypto_scalarmult, crypto_scalarmult_curve25519_base, randombytes_buf, sodium_free, sodium_malloc, sodium_memzero};
-
+use crate::sodium_bindings;
+use crate::sodium_bindings::{crypto_aead_aes256gcm_ABYTES, crypto_aead_aes256gcm_decrypt, crypto_aead_aes256gcm_encrypt, crypto_generichash_blake2b_final, crypto_generichash_blake2b_init, crypto_generichash_blake2b_update, crypto_scalarmult, crypto_scalarmult_curve25519_base, randombytes_buf, sodium_free, sodium_malloc, sodium_memzero};
 
 /// utility
 
@@ -49,6 +49,16 @@ impl<T> Drop for SodiumBox<T> {
             sodium_free(self.ptr.cast());
         }
     }
+}
+
+
+pub fn sodium_init()-> Result<(), ()> {
+    unsafe {
+        if sodium_bindings::sodium_init() != 0 {
+            return Err(())
+        }
+    }
+    Ok(())
 }
 
 

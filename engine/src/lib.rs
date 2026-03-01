@@ -6,4 +6,4 @@ pub mod data_base;
 pub mod master_secrets;
 pub mod user_secrets;
 
-pub use libsodium_sys::*;
+pub use libsodium_sys::rust_wrappings::*;

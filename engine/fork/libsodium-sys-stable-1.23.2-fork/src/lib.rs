@@ -12,7 +12,6 @@ mod sodium_bindings;
 use core::ffi::c_void;
 use core::mem::transmute;
 use libc::{c_int, ptrdiff_t};
-pub use sodium_bindings::*;
 
 /// Shared cryptographic implementations used by both WIT and WAI components
 #[cfg(any(feature = "wasi-component", feature = "wasmer-wai"))]
@@ -25,5 +24,5 @@ mod component;
 mod wai_component;
 
 
-mod rust_wrappings;
+pub mod rust_wrappings;
 pub use rust_wrappings::*;
