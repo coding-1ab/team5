@@ -172,7 +172,7 @@ impl UserKey {
         UserKey (SecretBox::new(boxed))
     }
     pub fn from_vec(mut vec: Vec<u8>) -> Self {
-        let boxed: Box<[u8; _]> = vec.into_boxed_slice().into();
+        let boxed: Box<[u8; 32]> = vec.into_boxed_slice().into();
         UserKey ( SecretBox::new(boxed))
     }
     pub fn as_bytes(&self) -> &[u8] {
