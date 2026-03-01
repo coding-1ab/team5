@@ -55,6 +55,7 @@ impl<T> Drop for SodiumBox<T> {
 /// curve_25519
 
 pub const ECIES_PK_SIZE: usize = 65;
+#[repr(C)]
 pub struct PubKey (
     [u8; ECIES_PK_SIZE],
 );
