@@ -1,6 +1,6 @@
-use crate::manual_zeroize;
+use crate::{manual_zeroize, user_secrets};
 use crate::header::{Salt};
-use crate::user_secrets::{wrap_user_key, UserKey, WrappedUserKey};
+use crate::user_secrets::{wrap_user_key, UserKey, UserKeyNonce, WrappedUserKey};
 use argon2::password_hash::rand_core;
 use argon2::{Argon2, Params};
 use rand_core::OsRng;
@@ -71,7 +71,7 @@ impl StdError for MasterPWError {}
 
 
 #[inline]
-fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
+fn get_wrapped_user_key(sec_key: &SecKey) -> (WrappedUserKey, UserKeyNonce) {
     let halo = [40u8, 167, 39, 179, 72, 65, 122, 230, 190, 236, 125, 99, 81, 178, 50, 71, 35, 205, 141, 170, 74, 54, 227, 7, 92, 208, 212, 206, 126, 216, 55, 37];
 
     let params = Params::new(
@@ -91,8 +91,7 @@ fn get_wrapped_user_key(sec_key: &SecKey) -> WrappedUserKey {
         .hash_password_into(&sec_key.as_array().as_slice(), &halo, user_key.as_mut_bytes())
         .unwrap();
 
-    let wrapped_user_key = wrap_user_key(user_key);
-    wrapped_user_key
+    wrap_user_key(user_key)
 }
 
 fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
@@ -119,15 +118,15 @@ fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
 
 
 pub fn general_login(master_pw: &mut String, salt: &Salt)
-                     -> Result<(SecKey, PubKey, WrappedUserKey), MasterPWError> {
+                     -> Result<(SecKey, PubKey, WrappedUserKey, UserKeyNonce), MasterPWError> {
     let mut sec_key = master_pw_kdf(master_pw, salt);
     master_pw.zeroize();
 
     let pub_key = PubKey::from_sec_key(&sec_key);
-    let wrapped_user_key = get_wrapped_user_key(&sec_key);
-    Ok( (sec_key, pub_key, wrapped_user_key) )
+    let (wrapped_user_key, user_key_nonce) = get_wrapped_user_key(&sec_key);
+    Ok( (sec_key, pub_key, wrapped_user_key, user_key_nonce) )
 }
-pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
+pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey, UserKeyNonce) {
     let mut salt = Salt::default();
         OsRng.fill_bytes(salt.as_mut_slice());
         let sec_key = master_pw_kdf(&master_pw, &salt);
@@ -135,12 +134,12 @@ pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedUserKey) {
     master_pw.zeroize();
 
     let pub_key = PubKey::from_sec_key(&sec_key);
-    let wrapped_user_key = get_wrapped_user_key(&sec_key);
+    let (wrapped_user_key, user_key_noce) = get_wrapped_user_key(&sec_key);
     drop(sec_key);
 
-    (pub_key, salt, wrapped_user_key)
+    (pub_key, salt, wrapped_user_key, user_key_noce)
 }
-pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: &mut WrappedUserKey)
+pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key: &mut WrappedUserKey, user_key_nonce: &mut UserKeyNonce)
                         -> Result<(PubKey, Salt), MasterPWError> {
     let mut salt = Salt::default();
     OsRng.fill_bytes(salt.as_mut_slice());
@@ -149,7 +148,7 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
     new_master_pw.zeroize();
 
     let mut pub_key = PubKey::from_sec_key(&sec_key);
-    let mut new_wrapped_user_key = get_wrapped_user_key(&sec_key);
+    let (new_wrapped_user_key, new_user_key_nonce) = get_wrapped_user_key(&sec_key);
     drop(sec_key);
 
     let mut users_archive = vec![];
@@ -162,165 +161,29 @@ pub fn change_master_pw(db: &mut DB, mut new_master_pw: String, wrapped_user_key
 
     for user in users_archive.into_iter() {
 
-        let user_pw = get_user_pw(&db, &user.0, &user.1, &wrapped_user_key).unwrap();
+        let user_pw = get_user_pw(&db, &user.0, &user.1, &wrapped_user_key, &user_key_nonce).unwrap();
 
-        if let Err(_) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key) {
+        if let Err(_) = change_user_pw(&mut *db, &user.0, &user.1, user_pw, &new_wrapped_user_key, &new_user_key_nonce) {
             drop(pub_key);
             drop(new_wrapped_user_key);
+            drop(new_user_key_nonce);
             return Err(MasterPWError::InvalidSession);
         }
     }
 
     wrapped_user_key.zeroize();
     *wrapped_user_key = new_wrapped_user_key;
+    user_key_nonce.zeroize();
+    *user_key_nonce = new_user_key_nonce;
     Ok( (pub_key, salt) )
 }
 
 
-const ECIES_PK_SIZE: usize = 65;
-pub struct PubKey (
-    [u8; ECIES_PK_SIZE],
-);
-impl PubKey {
-    pub fn from_sec_key(sk: &SecKey) -> Self {
-        let mut pk = [0u8; 65];
 
-        let rc = unsafe {
-            crypto_scalarmult_curve25519_base(pk.as_mut_ptr(), sk.0.expose_secret().as_ptr())
-        };
-        assert_eq!(rc, 0);
-
-        PubKey (pk)
-    }
-    pub fn from_slice(slice: &[u8]) -> Self {
-        let arr = slice.try_into().unwrap();
-        Self {0: arr}
-    }
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
-impl Zeroize for PubKey {
-    fn zeroize(&mut self) {
-        unsafe {
-            sodium_memzero(self.0.as_mut_ptr() as _, 65);;
-        }
-    }
-}
-impl ZeroizeOnDrop for PubKey {}
-
-const ECIES_SK_SIZE: usize = 32;
-pub struct SecKey (
-    SecretBox<[u8; ECIES_SK_SIZE]>,
-);
-impl SecKey {
-    pub fn gen_rand() -> Self {
-        let mut boxed = Box::new([0u8; _]);
-        OsRng::fill_bytes(&mut OsRng, &mut *boxed);
-        SecKey (SecretBox::new(boxed))
-    }
-    pub fn from_array(mut sk: [u8; 32]) -> SecKey {
-        let boxed = Box::new(sk);
-        sk.zeroize();
-
-        Self (SecretBox::new(boxed))
-    }
-    pub fn as_array(&self) -> &[u8; 32] {
-        self.0.expose_secret()
-    }
-}
-impl Zeroize for SecKey {
-    fn zeroize(&mut self) {
-        self.0.expose_secret_mut().zeroize();
-    }
-}
-impl ZeroizeOnDrop for SecKey {}
-
-const ECIES_SHARED_SECRET_SIZE: usize = 32;
-struct SharedSecret (
-    SecretBox<[u8; ECIES_SHARED_SECRET_SIZE]>,
-);
-impl SharedSecret {
-    pub fn from_sk_pk(sk: &SecKey, pk: &PubKey) -> Self {
-        let mut shared = Box::new([0u8; _]);
-
-        let rc = unsafe {
-            crypto_scalarmult(
-                shared.as_mut_ptr(),
-                sk.0.expose_secret().as_ptr(),
-                pk.0.as_ptr(),
-            )
-        };
-        assert_eq!(rc, 0);
-
-        Self {0: SecretBox::new(shared)}
-    }
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.expose_secret()
-    }
-}
-impl Zeroize for SharedSecret {
-    fn zeroize(&mut self) {
-        unsafe {
-            sodium_memzero(self.0.expose_secret_mut().as_mut_ptr() as *mut libc::c_uchar, 32);
-        }
-    }
-}
-impl ZeroizeOnDrop for SharedSecret {}
-
-struct AesKey {
-    key: SecretBox<[u8; 32]>,
-}
-impl AesKey {
-    pub fn from_shared_secret(shared: &SharedSecret) -> Self {
-        let halo = &[95u8, 213, 252, 194, 137, 54, 67, 46, 29, 206, 72, 249, 3, 152, 242, 90, 219, 64, 130, 21, 7, 96, 24, 187, 85, 69, 81, 233, 218, 40, 105, 233];
-        let params = Params::new(
-            8*1024, // 메모리 요구량 (KB 단위)
-            1,       // 반복 횟수
-            2,       // 병렬 처리 수준
-            Some(32),      // 출력 길이
-        ).unwrap();
-        let argon2 = Argon2::new(
-            argon2::Algorithm::Argon2id,
-            argon2::Version::V0x13,
-            params
-        );
-        let mut boxed = Box::new([0u8; 32]);
-        argon2.hash_password_into(
-            shared.as_slice(), halo,
-            boxed.as_mut()
-        ).unwrap();
-        Self {key: SecretBox::new(boxed)}
-    }
-    pub fn as_slice(&self) -> &[u8] {
-        &self.key.expose_secret().as_slice()
-    }
-}
-impl Zeroize for AesKey {
-    fn zeroize(&mut self) {
-        self.key.zeroize();
-    }
-}
-impl ZeroizeOnDrop for AesKey {}
 
 const AES_NONCE_BEGIN: usize = ECIES_PK_SIZE;
-const AES_NONCE_SIZE: usize = 12;
 const AES_NONCE_END: usize = AES_NONCE_BEGIN + AES_NONCE_SIZE;
 const CIPHERTEXT_BEGIN: usize = AES_NONCE_END.next_power_of_two();
-
-struct AesNonce {
-    nonce: [u8; AES_NONCE_SIZE]
-}
-impl AesNonce {
-    pub fn gen_rand() -> Self {
-        let mut nonce = [0u8; _];
-        OsRng::fill_bytes(&mut OsRng, nonce.as_mut_slice());
-        Self { nonce }
-    }
-    pub fn as_slice(&self) -> &[u8; AES_NONCE_SIZE] {
-        &self.nonce
-    }
-}
 
 pub type EncryptedDB = Vec<u8>;
 

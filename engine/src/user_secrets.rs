@@ -91,11 +91,11 @@ impl Zeroize for UserPWNonce {
 }
 impl ZeroizeOnDrop for UserPWNonce {}
 
-struct UserKeyNonce (
+pub struct UserKeyNonce (
     SecretBox<[u8; 12]>,
 );
 impl UserKeyNonce {
-    pub fn new() -> Self {
+    pub fn gen_rand() -> Self {
         let mut secret_boxed = SecretBox::new(Box::new([0u8; _]));
         OsRng.fill_bytes(secret_boxed.expose_secret_mut().as_mut_slice());
         UserKeyNonce (secret_boxed)
@@ -106,6 +106,10 @@ impl UserKeyNonce {
     // pub fn as_mut_bytes(&mut self) -> &mut [u8] {
     //     self.0.as_mut_slice()
     // }
+    pub fn clone(self) -> UserKeyNonce {
+        let boxed = Box::new(self.0.expose_secret().clone());
+        UserKeyNonce (SecretBox::new(boxed))
+    }
 }
 impl Zeroize for UserKeyNonce {
     fn zeroize(&mut self) {
@@ -243,7 +247,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID)
         32*1024, // 메모리 요구량 (KB 단위)
         1,        // 반복 횟수
         2,       // 병렬 처리 수준
-        Some(12),       // 출력 길이
+        Some(12),      // 출력 길이
     ).unwrap();
     let argon2 = Argon2::new(
         argon2::Algorithm::Argon2id,
@@ -260,69 +264,64 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID)
     nonce
 }
 
-
-thread_local! {
-    static USER_KEY_NONCE: RefCell<UserKeyNonce> = RefCell::new(UserKeyNonce::new());
-}
-
 pub fn wrap_user_key(mut user_key: UserKey)
-                     -> WrappedUserKey {
+                     -> (WrappedUserKey, UserKeyNonce) {
     let mut wrapper = get_user_key_wrapper();
-    USER_KEY_NONCE.with_borrow_mut(|v| *v = UserKeyNonce::new() );
-    let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
+    let nonce = UserKeyNonce::gen_rand();
+    let nonce_obj = aes_gcm::Nonce::from_slice(nonce.as_bytes());
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes()).unwrap();
     let ciphertext =
         cipher
-            .encrypt(&nonce, user_key.as_bytes()).unwrap();
+            .encrypt(&nonce_obj, user_key.as_bytes()).unwrap();
     wrapper.zeroize();
     user_key.zeroize();
     let wrapped_key = WrappedUserKey::from_vec(ciphertext);
 
-    wrapped_key
+    (wrapped_key, nonce)
 }
 
-pub fn unwrap_user_key(wrapped_key: &WrappedUserKey)
+pub fn unwrap_user_key(wrapped_key: &WrappedUserKey, nonce: &UserKeyNonce)
                           -> Result<UserKey, DBIOError> {
     let mut wrapper = get_user_key_wrapper();
     let cipher = Aes256Gcm::new_from_slice(wrapper.as_bytes()).unwrap();
-    let nonce = (USER_KEY_NONCE.with_borrow(|v| *aes_gcm::Nonce::from_slice(v.as_bytes())));
+    let nonce_obj = aes_gcm::Nonce::from_slice(nonce.as_bytes());
     let plaintext =
         cipher
-            .decrypt(&nonce, wrapped_key.as_bytes())
+            .decrypt(&nonce_obj, wrapped_key.as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
     let user_key = UserKey::from_vec(plaintext);
     Ok( user_key )
 }
 
 #[inline]
-pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey)
+pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedUserKey, user_key_nonce: &UserKeyNonce)
                        -> Result<EncryptedUserPW, DBIOError> {
-    let mut nonce = get_user_pw_nonce(site, id);
-    let mut user_key = unwrap_user_key(wrapped_key)?;
+    let mut user_key = unwrap_user_key(wrapped_key, user_key_nonce)?;
+    let mut user_pw_nonce = get_user_pw_nonce(site, id);
     let cipher = Aes256Gcm::new_from_slice(user_key.as_mut_bytes()).unwrap();
     let ciphertext =
         cipher
-            .encrypt(aes_gcm::Nonce::from_slice(nonce.as_bytes()), user_pw.as_str().as_bytes())
+            .encrypt(aes_gcm::Nonce::from_slice(user_pw_nonce.as_bytes()), user_pw.as_str().as_bytes())
             .map_err(|_| DBIOError::InvalidSession)?;
     user_key.zeroize();
-    nonce.zeroize();
+    user_pw_nonce.zeroize();
     let encrypted_pw = EncryptedUserPW::from_vec(ciphertext);
 
     Ok( encrypted_pw )
 }
 
 #[inline]
-pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUserPW, wrapped_key: &WrappedUserKey)
+pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUserPW, wrapped_key: &WrappedUserKey, user_key_nonce: &UserKeyNonce)
                        -> Result<UserPW, DBIOError> {
-    let mut nonce = get_user_pw_nonce(site, id);
-    let mut user_key = unwrap_user_key(wrapped_key)?;
+    let mut user_key = unwrap_user_key(wrapped_key, user_key_nonce)?;
+    let mut user_pw_nonce = get_user_pw_nonce(site, id);
     let cipher = Aes256Gcm::new_from_slice(user_key.as_bytes()).unwrap();
     let plaintext =
         cipher
-        .decrypt(aes_gcm::Nonce::from_slice(nonce.as_bytes()), encrypted_pw.as_bytes())
+        .decrypt(aes_gcm::Nonce::from_slice(user_pw_nonce.as_bytes()), encrypted_pw.as_bytes())
         .map_err(|_| DBIOError::InvalidSession)?;
     user_key.zeroize();
-    nonce.zeroize();
+    user_pw_nonce.zeroize();
     let user_pw = UserPW::from_unchecked(
         String::from_utf8(plaintext).unwrap()
     );

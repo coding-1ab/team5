@@ -36,6 +36,7 @@ pub fn cli_app() -> () {
     let mut db: DB;
     let mut pub_key;
     let mut wrapped_user_key;
+    let mut user_key_nonce;
     if encrypted_db.is_none() {
         println!("[ First Login ]");
         loop {
@@ -62,7 +63,7 @@ pub fn cli_app() -> () {
                 continue;
             }
 
-            (pub_key, db_header.master_pw_salt, wrapped_user_key) = first_login(master_pw_confirm);
+            (pub_key, db_header.master_pw_salt, wrapped_user_key, user_key_nonce) = first_login(master_pw_confirm);
 
             break;
         }
@@ -112,7 +113,7 @@ pub fn cli_app() -> () {
             };
 
             let sec_key;
-            (sec_key, pub_key, wrapped_user_key) = match general_login(&mut master_pw, &db_header.master_pw_salt) {
+            (sec_key, pub_key, wrapped_user_key, user_key_nonce) = match general_login(&mut master_pw, &db_header.master_pw_salt) {
                 Ok(v) => { v }
                 Err(e) => {
                     println!("Error checking master pw: {}", e);
@@ -149,7 +150,7 @@ pub fn cli_app() -> () {
             Ok(request) =>
                 match request {
                     UserRequest::AddUserPW { site, id, pw } => {
-                        if let Err(e) = add_user_pw(&mut db, site, id, pw, &wrapped_user_key) {
+                        if let Err(e) = add_user_pw(&mut db, site, id, pw, &wrapped_user_key, &user_key_nonce) {
                             println!("Error adding password: {}", e);
                             continue
                         }
@@ -159,7 +160,7 @@ pub fn cli_app() -> () {
                         }
                     }
                     UserRequest::ChangeUserPW { site, id, pw } => {
-                        if let Err(e) = change_user_pw(&mut db, &site, &id, pw, &wrapped_user_key) {
+                        if let Err(e) = change_user_pw(&mut db, &site, &id, pw, &wrapped_user_key, &user_key_nonce) {
                             println!("Error changing password: {}", e);
                             continue;
                         }
@@ -179,7 +180,7 @@ pub fn cli_app() -> () {
                         }
                     }
                     UserRequest::GetUserPW { site, id } => {
-                        let pw = match get_user_pw(&mut db, &site, &id, &wrapped_user_key) {
+                        let pw = match get_user_pw(&mut db, &site, &id, &wrapped_user_key, &user_key_nonce) {
                             Ok(v) => {v}
                             Err(e) => {
                                 println!("Error getting password: {}", e);
@@ -190,7 +191,7 @@ pub fn cli_app() -> () {
                         println!("{}", pw.as_str());
                     }
                     UserRequest::GetUserPWToClipboard { site, id } => {
-                        let mut pw = match get_user_pw(&mut db, &site, &id, &wrapped_user_key) {
+                        let mut pw = match get_user_pw(&mut db, &site, &id, &wrapped_user_key, &user_key_nonce) {
                             Ok(v) => {v}
                             Err(e) => {
                                 println!("Error getting password: {}", e);
@@ -237,7 +238,7 @@ pub fn cli_app() -> () {
                             continue;
                         }
 
-                        (pub_key, db_header.master_pw_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key) {
+                        (pub_key, db_header.master_pw_salt) = match change_master_pw(&mut db, master_pw_confirm, &mut wrapped_user_key, &user_key_nonce) {
                             Ok(v) => v,
                             Err(e) => {
                                 println!("Error setting master pw: {}", e);
