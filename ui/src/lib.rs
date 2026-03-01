@@ -10,7 +10,6 @@ use engine::data_base::DB;
 #[cfg(feature = "gui")]
 pub mod graphical_user_interface;
 mod command_builder;
-mod viewport_error;
 
 struct CharacterUserInterface {
     db: DB

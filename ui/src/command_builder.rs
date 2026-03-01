@@ -3,7 +3,7 @@ use eframe::egui;
 use eframe::egui::TextEdit;
 use zeroize::Zeroize;
 use engine::data_base::DB;
-use engine::user_secrets::WrappedUserKey;
+use engine::user_secrets::{UserKeyNonce, WrappedUserKey};
 
 // 하나의 입력 필드를 표현
 pub struct InputField<'a> {
@@ -20,9 +20,11 @@ pub struct CommandBuilder<'a, Output> {
     database: Option<&'a mut DB>,
     wrapped_user_key: Option<&'a WrappedUserKey>,
     wrapped_user_key_mut: Option<&'a mut WrappedUserKey>,
+    user_key_nonce: Option<&'a UserKeyNonce>,
+    user_key_nonce_mut: Option<&'a mut UserKeyNonce>,
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
-    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>) -> Result<Output, Error> + 'a>>,
+    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>, Option<&UserKeyNonce>, Option<&mut UserKeyNonce>) -> Result<Output, Error> + 'a>>,
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
@@ -34,6 +36,8 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             database: None,
             wrapped_user_key: None,
             wrapped_user_key_mut: None,
+            user_key_nonce: None,
+            user_key_nonce_mut: None,
             on_success: Box::new(|_| {}),
             execute: None,
         }
@@ -55,10 +59,20 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self
     }
 
+    pub fn user_key_nonce(mut self, key: &'a UserKeyNonce) -> Self {
+        self.user_key_nonce = Some(key);
+        self
+    }
+
+    pub fn user_key_nonce_mut(mut self, key: &'a mut UserKeyNonce) -> Self {
+        self.user_key_nonce_mut = Some(key);
+        self
+    }
+
     // ← 여기서 핵심 변경
     pub fn execute<F>(mut self, execute_fn: F) -> Self
     where
-        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>) -> Result<Output, Error> + 'a,
+        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>, Option<&UserKeyNonce>, Option<&mut UserKeyNonce>) -> Result<Output, Error> + 'a,
     {
         self.execute = Some(Box::new(execute_fn));
         self
@@ -169,7 +183,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
         let values: &mut Vec<InputField> = &mut builder.inputs;
 
-        match (builder.execute.as_mut().unwrap())(values, builder.database.as_deref_mut(), builder.wrapped_user_key, builder.wrapped_user_key_mut.as_deref_mut()) {
+        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.wrapped_user_key, builder.wrapped_user_key_mut.as_deref_mut(), builder.user_key_nonce, builder.user_key_nonce_mut.as_deref_mut()) {
             Ok(result) => {
                 (builder.on_success)(result);
                 *window_open = false;
@@ -235,7 +249,7 @@ pub struct CommandValue {
     pub add_user_password: AddUserPassword,
     pub change_user_password: ChangeUserPassword,
     pub remove_user_password: RemoveUserPassword,
-    pub get_user_password: GetUserPassword,
+    // pub get_user_password: GetUserPassword,
     pub change_master_password: ChangeMasterPassword,
 }
 
