@@ -289,7 +289,7 @@ pub fn check_can_directly_exit() -> bool {
     let bak_path = Path::new(DB_BAK_FILE);
 
     match bak_path.exist() {
-        Ok(false) => false,
+        Ok(false) => true,
         _ => false
     }
 }
