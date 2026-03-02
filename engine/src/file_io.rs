@@ -284,3 +284,12 @@ pub fn mark_as_graceful_exited_to_file() -> Result<(), FileIOError> {
 
     Ok(())
 }
+
+pub fn check_can_directly_exit() -> bool {
+    let bak_path = Path::new(DB_BAK_FILE);
+
+    match bak_path.exist() {
+        Ok(false) => false,
+        _ => false
+    }
+}
