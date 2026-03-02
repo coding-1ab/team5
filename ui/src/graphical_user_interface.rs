@@ -70,6 +70,7 @@ struct WindowOpenList {
     remove_user_password: bool,
     // get_user_password: bool,
     change_master_password: bool,
+    reset: bool,
     user_state: UserState,
 }
 
@@ -84,6 +85,7 @@ impl Default for WindowOpenList {
             remove_user_password: false,
             // get_user_password: false,
             change_master_password: false,
+            reset: false,
             user_state: Default::default()
         }
     }
@@ -146,19 +148,9 @@ impl GraphicalUserInterface {
                             self.string_values.master_login.error_message = "invalid password".to_string();
                             return;
                         }
-                        let (secret_key, public_key, wrapped_user_key, user_key_nonce) = match general_login(&mut self.string_values.master_login.password.take(), &self.data_base_header.expect("unreachable").master_pw_salt) {
-                            Ok(value) => {
-                                self.string_values.master_login.password.zeroize();
-                                self.string_values.master_login.recheck_password.zeroize();
-                                value
-                            },
-                            Err(error) => {
-                                self.string_values.master_login.error_message = error.to_string();
-                                self.string_values.master_login.password.zeroize();
-                                self.string_values.master_login.recheck_password.zeroize();
-                                return;
-                            }
-                        };
+                        let (secret_key, public_key, wrapped_user_key, user_key_nonce) = general_login(&mut self.string_values.master_login.password.take(), &self.data_base_header.expect("unreachable").master_pw_salt);
+                        self.string_values.master_login.password.zeroize();
+                        self.string_values.master_login.recheck_password.zeroize();
                         let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
                             Ok(decrypted_data_base) => decrypted_data_base,
                             Err(error) => {
@@ -172,6 +164,29 @@ impl GraphicalUserInterface {
                         self.user_key_nonce = Some(user_key_nonce);
                         self.window_open_list.master_login = false;
                         self.login = true;
+                    }
+                    if ui.button("reset").clicked() {
+                        self.window_open_list.reset = true;
+                    }
+                    if self.window_open_list.reset {
+                        ctx.show_viewport_immediate(
+                            egui::ViewportId::from_hash_of("reset"),
+                            egui::ViewportBuilder::default().with_title("reset"),
+                            |ctx, _| {
+                                egui::CentralPanel::default().show(ctx, |ui| {
+                                    ui.label("reset?");
+                                    ui.horizontal(|ui| {
+                                        if ui.button("yes").clicked() {
+                                            *self = Self::default();
+                                            self.window_open_list.reset = false;
+                                        }
+                                        if ui.button("no").clicked() {
+                                            self.window_open_list.reset = false;
+                                        }
+                                    })
+                                })
+                            }
+                        );
                     }
                 });
             },
