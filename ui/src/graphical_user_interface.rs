@@ -6,6 +6,7 @@
 // 흠 뭐부터 하지
 
 use std::collections::{BTreeMap, HashMap, btree_map::Entry};
+use std::sync::{Arc, Mutex};
 use eframe::{
     egui::TextBuffer,
     egui::{Context, ViewportCommand, self},
@@ -25,39 +26,39 @@ use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Default)]
 struct UserState {
-    site_name: BTreeMap<SiteName, bool>,
-    user_data: BTreeMap<SiteName, HashMap<UserID, bool>>,
+    site_names: BTreeMap<SiteName, bool>,
+    user_datas: BTreeMap<SiteName, HashMap<UserID, bool>>,
 }
 
 #[allow(unused)]
 impl UserState {
     fn update_site_name(&mut self, site_name: SiteName, value: bool) {
-        self.site_name.insert(site_name, value);
+        self.site_names.insert(site_name, value);
     }
 
     fn get_site_name(&self, site_name: &SiteName) -> Option<&bool> {
-        self.site_name.get(site_name)
+        self.site_names.get(site_name)
     }
 
     fn get_mut_site_name(&mut self, site_name: &SiteName) -> Option<&mut bool> {
-        self.site_name.get_mut(site_name)
+        self.site_names.get_mut(site_name)
     }
 
     fn entry_site_name(&mut self, site_name: SiteName) -> Entry<'_, SiteName, bool> {
-        self.site_name.entry(site_name)
+        self.site_names.entry(site_name)
     }
 
     fn update_user_data(&mut self, site_name: SiteName, user_id: UserID, value: bool) {
-        if let Some(data) = self.user_data.get_mut(&site_name) {
+        if let Some(data) = self.user_datas.get_mut(&site_name) {
             if value {
-                self.site_name.insert(site_name.clone(), true);
+                self.site_names.insert(site_name.clone(), true);
             }
             data.insert(user_id, value);
         }
     }
 
     fn get_user_data(&self, site_name: &SiteName, user_id: &UserID) -> Option<&bool> {
-        self.user_data.get(site_name).and_then(|data| data.get(user_id))
+        self.user_datas.get(site_name).and_then(|data| data.get(user_id))
     }
 }
 
@@ -292,13 +293,13 @@ impl GraphicalUserInterface {
     /*
     fn graphical_user_interface_get_user_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("get user password", "get user password")
-            .input("site name", &mut self.string_values.command_value.get_user_password.site_name)
+            .input("site name", &mut self.string_values.command_value.get_user_password.site_names)
             .input("user identifier", &mut self.string_values.command_value.get_user_password.identifier)
             .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().expect("unreachable"))
             .execute(|inputs, data_base, wrapped_user_key, _, _, _| {
-                let site_name = SiteName::new(&inputs[0].value)?;
+                let site_names = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
-                let password = get_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, wrapped_user_key.expect("unreachable"))?;
+                let password = get_user_pw(data_base.expect("unreachable"), &site_names, &user_identifier, wrapped_user_key.expect("unreachable"))?;
                 Ok(password)
             })
             .on_success(|password| {
@@ -362,8 +363,6 @@ impl Default for GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if !self.window_open_list.root {
-            let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().expect("unreachable"));
-            save_db(&mut self.data_base_header.expect("unreachable"), encrypted_data_base).expect("unreachable");
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
 
@@ -417,16 +416,16 @@ impl eframe::App for GraphicalUserInterface {
         ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
                 let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
                 let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
                 // let get_user_password_button = ui.button("get user password").on_hover_text("get user password");
                 let change_master_password_button = ui.button("change master password").on_hover_text("change master password");
-                self.graphical_user_interface_add_user_password(ctx, add_user_password_button);
                 self.graphical_user_interface_change_user_password(ctx, change_user_password_button);
                 self.graphical_user_interface_remove_user_password(ctx, remove_user_password_button);
                 // self.graphical_user_interface_get_user_password(ctx, get_user_password_button);
                 self.graphical_user_interface_change_master_password(ctx, change_master_password_button);
+                                        let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
+                                        self.graphical_user_interface_add_user_password(ctx, add_user_password_button);
             });
             ui.label("search");
             ui.add(egui::TextEdit::singleline(&mut self.string_values.search_data_base));
@@ -439,51 +438,61 @@ impl eframe::App for GraphicalUserInterface {
                             ui.label(format!("{}", site_name.as_str()));
                         }
                         if button.clicked() {
-                            match self.window_open_list.user_state.entry_site_name(site_name.clone()) {
-                                Entry::Occupied(mut entry) => *entry.get_mut() = true,
-                                Entry::Vacant(entry) => { entry.insert(true); }
-                            }
+                            self.window_open_list.user_state.update_site_name(site_name.clone(), true);
                         }
-                        if *self.window_open_list.user_state.get_site_name(site_name).unwrap_or(&false) {
+                    });
+                }
+                {
+                    let user_state = &mut self.window_open_list.user_state;
+                    let UserState { user_datas, site_names } = user_state;
+                    for (site_name, is_open) in site_names.clone() {
+                        if let Some(user_data) = self.data_base.get_mut(&site_name) && is_open {
                             ctx.show_viewport_immediate(
                                 egui::ViewportId::from_hash_of(format!("{}_user_data", site_name.as_str())),
                                 egui::ViewportBuilder::default().with_title(format!("{} user data", site_name.as_str())),
                                 |ctx, _| {
                                     if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                                        self.window_open_list.user_state.user_data.get_mut(site_name).unwrap_or(&mut HashMap::default()).clear();
-                                        match self.window_open_list.user_state.entry_site_name(site_name.clone()) {
+                                        user_datas.get_mut(&site_name).unwrap_or(&mut HashMap::default()).clear();
+                                        match site_names.entry(site_name.clone()) {
                                             Entry::Occupied(mut entry) => *entry.get_mut() = false,
                                             Entry::Vacant(entry) => { entry.insert(false); }
                                         }
                                     }
 
                                     egui::CentralPanel::default().show(ctx, |ui| {
-                                        ui.label(format!("{}", site_name.as_str()));
-                                        for (user_identifier, encrypted_password) in user_data {
+                                        ui.label(site_name.as_str());
+                                        for (user_identifier, encrypted_password) in user_data.iter_mut() {
                                             egui::Grid::new(format!("{}", user_identifier.as_str())).show(ui, |ui| {
-                                                ui.label(format!("User identifier: {}", user_identifier.as_str()));
-                                                let button = ui.button(format!("{}", user_identifier.as_str()));
-                                                if button.hovered() {}
-                                                if button.is_pointer_button_down_on() {
-                                                    let mut user_password = match decrypt_user_pw(site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().expect("unreachable"), self.user_key_nonce.as_ref().expect("unreachable")) {
-                                                        Ok(password) => password,
-                                                        Err(error) => {
-                                                            ui.label(format!("error: {}", error));
-                                                            return;
-                                                        }
-                                                    };
-                                                    ui.label(format!("user password: {}", user_password.as_str()));
-                                                    user_password.zeroize();
-                                                }
+                                                ui.horizontal(|ui| {
+                                                    ui.label(format!("User identifier: {}", user_identifier.as_str()));
+                                                    let button = ui.button(format!("view password: {}", user_identifier.as_str()));
+                                                    if button.hovered() {}
+                                                    if button.is_pointer_button_down_on() {
+                                                        let mut user_password = match decrypt_user_pw(&site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().expect("unreachable"), self.user_key_nonce.as_ref().expect("unreachable")) {
+                                                            Ok(password) => password,
+                                                            Err(error) => {
+                                                                ui.label(format!("error: {}", error));
+                                                                return;
+                                                            }
+                                                        };
+                                                        ui.label(format!("user password: {}", user_password.as_str()));
+                                                        user_password.zeroize();
+                                                    }
+                                                });
                                             });
                                         }
                                     });
                                 }
                             );
                         }
-                    });
+                    }
                 }
             });
         });
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().expect("unreachable"));
+        save_db(&mut self.data_base_header.expect("unreachable"), encrypted_data_base).expect("unreachable");
     }
 }
