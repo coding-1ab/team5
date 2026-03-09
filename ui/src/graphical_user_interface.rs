@@ -1,4 +1,11 @@
-use crate::command_builder::{CommandBuilder, CommandValue};
+// todo
+// 사이트 이름 + 계정 정보 주면 저장
+// 사이트 이름 주면 계정 정보 불러오기
+// 사이트 이름 주면 계정 정복 삭제하기
+
+// 흠 뭐부터 하지
+
+use std::collections::{BTreeMap, HashMap, btree_map::Entry};
 use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
@@ -18,8 +25,8 @@ use engine::{
     },
     user_secrets::{WrappedUserKey, decrypt_user_pw},
 };
-use std::collections::{BTreeMap, HashMap, btree_map::Entry};
 use zeroize::Zeroize;
+use crate::command_builder::{CommandValue, CommandBuilder};
 
 #[derive(Default)]
 struct UserState {
@@ -281,164 +288,53 @@ impl GraphicalUserInterface {
         );
     }
 
-    fn graphical_user_interface_add_user_password(
-        &mut self,
-        context: &Context,
-        button: egui::Response,
-    ) {
+    fn graphical_user_interface_add_user_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("add user password", "add user password")
-            .input(
-                "site name",
-                &mut self.string_values.command_value.add_user_password.site_name,
-            )
-            .input(
-                "user identifier",
-                &mut self
-                    .string_values
-                    .command_value
-                    .add_user_password
-                    .identifier,
-            )
-            .sensitive_input(
-                "password",
-                &mut self.string_values.command_value.add_user_password.password,
-            )
-            .database(&mut self.data_base)
-            .user_key(self.wrapped_user_key.as_ref().expect("unreachable"))
-            .user_key_nonce(self.user_key_nonce.as_ref().expect("unreachable"))
-            .execute(
-                |inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-                    let site_name = SiteName::new(&inputs[0].value)?;
-                    let user_identifier = UserID::new(&inputs[1].value)?;
-                    let user_password = UserPW::new(&inputs[2].value)?;
-                    add_user_pw(
-                        data_base.expect("unreachable"),
-                        site_name,
-                        user_identifier,
-                        user_password,
-                        wrapped_user_key.expect("unreachable"),
-                        user_key_nonce.expect("unreachable"),
-                    )?;
-                    Ok(())
-                },
-            )
-            .on_success(|_| {})
-            .error_message(
-                &mut self
-                    .string_values
-                    .command_value
-                    .add_user_password
-                    .error_message,
-            )
-            .show(
-                context,
-                button,
-                &mut self.window_open_list.add_user_password,
-            );
+            .input("site name", &mut self.string_values.command_value.add_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.add_user_password.identifier)
+            .sensitive_input("password", &mut self.string_values.command_value.add_user_password.password)
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().expect("unreachable")).user_key_nonce(self.user_key_nonce.as_ref().expect("unreachable"))
+            .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
+                let site_name = SiteName::new(&inputs[0].value)?;
+                let user_identifier = UserID::new(&inputs[1].value)?;
+                let user_password = UserPW::new(&inputs[2].value)?;
+                add_user_pw(data_base.expect("unreachable"), site_name, user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
+                Ok(())
+            })
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.add_user_password.error_message)
+            .show(context, button, &mut self.window_open_list.add_user_password);
     }
 
     fn change_user_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("change user password", "change user password")
-            .input(
-                "site name",
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_user_password
-                    .site_name,
-            )
-            .input(
-                "user identifier",
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_user_password
-                    .identifier,
-            )
-            .sensitive_input(
-                "password",
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_user_password
-                    .password,
-            )
-            .database(&mut self.data_base)
-            .user_key(self.wrapped_user_key.as_ref().expect("unreachable"))
-            .user_key_nonce(self.user_key_nonce.as_ref().expect("unreachable"))
-            .execute(
-                |inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-                    let site_name = SiteName::new(&inputs[0].value)?;
-                    let user_identifier = UserID::new(&inputs[1].value)?;
-                    let user_password = UserPW::new(&inputs[2].value)?;
-                    change_user_pw(
-                        data_base.expect("unreachable"),
-                        &site_name,
-                        &user_identifier,
-                        user_password,
-                        wrapped_user_key.expect("unreachable"),
-                        user_key_nonce.expect("unreachable"),
-                    )?;
-                    Ok(())
-                },
-            )
-            .on_success(|_| {})
-            .error_message(
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_user_password
-                    .error_message,
-            )
-            .show(
-                context,
-                button,
-                &mut self.window_open_list.change_user_password,
-            );
+            .input("site name", &mut self.string_values.command_value.change_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.change_user_password.identifier)
+            .sensitive_input("password", &mut self.string_values.command_value.change_user_password.password)
+            .database(&mut self.data_base).user_key(self.wrapped_user_key.as_ref().expect("unreachable")).user_key_nonce(self.user_key_nonce.as_ref().expect("unreachable"))
+            .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
+                let site_name = SiteName::new(&inputs[0].value)?;
+                let user_identifier = UserID::new(&inputs[1].value)?;
+                let user_password = UserPW::new(&inputs[2].value)?;
+                change_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
+                Ok(())
+            })
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.change_user_password.error_message)
+            .show(context, button, &mut self.window_open_list.change_user_password);
     }
 
     fn remove_user_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("remove user password", "remove user password")
-            .input(
-                "site name",
-                &mut self
-                    .string_values
-                    .command_value
-                    .remove_user_password
-                    .site_name,
-            )
-            .input(
-                "user identifier",
-                &mut self
-                    .string_values
-                    .command_value
-                    .remove_user_password
-                    .identifier,
-            )
+            .input("site name", &mut self.string_values.command_value.remove_user_password.site_name)
+            .input("user identifier", &mut self.string_values.command_value.remove_user_password.identifier)
             .database(&mut self.data_base)
             .execute(|inputs, data_base, _, _, _, _| {
                 let site_name = SiteName::new(&inputs[0].value)?;
                 let user_identifier = UserID::new(&inputs[1].value)?;
-                remove_user_pw(
-                    data_base.expect("unreachable"),
-                    &site_name,
-                    &user_identifier,
-                )?;
+                remove_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier)?;
                 Ok(())
             })
-            .on_success(|_| {})
-            .error_message(
-                &mut self
-                    .string_values
-                    .command_value
-                    .remove_user_password
-                    .error_message,
-            )
-            .show(
-                context,
-                button,
-                &mut self.window_open_list.remove_user_password,
-            );
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.remove_user_password.error_message)
+            .show(context, button, &mut self.window_open_list.remove_user_password);
     }
 
     /*
@@ -460,61 +356,27 @@ impl GraphicalUserInterface {
             .show(context, button, &mut self.window_open_list.get_user_password);
     }
     */
-
-    fn graphical_user_interface_change_master_password(
-        &mut self,
-        context: &Context,
-        button: egui::Response,
-    ) {
+    
+    fn graphical_user_interface_change_master_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("change master password", "change master password")
-            .sensitive_input(
-                "master password",
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_master_password
-                    .password,
-            )
-            .database(&mut self.data_base)
-            .user_key_mut(self.wrapped_user_key.as_mut().expect("unreachable"))
-            .user_key_nonce_mut(self.user_key_nonce.as_mut().expect("unreachable"))
-            .execute(
-                |inputs, data_base, _, wrapped_user_key_mut, _, user_key_nonce_mut| {
-                    let data_base = data_base.expect("unreachable");
-                    if let Err(error) = master_pw_validation(inputs[0].value) {
-                        return Err(error.into());
-                    }
-                    let (public_key, salt) = change_master_pw(
-                        data_base,
-                        inputs[0].value.take(),
-                        wrapped_user_key_mut.expect("unreachable"),
-                        user_key_nonce_mut.expect("unreachable"),
-                    )?;
+            .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password)
+            .database(&mut self.data_base).user_key_mut(self.wrapped_user_key.as_mut().expect("unreachable")).user_key_nonce_mut(self.user_key_nonce.as_mut().expect("unreachable"))
+            .execute(|inputs, data_base, _, wrapped_user_key_mut, _, user_key_nonce_mut| {
+                let data_base = data_base.expect("unreachable");
+                if let Err(error) = master_pw_validation(inputs[0].value) {
+                    return Err(error.into());
+                }
+                let (public_key, salt) = change_master_pw(data_base, inputs[0].value.take(), wrapped_user_key_mut.expect("unreachable"), user_key_nonce_mut.expect("unreachable"))?;
 
-                    self.data_base_header.expect("unreachable").master_pw_salt = salt;
-                    self.public_key = Some(public_key);
-
-                    save_db(
-                        self.data_base_header.as_mut().expect("unreachable"),
-                        encrypt_db(data_base, self.public_key.as_ref().expect("unreachable")),
-                    )?;
-                    mark_as_graceful_exited_to_file()?;
-                    Ok(())
-                },
-            )
-            .on_success(|_| {})
-            .error_message(
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_master_password
-                    .error_message,
-            )
-            .show(
-                context,
-                button,
-                &mut self.window_open_list.change_master_password,
-            );
+                self.data_base_header.expect("unreachable").master_pw_salt = salt;
+                self.public_key = Some(public_key);
+                
+                save_db(self.data_base_header.as_mut().expect("unreachable"), encrypt_db(data_base, self.public_key.as_ref().expect("unreachable")))?;
+                mark_as_graceful_exited_to_file()?;
+                Ok(())
+            })
+            .on_success(|_| {}).error_message(&mut self.string_values.command_value.change_master_password.error_message)
+            .show(context, button, &mut self.window_open_list.change_master_password);
     }
 
     /*
@@ -721,14 +583,7 @@ impl eframe::App for GraphicalUserInterface {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let encrypted_data_base = encrypt_db(
-            &self.data_base,
-            self.public_key.as_ref().expect("unreachable"),
-        );
-        save_db(
-            &mut self.data_base_header.expect("unreachable"),
-            encrypted_data_base,
-        )
-        .expect("unreachable");
+        let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().expect("unreachable"));
+        save_db(&mut self.data_base_header.expect("unreachable"), encrypted_data_base).expect("unreachable");
     }
 }
