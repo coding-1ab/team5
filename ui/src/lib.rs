@@ -1,4 +1,7 @@
 #![deny(unused_mut)]
+#![deny(clippy::cognitive_complexity)]
+#![deny(clippy::complexity)]
+#![deny(clippy::too_many_lines)]
 
 // todo
 

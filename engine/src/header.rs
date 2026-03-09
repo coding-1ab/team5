@@ -1,4 +1,3 @@
-use std::panic::panic_any;
 use crate::file_io::FileIOError;
 use bytemuck::{Pod, Zeroable};
 use crate::master_secrets::EncryptedDB;
