@@ -1,8 +1,9 @@
+use std::collections::{BTreeMap, HashMap};
 use anyhow::Error;
 use eframe::egui;
 use eframe::egui::TextEdit;
 use zeroize::Zeroize;
-use engine::data_base::DB;
+use engine::data_base::{SiteName, DB};
 use engine::user_secrets::{UserKeyNonce, WrappedUserKey};
 
 // 하나의 입력 필드를 표현
@@ -245,12 +246,35 @@ pub struct ChangeMasterPassword {
 }
 
 #[derive(Default)]
+pub struct AddUserPasswordWithSiteName {
+    pub identifier: BTreeMap<SiteName, String>,
+    pub password: BTreeMap<SiteName, String>,
+    pub error_message: BTreeMap<SiteName, String>,
+}
+
+#[derive(Default)]
+pub struct ChangeUserPasswordWithSiteName {
+    pub identifier: BTreeMap<SiteName, String>,
+    pub password: BTreeMap<SiteName, String>,
+    pub error_message: BTreeMap<SiteName, String>,
+}
+
+#[derive(Default)]
+pub struct RemoveUserPasswordWithSiteName {
+    pub identifier: BTreeMap<SiteName, String>,
+    pub error_message: BTreeMap<SiteName, String>,
+}
+
+#[derive(Default)]
 pub struct CommandValue {
     pub add_user_password: AddUserPassword,
     pub change_user_password: ChangeUserPassword,
     pub remove_user_password: RemoveUserPassword,
     // pub get_user_password: GetUserPassword,
     pub change_master_password: ChangeMasterPassword,
+    pub add_user_password_with_site_name: AddUserPasswordWithSiteName,
+    pub change_user_password_with_site_name: ChangeUserPasswordWithSiteName,
+    pub remove_user_password_with_site_name: RemoveUserPasswordWithSiteName,
 }
 
 /*
