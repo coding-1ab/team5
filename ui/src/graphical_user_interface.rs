@@ -12,6 +12,7 @@ use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
 };
+use eframe::egui::ViewportEvent;
 use engine::file_io::{check_can_directly_exit, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, FileIOError};
 use engine::user_secrets::UserKeyNonce;
 use engine::{
@@ -359,14 +360,14 @@ impl GraphicalUserInterface {
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        if ctx.input(|input| input.viewport().close_requested()) {
+        if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root {
             ctx.send_viewport_cmd(ViewportCommand::CancelClose);
             self.window_open_list.root = false;
         }
 
         if !self.window_open_list.root {
             if check_can_directly_exit() {
-                ctx.send_viewport_cmd(Vi)
+                ctx.send_viewport_cmd(ViewportCommand::Close)
             }
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("close"),
@@ -560,11 +561,6 @@ impl eframe::App for GraphicalUserInterface {
                 }
             }
         });
-    }
-
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let encrypted_data_base = encrypt_db(&self.data_base, &self.public_key.as_ref().expect("unreachable"));
-        save_db(&mut self.data_base_header.expect("unreachable"), encrypted_data_base).expect("unreachable");
     }
 }
 
