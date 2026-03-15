@@ -13,7 +13,7 @@ use eframe::{
     egui::{self, Context, ViewportCommand},
 };
 use eframe::egui::ViewportEvent;
-use engine::file_io::{check_can_directly_exit, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, FileIOError};
+use engine::file_io::{check_can_directly_exit, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, FileIOError, FileIOWarn};
 use engine::user_secrets::UserKeyNonce;
 use engine::{
     PubKey,
@@ -133,6 +133,7 @@ struct MasterLogin {
     password: String,
     recheck_password: String,
     error_message: String,
+    warning_message: String,
 }
 
 #[derive(Default)]
@@ -229,6 +230,7 @@ impl GraphicalUserInterface {
                             },
                         );
                     }
+                    ui.label(&self.string_values.master_login.warning_message);
                 });
             },
         );
@@ -276,6 +278,7 @@ impl GraphicalUserInterface {
                             return;
                         }
                     }
+                    ui.label(&self.string_values.master_login.warning_message);
                 });
             },
         );
@@ -312,21 +315,10 @@ impl GraphicalUserInterface {
         match load_db() {
             Ok((user_warn, data_base_header, encrypted_data_base)) => {
                 self.data_base_header = Some(data_base_header);
-                if let Some(user_warn) = user_warn {
-                    ctx.show_viewport_immediate(
-                        egui::ViewportId::from_hash_of("user_warn"),
-                        egui::ViewportBuilder::default().with_title("warn"),
-                        |ctx, _| {
-                            if ctx.input(|input| input.viewport().close_requested()) {
-                                self.window_open_list.root = false;
-                                return
-                            }
-                            egui::CentralPanel::default().show(ctx, |ui| {
-                                ui.label(format!("warn: {}", user_warn));
-                            });
-                        },
-                    );
-                }
+                self.string_values.master_login.warning_message = match user_warn {
+                    Some(warning) => warning.to_string(),
+                    None => String::new(),
+                };
                 match encrypted_data_base {
                     Some(encrypted_data_base) => {
                         self.existing_user(ctx, &encrypted_data_base);
@@ -374,23 +366,25 @@ impl eframe::App for GraphicalUserInterface {
                 egui::ViewportBuilder::default().with_title("close"),
                 |ctx, _| {
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        if ui.button("cancel").clicked() {
-                            self.window_open_list.root = true;
-                            return;
-                        }
-                        if ui.button("save on exit").clicked() {
-                            if self.save_data_base().is_err() {
-                                self.string_values.save_error = "failed save".to_string();
-                            } else {
-                                self.string_values.save_error = "saved".to_string();
+                        ui.horizontal(|ui| {
+                            if ui.button("cancel").clicked() {
+                                self.window_open_list.root = true;
+                                return;
+                            }
+                            if ui.button("save on exit").clicked() {
+                                if self.save_data_base().is_err() {
+                                    self.string_values.save_error = "failed save".to_string();
+                                } else {
+                                    self.string_values.save_error = "saved".to_string();
+                                    self.window_open_list.root = false;
+                                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                                }
+                            }
+                            if ui.button("noting save").clicked() {
                                 self.window_open_list.root = false;
                                 ctx.send_viewport_cmd(ViewportCommand::Close);
                             }
-                        }
-                        if ui.button("noting save").clicked() {
-                            self.window_open_list.root = false;
-                            ctx.send_viewport_cmd(ViewportCommand::Close);
-                        }
+                        });
                         ui.label(&self.string_values.save_error);
                     });
                 }
