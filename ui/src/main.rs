@@ -1,5 +1,4 @@
 use eframe::egui::{FontData, ViewportCommand};
-use eframe::epaint::text::FontInsert;
 use single_instance::SingleInstance;
 
 fn main() {

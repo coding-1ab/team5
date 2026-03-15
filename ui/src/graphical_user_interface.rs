@@ -6,11 +6,13 @@
 // 흠 뭐부터 하지
 
 use std::collections::{BTreeMap, HashMap, btree_map::Entry};
+use std::error::Error;
+use std::fmt::Display;
 use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
 };
-use engine::file_io::{mark_as_graceful_exited_to_file, FileIOError};
+use engine::file_io::{check_can_directly_exit, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, FileIOError};
 use engine::user_secrets::UserKeyNonce;
 use engine::{
     PubKey,
@@ -27,6 +29,27 @@ use engine::{
 };
 use zeroize::Zeroize;
 use crate::command_builder::{CommandValue, CommandBuilder};
+
+#[derive(Debug)]
+enum SaveError {
+    FileIOError(FileIOError),
+    NotingPublicKey,
+    NothingDataBaseHeader
+}
+
+impl Display for SaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<FileIOError> for SaveError {
+    fn from(value: FileIOError) -> Self {
+        SaveError::FileIOError(value)
+    }
+}
+
+impl Error for SaveError {}
 
 #[derive(Default)]
 struct UserState {
@@ -115,6 +138,7 @@ struct MasterLogin {
 struct StringValues {
     search_data_base: String,
     save_data_base_label: String,
+    save_error: String,
     master_login: MasterLogin,
     command_value: CommandValue,
 }
@@ -192,11 +216,11 @@ impl GraphicalUserInterface {
                                 egui::CentralPanel::default().show(ctx, |ui| {
                                     ui.label("reset?");
                                     ui.horizontal(|ui| {
-                                        if ui.button("yes").clicked() {
+                                        if ui.button("submit").clicked() {
                                             *self = Self::default();
                                             self.window_open_list.reset = false;
                                         }
-                                        if ui.button("no").clicked() {
+                                        if ui.button("cancel").clicked() {
                                             self.window_open_list.reset = false;
                                         }
                                     })
@@ -278,9 +302,9 @@ impl GraphicalUserInterface {
             .show(context, button, &mut self.window_open_list.change_master_password);
     }
 
-    fn save_data_base(&mut self) -> Result<(), FileIOError>{
-        let encrypt_db = encrypt_db(&self.data_base, self.public_key.as_ref().expect("unreachable"));
-        save_db(self.data_base_header.as_mut().expect("unreachable"), encrypt_db)
+    fn save_data_base(&mut self) -> Result<(), SaveError>{
+        let encrypt_db = encrypt_db(&self.data_base, self.public_key.as_ref().ok_or(SaveError::NotingPublicKey)?);
+        save_db(self.data_base_header.as_mut().ok_or(SaveError::NothingDataBaseHeader)?, encrypt_db).map_err(SaveError::from)
     }
 
     fn login(&mut self, ctx: &Context) {
@@ -335,8 +359,41 @@ impl GraphicalUserInterface {
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        if ctx.input(|input| input.viewport().close_requested()) {
+            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+            self.window_open_list.root = false;
+        }
+
         if !self.window_open_list.root {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
+            if check_can_directly_exit() {
+                ctx.send_viewport_cmd(Vi)
+            }
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("close"),
+                egui::ViewportBuilder::default().with_title("close"),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        if ui.button("cancel").clicked() {
+                            self.window_open_list.root = true;
+                            return;
+                        }
+                        if ui.button("save on exit").clicked() {
+                            if self.save_data_base().is_err() {
+                                self.string_values.save_error = "failed save".to_string();
+                            } else {
+                                self.string_values.save_error = "saved".to_string();
+                                self.window_open_list.root = false;
+                                ctx.send_viewport_cmd(ViewportCommand::Close);
+                            }
+                        }
+                        if ui.button("noting save").clicked() {
+                            self.window_open_list.root = false;
+                            ctx.send_viewport_cmd(ViewportCommand::Close);
+                        }
+                        ui.label(&self.string_values.save_error);
+                    });
+                }
+            );
         }
 
         if !self.login {
@@ -409,7 +466,7 @@ impl eframe::App for GraphicalUserInterface {
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for (site_name, _) in prefix_range(&self.data_base, &self.string_values.search_data_base) {
-                    egui::Grid::new("user_data").show(ui, |ui| {
+                    ui.horizontal(|ui| {
                         ui.label(site_name.as_str());
                         let button = ui.button(site_name.as_str().to_string());
                         if button.hovered() {
@@ -533,6 +590,7 @@ fn add_user_password(
             let user_identifier = UserID::new(&inputs[1].value)?;
             let user_password = UserPW::new(&inputs[2].value)?;
             add_user_pw(data_base.expect("unreachable"), site_name, user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
+            mark_as_ungraceful_exited_to_file()?;
             Ok(())
         })
         .on_success(|_| {}).error_message(error_message)
@@ -559,6 +617,7 @@ fn add_user_password_with_site_name(
             let user_identifier = UserID::new(&inputs[0].value)?;
             let user_password = UserPW::new(&inputs[1].value)?;
             add_user_pw(data_base.expect("unreachable"), site_name.clone(), user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
+            mark_as_ungraceful_exited_to_file()?;
             Ok(())
         })
         .on_success(|_| {}).error_message(error_message)
@@ -587,6 +646,7 @@ fn change_user_password(
             let user_identifier = UserID::new(&inputs[1].value)?;
             let user_password = UserPW::new(&inputs[2].value)?;
             change_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
+            mark_as_ungraceful_exited_to_file()?;
             Ok(())
         })
         .on_success(|_| {}).error_message(error_message)
@@ -613,6 +673,7 @@ fn change_user_password_with_site_name(
             let user_identifier = UserID::new(&inputs[0].value)?;
             let user_password = UserPW::new(&inputs[1].value)?;
             change_user_pw(data_base.expect("unreachable"), site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
+            mark_as_ungraceful_exited_to_file()?;
             Ok(())
         })
         .on_success(|_| {}).error_message(error_message)
@@ -636,6 +697,7 @@ fn remove_user_password(
             let site_name = SiteName::new(&inputs[0].value)?;
             let user_identifier = UserID::new(&inputs[1].value)?;
             remove_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier)?;
+            mark_as_ungraceful_exited_to_file()?;
             Ok(())
         })
         .on_success(|_| {}).error_message(error_message)
@@ -657,6 +719,7 @@ fn remove_user_password_with_site_name(
         .execute(|inputs, data_base, _, _, _, _| {
             let user_identifier = UserID::new(&inputs[0].value)?;
             remove_user_pw(data_base.expect("unreachable"), site_name, &user_identifier)?;
+            mark_as_ungraceful_exited_to_file()?;
             Ok(())
         })
         .on_success(|_| {}).error_message(error_message)

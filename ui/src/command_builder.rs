@@ -164,7 +164,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
                     ui.label(&*error_message);
 
-                    if ui.button("Accept").clicked() {
+                    if ui.button("submit").clicked() {
                         Self::handle_accept(&mut self.inner, error_message, window_open);
                     }
                 });
