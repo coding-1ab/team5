@@ -173,7 +173,7 @@ impl GraphicalUserInterface {
     fn existing_user(&mut self, context: &Context, encrypted_data_base: &EncryptedDB) {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of("master_login"),
-            egui::ViewportBuilder::default().with_title("마스터 로그인").with_inner_size([300.0, 150.0]),
+            egui::ViewportBuilder::default().with_title("마스터 로그인").with_inner_size([300.0, 175.0]),
             |ctx, _| {
                 if ctx.input(|i| i.viewport().close_requested()) {
                     self.window_open_list.root = false;
@@ -239,7 +239,7 @@ impl GraphicalUserInterface {
     fn first_login(&mut self, context: &Context, data_base_header: &mut DBHeader) {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of("first_master_login"),
-            egui::ViewportBuilder::default().with_title("첫 마스터 로그인").with_inner_size([300.0, 150.0]),
+            egui::ViewportBuilder::default().with_title("첫 마스터 로그인").with_inner_size([300.0, 175.0]),
             |ctx, _| {
                 if ctx.input(|input_state| input_state.viewport().close_requested()) {
                     self.window_open_list.root = false;
@@ -313,12 +313,11 @@ impl GraphicalUserInterface {
 
     fn login(&mut self, ctx: &Context) {
         match load_db() {
-            Ok((user_warn, data_base_header, encrypted_data_base)) => {
+            Ok((user_warning, data_base_header, encrypted_data_base)) => {
                 self.data_base_header = Some(data_base_header);
-                self.string_values.master_login.warning_message = match user_warn {
-                    Some(warning) => warning.to_string(),
-                    None => String::new(),
-                };
+                if let Some(user_warning) = user_warning {
+                    self.string_values.master_login.warning_message = user_warning.to_string();
+                }
                 match encrypted_data_base {
                     Some(encrypted_data_base) => {
                         self.existing_user(ctx, &encrypted_data_base);
