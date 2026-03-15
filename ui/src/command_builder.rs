@@ -1,10 +1,11 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use anyhow::Error;
-use eframe::egui;
-use eframe::egui::TextEdit;
+use eframe::{egui, egui::TextEdit};
 use zeroize::Zeroize;
-use engine::data_base::{SiteName, DB};
-use engine::user_secrets::{UserKeyNonce, WrappedUserKey};
+use engine::{
+    data_base::{SiteName, DB},
+    user_secrets::{UserKeyNonce, WrappedUserKey}
+};
 
 // 하나의 입력 필드를 표현
 pub struct InputField<'a> {
@@ -25,6 +26,7 @@ pub struct CommandBuilder<'a, Output> {
     user_key_nonce_mut: Option<&'a mut UserKeyNonce>,
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
+    #[allow(clippy::complexity)]
     execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>, Option<&UserKeyNonce>, Option<&mut UserKeyNonce>) -> Result<Output, Error> + 'a>>,
 }
 
@@ -233,13 +235,6 @@ pub struct RemoveUserPassword {
 }
 
 #[derive(Default)]
-pub struct GetUserPassword {
-    pub site_name: String,
-    pub identifier: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
 pub struct ChangeMasterPassword {
     pub password: String,
     pub error_message: String,
@@ -270,7 +265,6 @@ pub struct CommandValue {
     pub add_user_password: AddUserPassword,
     pub change_user_password: ChangeUserPassword,
     pub remove_user_password: RemoveUserPassword,
-    // pub get_user_password: GetUserPassword,
     pub change_master_password: ChangeMasterPassword,
     pub add_user_password_with_site_name: AddUserPasswordWithSiteName,
     pub change_user_password_with_site_name: ChangeUserPasswordWithSiteName,

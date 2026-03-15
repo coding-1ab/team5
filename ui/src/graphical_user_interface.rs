@@ -5,31 +5,39 @@
 
 // 흠 뭐부터 하지
 
-use std::collections::{BTreeMap, HashMap, btree_map::Entry};
+use std::collections::{btree_map::Entry, BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt::Display;
 use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
 };
-use eframe::egui::ViewportEvent;
-use engine::file_io::{check_can_directly_exit, mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, FileIOError, FileIOWarn};
-use engine::user_secrets::UserKeyNonce;
-use engine::{
-    PubKey,
-    data_base::{
-        DB, SiteName, UserID, UserPW, add_user_pw, change_user_pw, prefix_range, remove_user_pw,
-    },
-    file_io::{load_db, save_db},
-    header::DBHeader,
-    master_secrets::{
-        EncryptedDB, change_master_pw, decrypt_db, encrypt_db, first_login, general_login,
-        master_pw_validation,
-    },
-    user_secrets::{WrappedUserKey, decrypt_user_pw},
-};
 use zeroize::Zeroize;
-use crate::command_builder::{CommandValue, CommandBuilder};
+use engine::{
+    file_io::{
+        check_can_directly_exit,
+        mark_as_graceful_exited_to_file,
+        mark_as_ungraceful_exited_to_file,
+        load_db,
+        save_db,
+        FileIOError,
+    },
+    user_secrets::{
+        decrypt_user_pw,
+        UserKeyNonce,
+        WrappedUserKey,
+    },
+    data_base::{
+        add_user_pw, change_user_pw, prefix_range, remove_user_pw, SiteName, UserID, UserPW, DB,
+    },
+    master_secrets::{
+        change_master_pw, decrypt_db, encrypt_db, first_login, general_login, master_pw_validation,
+        EncryptedDB,
+    },
+    header::DBHeader,
+    PubKey
+};
+use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Debug)]
 enum SaveError {
@@ -193,7 +201,7 @@ impl GraphicalUserInterface {
                             general_login(&mut self.string_values.master_login.password.take(), &self.data_base_header.expect("unreachable").master_pw_salt);
                         self.string_values.master_login.password.zeroize();
                         self.string_values.master_login.recheck_password.zeroize();
-                        let decrypted_data_base = match decrypt_db(&encrypted_data_base, secret_key) {
+                        let decrypted_data_base = match decrypt_db(encrypted_data_base, secret_key) {
                             Ok(decrypted_data_base) => decrypted_data_base,
                             Err(error) => {
                                 self.string_values.master_login.error_message = error.to_string();
@@ -341,61 +349,11 @@ impl GraphicalUserInterface {
                         });
                     },
                 );
-                return
             }
         };
-        return
     }
-}
 
-
-impl eframe::App for GraphicalUserInterface {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root {
-            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-            self.window_open_list.root = false;
-        }
-
-        if !self.window_open_list.root {
-            if check_can_directly_exit() {
-                ctx.send_viewport_cmd(ViewportCommand::Close)
-            }
-            ctx.show_viewport_immediate(
-                egui::ViewportId::from_hash_of("close"),
-                egui::ViewportBuilder::default().with_title("close"),
-                |ctx, _| {
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.button("cancel").clicked() {
-                                self.window_open_list.root = true;
-                                return;
-                            }
-                            if ui.button("save on exit").clicked() {
-                                if self.save_data_base().is_err() {
-                                    self.string_values.save_error = "failed save".to_string();
-                                } else {
-                                    self.string_values.save_error = "saved".to_string();
-                                    self.window_open_list.root = false;
-                                    ctx.send_viewport_cmd(ViewportCommand::Close);
-                                }
-                            }
-                            if ui.button("noting save").clicked() {
-                                self.window_open_list.root = false;
-                                ctx.send_viewport_cmd(ViewportCommand::Close);
-                            }
-                        });
-                        ui.label(&self.string_values.save_error);
-                    });
-                }
-            );
-        }
-
-        if !self.login {
-            self.login(ctx);
-            return;
-        }
-        ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
+    fn user_main_view(&mut self, ctx: &Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let save_data_base = ui.button("save data base");
@@ -452,12 +410,6 @@ impl eframe::App for GraphicalUserInterface {
             ui.label("search");
             ui.add(egui::TextEdit::singleline(&mut self.string_values.search_data_base));
 
-            let prefix = &self.string_values.search_data_base;
-            let lower = SiteName::from_unchecked("", prefix);
-            let mut upper_reg = prefix.to_string();
-            upper_reg.push(char::MAX);
-            let upper = SiteName::from_unchecked("", &upper_reg);
-
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for (site_name, _) in prefix_range(&self.data_base, &self.string_values.search_data_base) {
                     ui.horizontal(|ui| {
@@ -473,90 +425,147 @@ impl eframe::App for GraphicalUserInterface {
                 }
             });
 
-            let user_state = &mut self.window_open_list.user_state;
-            let UserState { user_data, site_names } = user_state;
-            for (site_name, is_open) in site_names {
-                if *is_open {
-                    ctx.show_viewport_immediate(
-                        egui::ViewportId::from_hash_of(format!("{}_user_data", site_name.as_str())),
-                        egui::ViewportBuilder::default().with_title(format!("{} user data", site_name.as_str())),
-                        |ctx, _| {
-                            if ctx.input(|input_state| { input_state.viewport().close_requested() }) {
-                                user_data.remove(site_name);
-                                *is_open = false;
-                            }
-
-                            egui::CentralPanel::default().show(ctx, |ui| {
-                                ui.label(site_name.as_str());
-                                ui.horizontal(|ui| {
-                                    let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
-                                    let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
-                                    let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
-                                    add_user_password_with_site_name(
-                                        ctx,
-                                        add_user_password_button,
-                                        site_name,
-                                        self.string_values.command_value.add_user_password_with_site_name.identifier.entry(site_name.clone()).or_default(),
-                                        self.string_values.command_value.add_user_password_with_site_name.password.entry(site_name.clone()).or_default(),
-                                        &mut self.data_base,
-                                        self.wrapped_user_key.as_ref().expect("unreachable"),
-                                        self.user_key_nonce.as_ref().expect("unreachable"),
-                                        self.string_values.command_value.add_user_password_with_site_name.error_message.entry(site_name.clone()).or_default(),
-                                        self.window_open_list.add_user_password_with_site_name.entry(site_name.clone()).or_default(),
-                                    );
-                                    change_user_password_with_site_name(
-                                        ctx,
-                                        change_user_password_button,
-                                        site_name,
-                                        self.string_values.command_value.change_user_password_with_site_name.identifier.entry(site_name.clone()).or_default(),
-                                        self.string_values.command_value.change_user_password_with_site_name.password.entry(site_name.clone()).or_default(),
-                                        &mut self.data_base,
-                                        self.wrapped_user_key.as_ref().expect("unreachable"),
-                                        self.user_key_nonce.as_ref().expect("unreachable"),
-                                        self.string_values.command_value.change_user_password_with_site_name.error_message.entry(site_name.clone()).or_default(),
-                                        self.window_open_list.change_user_password_with_site_name.entry(site_name.clone()).or_default(),
-                                    );
-                                    remove_user_password_with_site_name(
-                                        ctx,
-                                        remove_user_password_button,
-                                        site_name,
-                                        self.string_values.command_value.remove_user_password_with_site_name.identifier.entry(site_name.clone()).or_default(),
-                                        &mut self.data_base,
-                                        &mut self.string_values.command_value.remove_user_password_with_site_name.error_message.entry(site_name.clone()).or_default(),
-                                        &mut self.window_open_list.remove_user_password_with_site_name.entry(site_name.clone()).or_default(),
-                                    );
-                                });
-                                let Some(passwords) = self.data_base.get_mut(site_name) else {
-                                    return;
-                                };
-                                for (user_identifier, encrypted_password) in passwords.iter_mut() {
-                                    egui::Grid::new(user_identifier).num_columns(5).show(ui, |ui| {
-                                    ui.label(user_identifier.as_str());
-                                        ui.end_row();
-                                        let button = ui.button("view password");
-                                        if button.is_pointer_button_down_on() {
-                                            let mut user_password =
-                                                match decrypt_user_pw(site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().expect("unreachable"), self.user_key_nonce.as_ref().expect("unreachable"), ) {
-                                                    Ok(password) => password,
-                                                    Err(error) => {
-                                                        ui.label(format!("error: {}", error));
-                                                        return;
-                                                    }
-                                                };
-                                            ui.label(format!("user password: {}", user_password.as_str()));
-                                            user_password.zeroize();
-                                        }
-                                    });
-                                }
-                            });
-                        },
-                    );
-                }
-            }
+            self.user_passwords_windows(ctx);
         });
+    }
+
+    fn user_passwords_windows(&mut self, context: &Context) {
+        let user_state = &mut self.window_open_list.user_state;
+        let UserState { user_data, site_names } = user_state;
+        for (site_name, is_open) in site_names {
+            if *is_open {
+                context.show_viewport_immediate(
+                    egui::ViewportId::from_hash_of(format!("{}_user_data", site_name.as_str())),
+                    egui::ViewportBuilder::default().with_title(format!("{} user data", site_name.as_str())),
+                    |context, _| {
+                        if context.input(|input_state| { input_state.viewport().close_requested() }) {
+                            user_data.remove(site_name);
+                            *is_open = false;
+                        }
+
+                        egui::CentralPanel::default().show(context, |ui| {
+                            ui.label(site_name.as_str());
+                            ui.horizontal(|ui| {
+                                let add_user_password_button = ui.button("add user password").on_hover_text("add user password");
+                                let change_user_password_button = ui.button("change user password").on_hover_text("change user password");
+                                let remove_user_password_button = ui.button("remove user password").on_hover_text("remove user password");
+                                add_user_password_with_site_name(
+                                    context,
+                                    add_user_password_button,
+                                    site_name,
+                                    self.string_values.command_value.add_user_password_with_site_name.identifier.entry(site_name.clone()).or_default(),
+                                    self.string_values.command_value.add_user_password_with_site_name.password.entry(site_name.clone()).or_default(),
+                                    &mut self.data_base,
+                                    self.wrapped_user_key.as_ref().expect("unreachable"),
+                                    self.user_key_nonce.as_ref().expect("unreachable"),
+                                    self.string_values.command_value.add_user_password_with_site_name.error_message.entry(site_name.clone()).or_default(),
+                                    self.window_open_list.add_user_password_with_site_name.entry(site_name.clone()).or_default(),
+                                );
+                                change_user_password_with_site_name(
+                                    context,
+                                    change_user_password_button,
+                                    site_name,
+                                    self.string_values.command_value.change_user_password_with_site_name.identifier.entry(site_name.clone()).or_default(),
+                                    self.string_values.command_value.change_user_password_with_site_name.password.entry(site_name.clone()).or_default(),
+                                    &mut self.data_base,
+                                    self.wrapped_user_key.as_ref().expect("unreachable"),
+                                    self.user_key_nonce.as_ref().expect("unreachable"),
+                                    self.string_values.command_value.change_user_password_with_site_name.error_message.entry(site_name.clone()).or_default(),
+                                    self.window_open_list.change_user_password_with_site_name.entry(site_name.clone()).or_default(),
+                                );
+                                remove_user_password_with_site_name(
+                                    context,
+                                    remove_user_password_button,
+                                    site_name,
+                                    self.string_values.command_value.remove_user_password_with_site_name.identifier.entry(site_name.clone()).or_default(),
+                                    &mut self.data_base,
+                                    self.string_values.command_value.remove_user_password_with_site_name.error_message.entry(site_name.clone()).or_default(),
+                                    self.window_open_list.remove_user_password_with_site_name.entry(site_name.clone()).or_default(),
+                                );
+                            });
+                            let Some(passwords) = self.data_base.get_mut(site_name) else {
+                                return;
+                            };
+                            for (user_identifier, encrypted_password) in passwords.iter_mut() {
+                                egui::Grid::new(user_identifier).num_columns(5).show(ui, |ui| {
+                                    ui.label(user_identifier.as_str());
+                                    ui.end_row();
+                                    let button = ui.button("view password");
+                                    if button.is_pointer_button_down_on() {
+                                        let mut user_password =
+                                            match decrypt_user_pw(site_name, user_identifier, encrypted_password, self.wrapped_user_key.as_ref().expect("unreachable"), self.user_key_nonce.as_ref().expect("unreachable"), ) {
+                                                Ok(password) => password,
+                                                Err(error) => {
+                                                    ui.label(format!("error: {}", error));
+                                                    return;
+                                                }
+                                            };
+                                        ui.label(format!("user password: {}", user_password.as_str()));
+                                        user_password.zeroize();
+                                    }
+                                });
+                            }
+                        });
+                    },
+                );
+            }
+        }
     }
 }
 
+
+impl eframe::App for GraphicalUserInterface {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root {
+            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+            self.window_open_list.root = false;
+        }
+
+        if !self.window_open_list.root {
+            if check_can_directly_exit() {
+                ctx.send_viewport_cmd(ViewportCommand::Close)
+            }
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("close"),
+                egui::ViewportBuilder::default().with_title("close"),
+                |ctx, _| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.horizontal(|ui| {
+                            if ui.button("cancel").clicked() {
+                                self.window_open_list.root = true;
+                                return;
+                            }
+                            if ui.button("save on exit").clicked() {
+                                if let Err(error) = self.save_data_base() {
+                                    self.string_values.save_error = "failed save".to_string();
+                                }  else {
+                                    self.string_values.save_error = "saved".to_string();
+                                    self.window_open_list.root = false;
+                                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                                }
+                            }
+                            if ui.button("noting save").clicked() {
+                                self.window_open_list.root = false;
+                                ctx.send_viewport_cmd(ViewportCommand::Close);
+                            }
+                        });
+                        ui.label(&self.string_values.save_error);
+                    });
+                }
+            );
+        }
+
+        if !self.login {
+            self.login(ctx);
+            return;
+        }
+        ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
+        self.user_main_view(ctx);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn add_user_password(
     context: &Context,
     button: egui::Response,
@@ -575,9 +584,9 @@ fn add_user_password(
         .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let site_name = SiteName::new(&inputs[0].value)?;
-            let user_identifier = UserID::new(&inputs[1].value)?;
-            let user_password = UserPW::new(&inputs[2].value)?;
+            let site_name = SiteName::new(inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[1].value)?;
+            let user_password = UserPW::new(inputs[2].value)?;
             add_user_pw(data_base.expect("unreachable"), site_name, user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -586,6 +595,7 @@ fn add_user_password(
         .show(context, button, window_open);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_user_password_with_site_name(
     context: &Context,
     button: egui::Response,
@@ -603,8 +613,8 @@ fn add_user_password_with_site_name(
         .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let user_identifier = UserID::new(&inputs[0].value)?;
-            let user_password = UserPW::new(&inputs[1].value)?;
+            let user_identifier = UserID::new(inputs[0].value)?;
+            let user_password = UserPW::new(inputs[1].value)?;
             add_user_pw(data_base.expect("unreachable"), site_name.clone(), user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -613,6 +623,7 @@ fn add_user_password_with_site_name(
         .show(context, button, window_open);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn change_user_password(
     context: &Context,
     button: egui::Response,
@@ -631,9 +642,9 @@ fn change_user_password(
         .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let site_name = SiteName::new(&inputs[0].value)?;
-            let user_identifier = UserID::new(&inputs[1].value)?;
-            let user_password = UserPW::new(&inputs[2].value)?;
+            let site_name = SiteName::new(inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[1].value)?;
+            let user_password = UserPW::new(inputs[2].value)?;
             change_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -642,6 +653,7 @@ fn change_user_password(
         .show(context, button, window_open);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn change_user_password_with_site_name(
     context: &Context,
     button: egui::Response,
@@ -659,8 +671,8 @@ fn change_user_password_with_site_name(
         .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let user_identifier = UserID::new(&inputs[0].value)?;
-            let user_password = UserPW::new(&inputs[1].value)?;
+            let user_identifier = UserID::new(inputs[0].value)?;
+            let user_password = UserPW::new(inputs[1].value)?;
             change_user_pw(data_base.expect("unreachable"), site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -683,8 +695,8 @@ fn remove_user_password(
         .input("user identifier", identifier)
         .database(data_base)
         .execute(|inputs, data_base, _, _, _, _| {
-            let site_name = SiteName::new(&inputs[0].value)?;
-            let user_identifier = UserID::new(&inputs[1].value)?;
+            let site_name = SiteName::new(inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[1].value)?;
             remove_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier)?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -706,7 +718,7 @@ fn remove_user_password_with_site_name(
         .input("user identifier", identifier)
         .database(data_base)
         .execute(|inputs, data_base, _, _, _, _| {
-            let user_identifier = UserID::new(&inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[0].value)?;
             remove_user_pw(data_base.expect("unreachable"), site_name, &user_identifier)?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
