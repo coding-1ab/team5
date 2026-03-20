@@ -13,7 +13,6 @@ const MACHINE_ID_FILES: [&str; 2] = ["/var/lib/dbus/machine-id", "/etc/machine-i
 
 #[cfg(target_os = "linux")]
 #[derive(Deserialize)]
-#[derive(Clone)]
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct Output {
     blockdevices: Vec<Device>,
