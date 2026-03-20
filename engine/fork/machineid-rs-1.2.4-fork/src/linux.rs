@@ -36,7 +36,7 @@ impl Output {
     fn get_root(self) -> Result<String, HWIDError> {
         for devc in self.blockdevices.into_iter() {
             if devc.mountpoint.is_some() {
-                if devc.mountpoint.eq("/") {
+                if devc.mountpoint.unwrap().eq("/") {
                     if let Some(uuid) = devc.uuid {
                         return Ok(uuid);
                     }
