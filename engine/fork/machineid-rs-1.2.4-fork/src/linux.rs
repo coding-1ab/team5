@@ -39,7 +39,7 @@ impl Output {
             if devc.mountpoint.is_some() {
                 if devc.mountpoint.unwrap().eq("/") {
                     if devc.uuid.is_some() {
-                        return Ok(devc.uuid.unwrap());
+                        return Ok(devc.uuid.clone().unwrap());
                     }
                 }
             }
@@ -48,7 +48,7 @@ impl Output {
                     if chld_device.mountpoint.is_some() {
                         if chld_device.mountpoint.unwrap().eq("/") {
                             if chld_device.uuid.is_some() {
-                                return Ok(chld_device.uuid.unwrap());
+                                return Ok(chld_device.uuid.clone().unwrap());
                             }
                         }
                     }
