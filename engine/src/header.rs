@@ -1,0 +1,71 @@
+use crate::file_io::FileIOError;
+use bytemuck::{Pod, Zeroable};
+use crate::master_secrets::EncryptedDB;
+
+const SALT_LEN: usize = 32;
+const MAGIC_LEN: usize = 78;
+const VERSION_LEN: usize = 18;
+const HEADER_USED_LEN: usize = SALT_LEN + MAGIC_LEN + VERSION_LEN;
+
+
+type Magic = [u8; MAGIC_LEN];
+type Version = [u8; VERSION_LEN];
+pub type Salt = [u8; SALT_LEN];
+pub type CiphTxtChecksum = [u8; 64];
+pub type CipherTextLen = usize;
+
+/// Program internal magic literal
+const DB_MAGIC: Magic = *b"This is DB file of PW Manager. A Project Created By Team5 of 2025 Rust Study.\n";
+/// Program-internal DB format version
+const DB_VERSION: Version = *b"DB Ver: 0.1.2.000\n";
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct DBHeader {
+    pub(crate) magic: Magic,
+    pub(crate) version: Version,
+    pub master_pw_salt: Salt,
+    _padding: [u8; HEADER_USED_LEN.next_power_of_two() - HEADER_USED_LEN],
+    pub(crate) ciphertext_checksum: CiphTxtChecksum,
+    pub(crate) ciphertext_len: CipherTextLen,
+}
+pub const HEADER_LEN: usize = size_of::<DBHeader>();
+
+impl DBHeader {
+    pub fn parse_header(bytes: &[u8])
+                        -> Result<(DBHeader, EncryptedDB), FileIOError> {
+        if bytes.len() < HEADER_LEN {
+            return Err(FileIOError::InvalidHeader);
+        }
+
+        let (head, body) = bytes.split_at(HEADER_LEN);
+
+        let header: DBHeader = *bytemuck::from_bytes::<DBHeader>(head);
+
+        if header.magic != DB_MAGIC {
+            return Err(FileIOError::InvalidHeader);
+        }
+
+        if header.version != DB_VERSION {
+            return Err(FileIOError::DBVersionMissMatch);
+        }
+
+        Ok( (header, body.to_vec()) )
+    }
+
+    pub fn write_to(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(bytemuck::bytes_of(self));
+    }
+    pub fn empty_valid() -> Self {
+        Self {
+            magic: DB_MAGIC,
+            version: DB_VERSION,
+            master_pw_salt: Salt::default(),
+            _padding: [0u8; _],
+            ciphertext_checksum: [0u8; _],
+            ciphertext_len: 0,
+        }
+    }
+}
+unsafe impl Zeroable for DBHeader {}
+unsafe impl Pod for DBHeader {}

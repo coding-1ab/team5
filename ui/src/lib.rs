@@ -1,0 +1,34 @@
+#![deny(unused_mut)]
+#![deny(clippy::cognitive_complexity)]
+#![deny(clippy::complexity)]
+#![deny(clippy::too_many_lines)]
+
+// todo
+
+// 사이트 이름 + 계정 정보 주면 저장
+// 사이트 이름 주면 계정 정보 불러오기
+
+// 흠 뭐부터 하지
+
+use engine::data_base::DB;
+
+#[cfg(feature = "gui")]
+pub mod graphical_user_interface;
+mod command_builder;
+
+struct CharacterUserInterface {
+    db: DB
+}
+
+impl CharacterUserInterface {
+
+}
+
+struct UserInterface {
+    #[cfg(feature = "gui")]
+    graphical_user_interface: graphical_user_interface::GraphicalUserInterface,
+    #[cfg(feature = "cui")]
+    character_user_interface: CharacterUserInterface,
+    //_phantom_data: PhantomData<()>
+}
+
