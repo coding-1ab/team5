@@ -1,0 +1,25 @@
+[package]
+name = "engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rkyv = { version = "0.8" }
+fs2 = "*"
+bytemuck = "*"
+argon2 = { version = "*", features = ["zeroize"] }
+rand = "0.8"
+sha2 = "*"
+sha3 = "*"
+whoami = "*"
+libc = "*"
+#memsec = "*"
+secrecy = "*"
+zeroize = { workspace = true }
+crossbeam-utils = "0.8.21"
+psl = "*"
+
+url = { path = "fork/url-2.5.8-fork" }
+libsodium-sys-stable = { path = "fork/libsodium-sys-stable-1.23.2-fork" }
+sysinfo = { path = "fork/sysinfo-0.29.11-fork" }
+machineid-rs = { path = "fork/machineid-rs-1.2.4-fork", default-features = true }

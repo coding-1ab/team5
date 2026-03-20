@@ -1,0 +1,13 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engine = {path = "../engine"}
+
+clap = { version = "*", features = ["derive"] }
+arboard = {workspace = true}
+
+zeroize = {workspace = true}
+single-instance = {workspace = true}
