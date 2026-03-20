@@ -35,7 +35,7 @@ impl Output {
     #[cfg(target_os = "linux")]
     fn get_root(self) -> Result<String, HWIDError> {
         for devc in self.blockdevices.into_iter() {
-            if let Some(mountpoint) = devc.mountpoint {
+            if devc.mountpoint.is_some() {
                 if mountpoint.eq("/") {
                     if let Some(uuid) = devc.uuid {
                         return Ok(uuid);
@@ -44,7 +44,7 @@ impl Output {
             }
             if let Some(children) = devc.children {
                 for chld_device in children.into_iter() {
-                    if let Some(mnt) = chld_device.mountpoint {
+                    if chld_device.mountpoint.is_some() {
                         if mnt.eq("/") {
                             if let Some(uuid) = chld_device.uuid {
                                 return Ok(uuid);
