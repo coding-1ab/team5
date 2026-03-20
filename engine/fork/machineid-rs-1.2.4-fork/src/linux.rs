@@ -35,7 +35,7 @@ struct Device {
 impl Output {
     #[cfg(target_os = "linux")]
     fn get_root(self) -> Result<String, HWIDError> {
-        for devc in self.blockdevices.into_iter() {
+        for devc in self.blockdevices.clone().into_iter() {
             if devc.mountpoint.is_some() {
                 if devc.mountpoint.unwrap().eq("/") {
                     if devc.uuid.is_some() {
