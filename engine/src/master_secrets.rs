@@ -249,12 +249,12 @@ pub fn decrypt_db(bytes: &Vec<u8>, sk: SecKey) -> Result<DB, MasterPWError> {
 macro_rules! manual_zeroize {
     ($($var:expr),+ $(,)?) => {
         $(
-            static_zeroize(&mut $var);
+            static_type_zeroize(&mut $var);
         )+
     };
 }
 
-pub fn static_zeroize<T>(data: &mut T) {
+pub fn static_type_zeroize<T>(data: &mut T) {
     let size = std::mem::size_of::<T>();
     let ptr = data as *mut T as *mut u8;
     unsafe {

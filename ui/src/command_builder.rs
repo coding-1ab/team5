@@ -4,7 +4,7 @@ use eframe::{egui, egui::TextEdit};
 use zeroize::Zeroize;
 use engine::{
     data_base::{SiteName, DB},
-    user_secrets::{UserKeyNonce, WrappedUserKey}
+    user_secrets::{SessionKeyNonce, WrappedSessionKey}
 };
 use engine::data_base::UserID;
 
@@ -21,14 +21,14 @@ pub struct CommandBuilder<'a, Output> {
     screen_name: &'a str,
     inputs: HashMap<&'static str, InputField<'a>>,
     database: Option<&'a mut DB>,
-    wrapped_user_key: Option<&'a WrappedUserKey>,
-    wrapped_user_key_mut: Option<&'a mut WrappedUserKey>,
-    user_key_nonce: Option<&'a UserKeyNonce>,
-    user_key_nonce_mut: Option<&'a mut UserKeyNonce>,
+    wrapped_user_key: Option<&'a WrappedSessionKey>,
+    wrapped_user_key_mut: Option<&'a mut WrappedSessionKey>,
+    user_key_nonce: Option<&'a SessionKeyNonce>,
+    user_key_nonce_mut: Option<&'a mut SessionKeyNonce>,
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
     #[allow(clippy::complexity)]
-    execute: Option<Box<dyn FnMut(&mut HashMap<&'static str, InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>, Option<&UserKeyNonce>, Option<&mut UserKeyNonce>) -> Result<Output, Error> + 'a>>,
+    execute: Option<Box<dyn FnMut(&mut HashMap<&'static str, InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a>>,
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
@@ -53,22 +53,22 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self
     }
 
-    pub fn user_key(mut self, key: &'a WrappedUserKey) -> Self {
+    pub fn user_key(mut self, key: &'a WrappedSessionKey) -> Self {
         self.wrapped_user_key = Some(key);
         self
     }
 
-    pub fn user_key_mut(mut self, key: &'a mut WrappedUserKey) -> Self {
+    pub fn user_key_mut(mut self, key: &'a mut WrappedSessionKey) -> Self {
         self.wrapped_user_key_mut = Some(key);
         self
     }
 
-    pub fn user_key_nonce(mut self, key: &'a UserKeyNonce) -> Self {
+    pub fn user_key_nonce(mut self, key: &'a SessionKeyNonce) -> Self {
         self.user_key_nonce = Some(key);
         self
     }
 
-    pub fn user_key_nonce_mut(mut self, key: &'a mut UserKeyNonce) -> Self {
+    pub fn user_key_nonce_mut(mut self, key: &'a mut SessionKeyNonce) -> Self {
         self.user_key_nonce_mut = Some(key);
         self
     }
@@ -76,7 +76,7 @@ impl<'a, Output> CommandBuilder<'a, Output> {
     // ← 여기서 핵심 변경
     pub fn execute<F>(mut self, execute_fn: F) -> Self
     where
-        F: FnMut(&mut HashMap<&'static str, InputField>, Option<&mut DB>, Option<&WrappedUserKey>, Option<&mut WrappedUserKey>, Option<&UserKeyNonce>, Option<&mut UserKeyNonce>) -> Result<Output, Error> + 'a,
+        F: FnMut(&mut HashMap<&'static str, InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a,
     {
         self.execute = Some(Box::new(execute_fn));
         self

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 engine = { path = "../engine" }
+libsodium-sys-stable = { path = "../engine/fork/libsodium-sys-stable-1.23.2-fork" }
 eframe = { version = "0.33.3" }
 zeroize = { workspace = true }
 single-instance = { workspace = true }

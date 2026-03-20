@@ -24,8 +24,8 @@ use engine::{
         FileIOError,
     },
     user_secrets::{
-        UserKeyNonce,
-        WrappedUserKey,
+        SessionKeyNonce,
+        WrappedSessionKey,
     },
     data_base::{
         add_user_pw, change_user_pw, get_user_pw, remove_user_pw, prefix_range, SiteName, UserID, UserPW, DB,
@@ -35,9 +35,11 @@ use engine::{
         EncryptedDB,
     },
     header::DBHeader,
-    PubKey
 };
 use engine::file_io::{DB_BAK_FILE, DB_FILE};
+use libsodium_sys::rust_wrappings::x25519::{
+    PubKey, SecKey
+};
 use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Debug)]
@@ -176,8 +178,8 @@ pub struct GraphicalUserInterface {
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
-    wrapped_user_key: Option<WrappedUserKey>,
-    user_key_nonce: Option<UserKeyNonce>,
+    wrapped_user_key: Option<WrappedSessionKey>,
+    user_key_nonce: Option<SessionKeyNonce>,
     // get_user_password_user_password: Option<UserPW>,
     data_base_header: Option<DBHeader>,
     public_key: Option<PubKey>,
@@ -273,7 +275,8 @@ impl GraphicalUserInterface {
                             return;
                         }
                         if self.string_values.master_login.password == self.string_values.master_login.recheck_password {
-                            let (public_key, data_base_header_salt, wrapped_user_key, user_key_nonce) = first_login(self.string_values.master_login.password.take());
+                            let (public_key, data_base_header_salt, wrapped_user_key, user_key_nonce) =
+                                first_login(self.string_values.master_login.password.take());
                             self.string_values.master_login.password.zeroize();
                             self.string_values.master_login.recheck_password.zeroize();
                             data_base_header.master_pw_salt = data_base_header_salt;
@@ -608,8 +611,8 @@ fn add_user_password(
     identifier: &mut String,
     password: &mut String,
     data_base: &mut DB,
-    wrapped_user_key: &WrappedUserKey,
-    user_key_nonce: &UserKeyNonce,
+    wrapped_user_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
     error_message: &mut String,
     window_open: &mut bool,
 ) {
@@ -638,8 +641,8 @@ fn add_user_password_with_site_name(
     identifier: &mut String,
     password: &mut String,
     data_base: &mut DB,
-    wrapped_user_key: &WrappedUserKey,
-    user_key_nonce: &UserKeyNonce,
+    wrapped_user_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
     error_message: &mut String,
     window_open: &mut bool,
 ) {
@@ -666,8 +669,8 @@ fn change_user_password(
     user_identifier: &mut String,
     password: &mut String,
     data_base: &mut DB,
-    wrapped_user_key: &WrappedUserKey,
-    user_key_nonce: &UserKeyNonce,
+    wrapped_user_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
     error_message: &mut String,
     window_open: &mut bool,
 ) {
@@ -696,8 +699,8 @@ fn change_user_password_with_site_name(
     user_identifier: &mut String,
     password: &mut String,
     data_base: &mut DB,
-    wrapped_user_key: &WrappedUserKey,
-    user_key_nonce: &UserKeyNonce,
+    wrapped_user_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
     error_message: &mut String,
     window_open: &mut bool,
 ) {
@@ -724,8 +727,8 @@ fn change_user_password_with_site_name_with_user_identifier(
     user_identifier: &UserID,
     password: &mut String,
     data_base: &mut DB,
-    wrapped_user_key: &WrappedUserKey,
-    user_key_nonce: &UserKeyNonce,
+    wrapped_user_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
     error_message: &mut String,
     window_open: &mut bool,
 ) {

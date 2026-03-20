@@ -1,4 +1,4 @@
-use crate::master_secrets::static_zeroize;
+use crate::master_secrets::static_type_zeroize;
 use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use sha3::{Digest};
 use std::cell::RefCell;
