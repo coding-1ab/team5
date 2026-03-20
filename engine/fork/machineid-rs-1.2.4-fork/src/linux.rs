@@ -45,7 +45,7 @@ impl Output {
             if let Some(children) = devc.children {
                 for chld_device in children.into_iter() {
                     if chld_device.mountpoint.is_some() {
-                        if mnt.eq("/") {
+                        if chld_device.mountpoint.unwrap().eq("/") {
                             if let Some(uuid) = chld_device.uuid {
                                 return Ok(uuid);
                             }
