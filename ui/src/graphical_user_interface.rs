@@ -229,7 +229,7 @@ impl GraphicalUserInterface {
                                     ui.label("리셋하겠습니까? 복구할 수 없습니다.");
                                     ui.horizontal(|ui| {
                                         if ui.button("submit").clicked() {
-                                            match fs::remove_file("db.bin") {
+                                            match fs::remove_file("db.bin").and_then(|_| fs::remove_file("db.bin.bak")) {
                                                 Ok(_) => self.window_open_list.reset = false,
                                                 Err(error) => {
                                                     self.string_values.save_error = error.to_string();
@@ -543,7 +543,7 @@ impl eframe::App for GraphicalUserInterface {
                                 return;
                             }
                             if ui.button("save on exit").clicked() {
-                                if let Err(error) = self.save_data_base() {
+                                if let Err(_) = self.save_data_base() {
                                     self.string_values.save_error = "failed save".to_string();
                                 } else {
                                     self.string_values.save_error = "saved".to_string();
