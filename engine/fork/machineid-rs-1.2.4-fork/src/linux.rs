@@ -36,16 +36,16 @@ impl Output {
     fn get_root(self) -> Result<String, HWIDError> {
         for devc in self.blockdevices.into_iter() {
             if devc.mountpoint.is_some() {
-                if devc.mountpoint.unwrap() == "/" {
+                if devc.mountpoint.unwrap().as_str() == "/" {
                     if devc.uuid.is_some() {
                         return Ok(devc.uuid.unwrap());
                     }
                 }
             }
-            if let Some(children) = devc.children {
-                for chld_device in children.into_iter() {
+            if devc.children.is_some() {
+                for chld_device in devc.children.unwrap().into_iter() {
                     if chld_device.mountpoint.is_some() {
-                        if chld_device.mountpoint.unwrap() == "/" {
+                        if chld_device.mountpoint.unwrap().as_str() == "/" {
                             if chld_device.uuid.is_some() {
                                 return Ok(chld_device.uuid.unwrap());
                             }
