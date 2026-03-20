@@ -8,6 +8,7 @@
 use std::collections::{btree_map::Entry, BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt::Display;
+use std::fs;
 use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
@@ -149,6 +150,7 @@ struct StringValues {
     search_data_base: String,
     save_data_base_label: String,
     save_error: String,
+    reset_error: String,
     master_login: MasterLogin,
     command_value: CommandValue,
 }
@@ -224,15 +226,21 @@ impl GraphicalUserInterface {
                             egui::ViewportBuilder::default().with_title("reset"),
                             |ctx, _| {
                                 egui::CentralPanel::default().show(ctx, |ui| {
-                                    ui.label("reset?");
+                                    ui.label("리셋하겠습니까? 복구할 수 없습니다.");
                                     ui.horizontal(|ui| {
                                         if ui.button("submit").clicked() {
-                                            *self = Self::default();
-                                            self.window_open_list.reset = false;
+                                            match fs::remove_file("db.bin") {
+                                                Ok(_) => self.window_open_list.reset = false,
+                                                Err(error) => {
+                                                    self.string_values.save_error = error.to_string();
+                                                    return;
+                                                }
+                                            }
                                         }
                                         if ui.button("cancel").clicked() {
                                             self.window_open_list.reset = false;
                                         }
+                                        ui.label(&self.string_values.reset_error);
                                     })
                                 })
                             },
@@ -314,7 +322,7 @@ impl GraphicalUserInterface {
             .show(context, button, &mut self.window_open_list.change_master_password);
     }
 
-    fn save_data_base(&mut self) -> Result<(), SaveError>{
+    fn save_data_base(&mut self) -> Result<(), SaveError> {
         let encrypt_db = encrypt_db(&self.data_base, self.public_key.as_ref().ok_or(SaveError::NotingPublicKey)?);
         save_db(self.data_base_header.as_mut().ok_or(SaveError::NothingDataBaseHeader)?, encrypt_db).map_err(SaveError::from)
     }
@@ -513,7 +521,6 @@ impl GraphicalUserInterface {
     }
 }
 
-
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root {
@@ -538,7 +545,7 @@ impl eframe::App for GraphicalUserInterface {
                             if ui.button("save on exit").clicked() {
                                 if let Err(error) = self.save_data_base() {
                                     self.string_values.save_error = "failed save".to_string();
-                                }  else {
+                                } else {
                                     self.string_values.save_error = "saved".to_string();
                                     self.window_open_list.root = false;
                                     ctx.send_viewport_cmd(ViewportCommand::Close);
