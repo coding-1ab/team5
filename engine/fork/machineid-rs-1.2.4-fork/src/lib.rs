@@ -7,7 +7,7 @@ mod macos;
 
 use errors::HWIDError;
 #[cfg(target_os = "linux")]
-pub use linux::{get_disk_id, get_hwid, get_mac_address};
+pub use linux::*;
 #[cfg(target_os = "windows")]
 pub use windows::{get_disk_id, get_hwid, get_mac_address};
 #[cfg(target_os = "macos")]
