@@ -20,7 +20,7 @@ struct Output {
 
 #[cfg(target_os = "linux")]
 #[derive(Deserialize)]
-#[derice(clone)]
+#[derice(Clone)]
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct Device {
     #[serde(skip_serializing_if = "Option::is_none")]
