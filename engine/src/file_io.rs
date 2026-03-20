@@ -7,8 +7,8 @@ use std::{error::Error, fmt::{Display, Formatter}};
 use sha2::{Digest, Sha512};
 use crate::master_secrets::EncryptedDB;
 
-const DB_FILE: &str = "db.bin";
-const DB_BAK_FILE: &str = "db.bin.bak";
+pub const DB_FILE: &str = "db.bin";
+pub const DB_BAK_FILE: &str = "db.bin.bak";
 
 
 #[derive(Debug)]

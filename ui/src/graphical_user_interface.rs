@@ -38,6 +38,7 @@ use engine::{
     header::DBHeader,
     PubKey
 };
+use engine::file_io::{DB_BAK_FILE, DB_FILE};
 use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Debug)]
@@ -229,7 +230,7 @@ impl GraphicalUserInterface {
                                     ui.label("리셋하겠습니까? 복구할 수 없습니다.");
                                     ui.horizontal(|ui| {
                                         if ui.button("submit").clicked() {
-                                            match fs::remove_file("db.bin").and_then(|_| fs::remove_file("db.bin.bak")) {
+                                            match fs::remove_file(DB_FILE).and_then(|_| fs::remove_file(DB_BAK_FILE)) {
                                                 Ok(_) => self.window_open_list.reset = false,
                                                 Err(error) => {
                                                     self.string_values.save_error = error.to_string();
