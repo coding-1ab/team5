@@ -21,14 +21,12 @@ pub struct CommandBuilder<'a, Output> {
     screen_name: &'a str,
     inputs: Vec<InputField<'a>>,
     database: Option<&'a mut DB>,
-    wrapped_user_key: Option<&'a WrappedSessionKey>,
-    wrapped_user_key_mut: Option<&'a mut WrappedSessionKey>,
-    user_key_nonce: Option<&'a SessionKeyNonce>,
-    user_key_nonce_mut: Option<&'a mut SessionKeyNonce>,
+    key: Option<&'a (WrappedSessionKey, SessionKeyNonce)>,
+    key_mut: Option<&'a mut (WrappedSessionKey, SessionKeyNonce)>,
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
     #[allow(clippy::complexity)]
-    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a>>,
+    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&(WrappedSessionKey, SessionKeyNonce)>, Option<&mut (WrappedSessionKey, SessionKeyNonce)>) -> Result<Output, Error> + 'a>>,
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
@@ -38,45 +36,33 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             screen_name,
             inputs: Vec::new(),
             database: None,
-            wrapped_user_key: None,
-            wrapped_user_key_mut: None,
-            user_key_nonce: None,
-            user_key_nonce_mut: None,
+            key: None,
+            key_mut: None,
             on_success: Box::new(|_| {}),
             execute: None,
         }
     }
 
     // DB, Key는 여전히 선택적으로 설정
-    pub fn database(mut self, db: &'a mut DB) -> Self {
+    pub fn set_database(mut self, db: &'a mut DB) -> Self {
         self.database = Some(db);
         self
     }
-
-    pub fn user_key(mut self, key: &'a WrappedSessionKey) -> Self {
-        self.wrapped_user_key = Some(key);
+    
+    pub fn set_key(mut self, key: &'a (WrappedSessionKey, SessionKeyNonce)) -> Self {
+        self.key = Some(key);
         self
     }
 
-    pub fn user_key_mut(mut self, key: &'a mut WrappedSessionKey) -> Self {
-        self.wrapped_user_key_mut = Some(key);
-        self
-    }
-
-    pub fn user_key_nonce(mut self, key: &'a SessionKeyNonce) -> Self {
-        self.user_key_nonce = Some(key);
-        self
-    }
-
-    pub fn user_key_nonce_mut(mut self, key: &'a mut SessionKeyNonce) -> Self {
-        self.user_key_nonce_mut = Some(key);
+    pub fn set_key_mut(mut self, key: &'a mut (WrappedSessionKey, SessionKeyNonce)) -> Self {
+        self.key_mut = Some(key);
         self
     }
 
     // ← 여기서 핵심 변경
     pub fn execute<F>(mut self, execute_fn: F) -> Self
     where
-        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a,
+        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&(WrappedSessionKey, SessionKeyNonce)>, Option<&mut (WrappedSessionKey, SessionKeyNonce)>) -> Result<Output, Error> + 'a,
     {
         self.execute = Some(Box::new(execute_fn));
         self
@@ -187,7 +173,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
         let values = &mut builder.inputs;
 
-        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.wrapped_user_key, builder.wrapped_user_key_mut.as_deref_mut(), builder.user_key_nonce, builder.user_key_nonce_mut.as_deref_mut()) {
+        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.key, builder.key_mut.as_deref_mut()) {
             Ok(result) => {
                 (builder.on_success)(result);
                 *window_open = false;
