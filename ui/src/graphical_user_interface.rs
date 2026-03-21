@@ -29,20 +29,16 @@ use engine::{
         DB_FILE,
     },
     data_base::{
-        add_user_pw, change_user_pw, get_user_pw, remove_user_pw, prefix_range, SiteName, UserID, UserPW, DB,
+        add_user_pw, change_user_pw, get_user_pw, remove_user_pw, prefix_range,
+        SiteName, UserID, UserPW, DB,
     },
     master_secrets::{
         change_master_pw, decrypt_db, encrypt_db, first_login, general_login, master_pw_validation,
         EncryptedDB,
     },
-    user_secrets::{
-        SessionKeyNonce,
-        WrappedSessionKey,
-    },
+    user_secrets::{SessionKeyNonce, WrappedSessionKey},
     header::DBHeader,
-};
-use libsodium_sys::rust_wrappings::x25519::{
-    PubKey, SecKey
+    sodium::rust_wrappings::x25519::PubKey
 };
 use crate::command_builder::{CommandBuilder, CommandValue};
 
@@ -50,7 +46,6 @@ use crate::command_builder::{CommandBuilder, CommandValue};
 enum SaveError {
     FileIOError(FileIOError),
     NotingPublicKey,
-    NothingDataBaseHeader
 }
 
 impl Display for SaveError {
