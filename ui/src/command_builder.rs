@@ -19,7 +19,7 @@ pub struct InputField<'a> {
 pub struct CommandBuilder<'a, Output> {
     title: &'a str,
     screen_name: &'a str,
-    inputs: HashMap<&'static str, InputField<'a>>,
+    inputs: Vec<InputField<'a>>,
     database: Option<&'a mut DB>,
     wrapped_user_key: Option<&'a WrappedSessionKey>,
     wrapped_user_key_mut: Option<&'a mut WrappedSessionKey>,
@@ -28,7 +28,7 @@ pub struct CommandBuilder<'a, Output> {
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
     #[allow(clippy::complexity)]
-    execute: Option<Box<dyn FnMut(&mut HashMap<&'static str, InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a>>,
+    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a>>,
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
@@ -36,7 +36,7 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         Self {
             title,
             screen_name,
-            inputs: HashMap::new(),
+            inputs: Vec::new(),
             database: None,
             wrapped_user_key: None,
             wrapped_user_key_mut: None,
@@ -76,14 +76,14 @@ impl<'a, Output> CommandBuilder<'a, Output> {
     // ← 여기서 핵심 변경
     pub fn execute<F>(mut self, execute_fn: F) -> Self
     where
-        F: FnMut(&mut HashMap<&'static str, InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a,
+        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&WrappedSessionKey>, Option<&mut WrappedSessionKey>, Option<&SessionKeyNonce>, Option<&mut SessionKeyNonce>) -> Result<Output, Error> + 'a,
     {
         self.execute = Some(Box::new(execute_fn));
         self
     }
 
-    pub fn input(mut self, identifier: &'static str, label: &'static str, value: &'a mut String) -> Self {
-        self.inputs.insert(identifier, InputField {
+    pub fn input(mut self, label: &'static str, value: &'a mut String) -> Self {
+        self.inputs.push(InputField {
             label,
             value,
             want_zeroize: false,
@@ -91,8 +91,8 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self
     }
 
-    pub fn sensitive_input(mut self, identifier: &'static str, label: &'static str, value: &'a mut String) -> Self {
-        self.inputs.insert(identifier, InputField {
+    pub fn sensitive_input(mut self, label: &'static str, value: &'a mut String) -> Self {
+        self.inputs.push(InputField {
             label,
             value,
             want_zeroize: true,
@@ -151,7 +151,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label(self.inner.screen_name);
 
-                    for field in &mut self.inner.inputs.values_mut() {
+                    for field in &mut self.inner.inputs {
                         if !field.want_zeroize {
                             ui.horizontal(|ui| {
                                 ui.label(field.label);
@@ -180,19 +180,19 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
         error_message: &mut String,
         window_open: &mut bool,
     ) {
-        if builder.inputs.iter().any(|(_, f)| f.value.trim().is_empty()) {
+        if builder.inputs.iter().any(|f| f.value.trim().is_empty()) {
             *error_message = "모든 필드를 입력해주세요!".to_string();
             return;
         }
 
-        let values: &mut HashMap<&'static str, InputField> = &mut builder.inputs;
+        let values = &mut builder.inputs;
 
         match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.wrapped_user_key, builder.wrapped_user_key_mut.as_deref_mut(), builder.user_key_nonce, builder.user_key_nonce_mut.as_deref_mut()) {
             Ok(result) => {
                 (builder.on_success)(result);
                 *window_open = false;
                 error_message.clear();
-                for field in &mut builder.inputs.values_mut() {
+                for field in &mut builder.inputs {
                     if field.want_zeroize {
                         field.value.zeroize();
                     }
@@ -202,7 +202,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                 *error_message = err.to_string();
 
                 // zeroize 처리
-                for field in &mut builder.inputs.values_mut() {
+                for field in &mut builder.inputs {
                     if field.want_zeroize {
                         field.value.zeroize();
                     }

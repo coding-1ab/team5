@@ -303,14 +303,14 @@ impl GraphicalUserInterface {
     
     fn graphical_user_interface_change_master_password(&mut self, context: &Context, button: egui::Response) {
         CommandBuilder::new("change master password", "change master password")
-            .sensitive_input("master_password", "master password", &mut self.string_values.command_value.change_master_password.password)
+            .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password)
             .database(&mut self.data_base).user_key_mut(self.wrapped_user_key.as_mut().expect("unreachable")).user_key_nonce_mut(self.user_key_nonce.as_mut().expect("unreachable"))
             .execute(|inputs, data_base, _, wrapped_user_key_mut, _, user_key_nonce_mut| {
                 let data_base = data_base.expect("unreachable");
-                if let Err(error) = master_pw_validation(inputs.get("master_password").expect("unreachable").value) {
+                if let Err(error) = master_pw_validation(inputs[0].value) {
                     return Err(error.into());
                 }
-                let (public_key, salt) = change_master_pw(data_base, inputs.get_mut("master_password").expect("unreachable").value.take(), wrapped_user_key_mut.expect("unreachable"), user_key_nonce_mut.expect("unreachable"))?;
+                let (public_key, salt) = change_master_pw(data_base, inputs[0].value.take(), wrapped_user_key_mut.expect("unreachable"), user_key_nonce_mut.expect("unreachable"))?;
 
                 self.data_base_header.expect("unreachable").master_pw_salt = salt;
                 self.public_key = Some(public_key);
@@ -617,14 +617,14 @@ fn add_user_password(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("add user password", "add user password")
-        .input("site_name", "site name", site_name)
-        .input("user_identifier", "user identifier", identifier)
-        .sensitive_input("password", "password", password)
+        .input("site name", site_name)
+        .input("user identifier", identifier)
+        .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let site_name = SiteName::new(inputs.get("site_name").expect("unreachable").value)?;
-            let user_identifier = UserID::new(inputs.get("user_identifier").expect("unreachable").value)?;
-            let user_password = UserPW::new(inputs.get("password").expect("unreachable").value)?;
+            let site_name = SiteName::new(inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[1].value)?;
+            let user_password = UserPW::new(inputs[2].value)?;
             add_user_pw(data_base.expect("unreachable"), site_name, user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -647,12 +647,12 @@ fn add_user_password_with_site_name(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("add user password", "add user password")
-        .input("user_identifier", "user identifier", identifier)
-        .sensitive_input("password", "password", password)
+        .input("user identifier", identifier)
+        .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let user_identifier = UserID::new(inputs.get("user_identifier").expect("unreachable").value)?;
-            let user_password = UserPW::new(inputs.get("password").expect("unreachable").value)?;
+            let user_identifier = UserID::new(inputs[0].value)?;
+            let user_password = UserPW::new(inputs[1].value)?;
             add_user_pw(data_base.expect("unreachable"), site_name.clone(), user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -675,14 +675,14 @@ fn change_user_password(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("change user password", "change user password")
-        .input("site_name", "site name", site_name)
-        .input("user_identifier", "user identifier", user_identifier)
-        .sensitive_input("password", "password", password)
+        .input("site name", site_name)
+        .input("user identifier", user_identifier)
+        .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let site_name = SiteName::new(inputs.get("site_name").expect("unreachable").value)?;
-            let user_identifier = UserID::new(inputs.get("user_identifier").expect("unreachable").value)?;
-            let user_password = UserPW::new(inputs.get("password").expect("unreachable").value)?;
+            let site_name = SiteName::new(inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[1].value)?;
+            let user_password = UserPW::new(inputs[2].value)?;
             change_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -705,12 +705,12 @@ fn change_user_password_with_site_name(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("change user password", "change user password")
-        .input("user_identifier", "user identifier", user_identifier)
-        .sensitive_input("password", "password", password)
+        .input("user identifier", user_identifier)
+        .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let user_identifier = UserID::new(inputs.get("user_identifier").expect("unreachable").value)?;
-            let user_password = UserPW::new(inputs.get("password").expect("unreachable").value)?;
+            let user_identifier = UserID::new(inputs[0].value)?;
+            let user_password = UserPW::new(inputs[1].value)?;
             change_user_pw(data_base.expect("unreachable"), site_name, &user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -733,10 +733,10 @@ fn change_user_password_with_site_name_with_user_identifier(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("change user password", "change user password")
-        .sensitive_input("password", "password", password)
+        .sensitive_input("password", password)
         .database(data_base).user_key(wrapped_user_key).user_key_nonce(user_key_nonce)
         .execute(|inputs, data_base, wrapped_user_key, _, user_key_nonce, _| {
-            let user_password = UserPW::new(inputs.get("password").expect("unreachable").value)?;
+            let user_password = UserPW::new(inputs[0].value)?;
             change_user_pw(data_base.expect("unreachable"), site_name, user_identifier, user_password, wrapped_user_key.expect("unreachable"), user_key_nonce.expect("unreachable"))?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -755,12 +755,12 @@ fn remove_user_password(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("remove user password", "remove user password")
-        .input("site_name", "site name", site_name)
-        .input("user_identifier", "user identifier", user_identifier)
+        .input("site name", site_name)
+        .input("user identifier", user_identifier)
         .database(data_base)
         .execute(|inputs, data_base, _, _, _, _| {
-            let site_name = SiteName::new(inputs.get("site_name").expect("unreachable").value)?;
-            let user_identifier = UserID::new(inputs.get("user_identifier").expect("unreachable").value)?;
+            let site_name = SiteName::new(inputs[0].value)?;
+            let user_identifier = UserID::new(inputs[1].value)?;
             remove_user_pw(data_base.expect("unreachable"), &site_name, &user_identifier)?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
@@ -779,10 +779,10 @@ fn remove_user_password_with_site_name(
     window_open: &mut bool,
 ) {
     CommandBuilder::new("remove user password", "remove user password")
-        .input("user_identifier", "user identifier", user_identifier)
+        .input("user identifier", user_identifier)
         .database(data_base)
         .execute(|inputs, data_base, _, _, _, _| {
-            let user_identifier = UserID::new(inputs.get("user_identifier").expect("unreachable").value)?;
+            let user_identifier = UserID::new(inputs[0].value)?;
             remove_user_pw(data_base.expect("unreachable"), site_name, &user_identifier)?;
             mark_as_ungraceful_exited_to_file()?;
             Ok(())
