@@ -549,13 +549,13 @@ impl GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root {
-            ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, ViewportCommand::CancelClose);
             self.window_open_list.root = false;
         }
 
         if !self.window_open_list.root {
             if check_can_directly_exit() {
-                ctx.send_viewport_cmd(ViewportCommand::Close)
+                ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, ViewportCommand::Close)
             }
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of("close"),
@@ -572,13 +572,12 @@ impl eframe::App for GraphicalUserInterface {
                                     self.string_values.save_error = "failed save".to_string();
                                 } else {
                                     self.string_values.save_error = "saved".to_string();
-                                    self.window_open_list.root = false;
-                                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                                    ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, ViewportCommand::Close);
                                 }
                             }
                             if ui.button("noting save").clicked() {
-                                self.window_open_list.root = false;
-                                ctx.send_viewport_cmd(ViewportCommand::Close);
+                                mark_as_graceful_exited_to_file().unwrap();
+                                ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, ViewportCommand::Close);
                             }
                         });
                         ui.label(&self.string_values.save_error);
