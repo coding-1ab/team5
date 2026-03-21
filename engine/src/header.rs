@@ -67,5 +67,12 @@ impl DBHeader {
         }
     }
 }
+
+impl Default for DBHeader {
+    fn default() -> Self {
+        Self::empty_valid()
+    }
+}
+
 unsafe impl Zeroable for DBHeader {}
 unsafe impl Pod for DBHeader {}
