@@ -7,3 +7,4 @@ pub mod master_secrets;
 pub mod user_secrets;
 
 pub use libsodium_sys as sodium;
+pub use sodium::rust_wrappings::*;
