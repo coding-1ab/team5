@@ -16,6 +16,7 @@ pub enum UserPWError {
     Empty,
 }
 impl UserPW {
+    #[inline(always)]
     pub fn new(input: &str) -> Result<UserPW, UserPWError> {
         let trimmed = input.trim();
         if trimmed.is_empty() {
@@ -69,6 +70,7 @@ pub enum UserIDError {
     // TooLong,
 }
 impl UserID {
+    #[inline]
     pub fn new(input: &str) -> Result<UserID, UserIDError> {
         let trimmed = input.trim();
         if trimmed.is_empty() {
@@ -120,6 +122,7 @@ pub enum SiteNameError {
 }
 
 impl SiteName {
+    #[inline]
     pub fn new(input: &str) -> Result<Self, SiteNameError> {
         if input.trim().is_empty() {
             return Err(SiteNameError::Empty);
@@ -252,6 +255,7 @@ impl Display for DBIOError {
 impl Error for DBIOError {}
 
 
+#[inline(always)]
 pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
                    -> Result<(), DBIOError> {
     let encrypted_pw = encrypt_user_pw(&site_name, &user_id, user_pw, wrapped_key, user_key_nonce)?;
@@ -267,6 +271,7 @@ pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: U
     }
 }
 
+#[inline(always)]
 pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
                       -> Result<(), DBIOError> {
     let users = db.get_mut(site_name)
@@ -278,6 +283,7 @@ pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_p
     Ok(())
 }
 
+#[inline(always)]
 pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Result<(), DBIOError> {
     let users = db.get_mut(site_name)
         .ok_or(DBIOError::SiteNotFound)?;
@@ -292,6 +298,7 @@ pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Re
     Ok(())
 }
 
+#[inline(always)]
 pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
                    -> Result<UserPW, DBIOError> {
     let users = db.get(site_name)
@@ -305,7 +312,7 @@ pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key:
     Ok( pw )
 }
 
-#[inline]
+#[inline(always)]
 pub fn prefix_range<'a>(db: &'a DB, prefix: &str, )
     -> impl Iterator<Item = (&'a SiteName, &'a HashMap<UserID, EncryptedUserPW>)> {
     let lower = SiteName::from_unchecked("", prefix);

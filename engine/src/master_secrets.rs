@@ -34,20 +34,6 @@ pub enum MasterPWError {
     // 프로세스 유효성
     InvalidSession
 }
-pub fn master_pw_validation(raw_pw: &String) -> Result<(), MasterPWError> {
-
-    if raw_pw.is_empty() {
-        return Err(MasterPWError::Empty);
-    }
-    if raw_pw.len() < 8 {
-        return Err(MasterPWError::TooShort);
-    }
-    if raw_pw.chars().any(|c| c.is_whitespace()) {
-    }
-
-    Ok( () )
-}
-
 impl Display for MasterPWError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -69,8 +55,46 @@ impl Display for MasterPWError {
         }
     }
 }
-
 impl StdError for MasterPWError {}
+#[inline(always)]
+pub fn master_pw_validation(raw_pw: &String) -> Result<(), MasterPWError> {
+    let trimmed = raw_pw.trim();
+
+    if trimmed.is_empty() {
+        return Err(MasterPWError::Empty);
+    }
+    if trimmed.len() < 8 {
+        return Err(MasterPWError::TooShort);
+    }
+    if trimmed.chars().any(|c| c.is_whitespace()) {
+    }
+
+    Ok( () )
+}
+
+#[inline(always)]
+fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
+    let params = Params::new(
+        128*1024, // 메모리 요구량 (KB 단위)
+        1,         // 반복 횟수
+        12,       // 병렬 처리 수준
+        Some(32),       // 출력 길이
+    ).unwrap();
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        params
+    );
+    let mut kdf_out = [0u8; ECIES_SK_SIZE];
+    hint::black_box(kdf_out.as_mut_ptr());
+    argon2.hash_password_into(
+        master_pw.as_bytes(), salt,
+        kdf_out.as_mut()
+    ).unwrap();
+    let sec_key = SecKey::from_raw(kdf_out.as_ptr());
+    kdf_out.zeroize();
+    sec_key
+}
 
 #[inline]
 fn get_wrapped_session_key(sec_key: &SecKey) -> (WrappedSessionKey, SessionKeyNonce) {
@@ -102,30 +126,6 @@ fn get_wrapped_session_key(sec_key: &SecKey) -> (WrappedSessionKey, SessionKeyNo
 
     wrap_session_key(session_key)
 }
-
-fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
-    let params = Params::new(
-        128*1024, // 메모리 요구량 (KB 단위)
-        1,         // 반복 횟수
-        12,       // 병렬 처리 수준
-        Some(32),       // 출력 길이
-    ).unwrap();
-    let argon2 = Argon2::new(
-        argon2::Algorithm::Argon2id,
-        argon2::Version::V0x13,
-        params
-    );
-    let mut kdf_out = [0u8; ECIES_SK_SIZE];
-    hint::black_box(kdf_out.as_mut_ptr());
-    argon2.hash_password_into(
-        master_pw.as_bytes(), salt,
-        kdf_out.as_mut()
-    ).unwrap();
-    let sec_key = SecKey::from_raw(kdf_out.as_ptr());
-    kdf_out.zeroize();
-    sec_key
-}
-
 
 pub fn general_login(master_pw: &mut String, salt: &Salt)
                      -> (SecKey, PubKey, WrappedSessionKey, SessionKeyNonce) {

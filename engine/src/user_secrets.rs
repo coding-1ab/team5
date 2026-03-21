@@ -280,6 +280,8 @@ pub fn get_session_key_wrapper() -> SessionKeyWrapper {
 
     result
 }
+
+#[inline]
 fn get_user_pw_nonce(site: &SiteName, id: &UserID)
     -> UserPWNonce {
     let mut processed_id = id.as_str().to_owned().into_bytes();
@@ -313,6 +315,7 @@ fn get_user_pw_nonce(site: &SiteName, id: &UserID)
     nonce
 }
 
+
 pub fn wrap_session_key(session_key: SessionKey)
                         -> (WrappedSessionKey, SessionKeyNonce) {
     let wrapper = get_session_key_wrapper().into();
@@ -327,6 +330,7 @@ pub fn wrap_session_key(session_key: SessionKey)
     (wrapped_key, nonce)
 }
 
+#[inline(always)]
 pub fn unwrap_session_key(wrapped_key: &WrappedSessionKey, nonce: &SessionKeyNonce)
                           -> Result<SessionKey, DBIOError> {
     let wrapper = get_session_key_wrapper().into();
@@ -337,7 +341,7 @@ pub fn unwrap_session_key(wrapped_key: &WrappedSessionKey, nonce: &SessionKeyNon
     Ok(session_key)
 }
 
-#[inline]
+
 pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
                        -> Result<EncryptedUserPW, DBIOError> {
     let session_key: AesKey = unwrap_session_key(wrapped_key, user_key_nonce)?.into();
@@ -351,7 +355,7 @@ pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_ke
     Ok( encrypted_pw )
 }
 
-#[inline]
+#[inline(always)]
 pub fn decrypt_user_pw(site: &SiteName, id: &UserID, encrypted_pw: &EncryptedUserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
                        -> Result<UserPW, DBIOError> {
     let user_key: AesKey = unwrap_session_key(wrapped_key, user_key_nonce)?.into();
