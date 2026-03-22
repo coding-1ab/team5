@@ -20,7 +20,6 @@ struct Output {
 
 #[cfg(target_os = "linux")]
 #[derive(Deserialize)]
-#[derive(Clone)]
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct Device {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,20 +34,20 @@ struct Device {
 impl Output {
     #[cfg(target_os = "linux")]
     fn get_root(self) -> Result<String, HWIDError> {
-        for devc in self.blockdevices.clone().into_iter() {
-            if devc.mountpoint.is_some() {
-                if devc.mountpoint.unwrap().eq("/") {
-                    if devc.uuid.is_some() {
-                        return Ok(devc.uuid.clone().unwrap());
+        for devc in self.blockdevices.into_iter() {
+            if let Some(mountpoint) = devc.mountpoint {
+                if mountpoint.eq("/") {
+                    if let Some(uuid) = devc.uuid {
+                        return Ok(uuid);
                     }
                 }
             }
-            if devc.children.is_some() {
-                for chld_device in devc.children.unwrap().into_iter() {
-                    if chld_device.mountpoint.is_some() {
-                        if chld_device.mountpoint.unwrap().eq("/") {
-                            if chld_device.uuid.is_some() {
-                                return Ok(chld_device.uuid.clone().unwrap());
+            if let Some(children) = devc.children {
+                for chld_device in children.into_iter() {
+                    if let Some(mnt) = chld_device.mountpoint {
+                        if mnt.eq("/") {
+                            if let Some(uuid) = chld_device.uuid {
+                                return Ok(uuid);
                             }
                         }
                     }
