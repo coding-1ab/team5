@@ -1,4 +1,5 @@
 use single_instance::SingleInstance;
+use engine::hide_root_window;
 
 fn main() {
     let instance = SingleInstance::new("team5").unwrap();
@@ -44,6 +45,7 @@ fn main() {
                 cc.egui_ctx.add_font(emoji_font);
                 Ok(Box::new(GraphicalUserInterface::default()))
             }),
-        ).unwrap()
+        ).unwrap();
+            engine::hide_root_window();
     }
 }
