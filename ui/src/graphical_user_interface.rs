@@ -16,6 +16,7 @@ use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
 };
+use eframe::egui::{ViewportBuilder, ViewportId};
 use zeroize::Zeroize;
 use engine::{
     file_io::{
@@ -40,6 +41,7 @@ use engine::{
     header::DBHeader,
     sodium::rust_wrappings::x25519::PubKey
 };
+use engine::master_secrets::MasterPWError;
 use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Debug)]
@@ -194,6 +196,11 @@ impl GraphicalUserInterface {
                     ui.add(egui::TextEdit::singleline(&mut self.string_values.master_login.password).password(true));
                     ui.label(&self.string_values.master_login.error_message);
                     if ui.button("login").clicked() {
+                        loading(context);
+                        if let Err(error) = master_pw_validation(&self.string_values.master_login.password) {
+                            self.string_values.master_login.error_message = error.to_string();
+                            return;
+                        }
                         let (secret_key, public_key, wrapped_session_key, session_key_nonce) =
                             general_login(&mut self.string_values.master_login.password, &self.data_base_header.master_pw_salt);
                         self.string_values.master_login.password.zeroize();
@@ -262,6 +269,7 @@ impl GraphicalUserInterface {
                     ui.add(egui::TextEdit::singleline(&mut self.string_values.master_login.recheck_password).password(true));
                     ui.label(&self.string_values.master_login.error_message);
                     if ui.button("Accept").clicked() {
+                        loading(context);
                         if let Err(err) = master_pw_validation(&self.string_values.master_login.password) {
                             self.string_values.master_login.error_message = format!("Master password validation error: {}", err);
                             self.string_values.master_login.password.zeroize();
@@ -339,6 +347,7 @@ impl GraphicalUserInterface {
                 let Some((wrapped_session_key, session_key_nonce)) = key_mut else {
                     return Err(anyhow!("unreachable"));
                 };
+                loading(context);
                 let (public_key, salt) = change_master_pw(data_base, inputs[0].value.take(), wrapped_session_key, session_key_nonce)?;
 
                 self.data_base_header.master_pw_salt = salt;
@@ -362,6 +371,7 @@ impl GraphicalUserInterface {
             ui.horizontal(|ui| {
                 let save_data_base = ui.button("save data base");
                 if save_data_base.clicked() {
+                    loading(ctx);
                     match self.save_data_base() {
                         Ok(()) => { self.string_values.save_data_base_label = "saved data base".to_string(); }
                         Err(error) => { self.string_values.save_data_base_label = error.to_string(); }
@@ -812,4 +822,16 @@ fn remove_user_password_with_site_name_with_user_identifier(
         })
         .on_success(|_| {}).error_message(error_message)
         .show(context, button, window_open);
+}
+
+fn loading(context: &Context) {
+    context.show_viewport_immediate(
+        ViewportId::from_hash_of("loading"),
+        ViewportBuilder::default().with_title("loading"),
+        |ctx, _| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.label("Loading...");
+            });
+        }
+    )
 }
