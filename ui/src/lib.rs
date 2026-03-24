@@ -3,13 +3,6 @@
 #![deny(clippy::complexity)]
 #![deny(clippy::too_many_lines)]
 
-// todo
-
-// 사이트 이름 + 계정 정보 주면 저장
-// 사이트 이름 주면 계정 정보 불러오기
-
-// 흠 뭐부터 하지
-
 use engine::data_base::DB;
 
 #[cfg(feature = "gui")]

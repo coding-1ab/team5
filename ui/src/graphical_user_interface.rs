@@ -173,7 +173,6 @@ ExitAppWithoutSave,
 
 #[derive(Default)]
 pub struct GraphicalUserInterface {
-    no_first_frame: bool,
     login: bool,
     string_values: StringValues,
     window_open_list: WindowOpenList,
@@ -559,10 +558,6 @@ impl GraphicalUserInterface {
 
 impl eframe::App for GraphicalUserInterface {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        if !self.no_first_frame {
-            engine::hide_root_window();
-            self.no_first_frame = true;
-        }
 
         if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, ViewportCommand::CancelClose);

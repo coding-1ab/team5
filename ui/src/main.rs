@@ -1,3 +1,6 @@
+#![windows_subsystem = "windows"]
+
+use eframe::egui::ViewportCommand;
 use single_instance::SingleInstance;
 use engine::hide_root_window;
 
@@ -21,7 +24,7 @@ fn main() {
             "eframe example",
             options,
             Box::new(|cc| {
-                //cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
+                cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
                 let insert_font_family = InsertFontFamily {
                     family: egui::FontFamily::Proportional,
                     priority: FontPriority::Highest,
@@ -46,6 +49,5 @@ fn main() {
                 Ok(Box::new(GraphicalUserInterface::default()))
             }),
         ).unwrap();
-            engine::hide_root_window();
     }
 }
