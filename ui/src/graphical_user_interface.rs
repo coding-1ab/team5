@@ -17,7 +17,6 @@ use eframe::{
     egui::{self, Context, ViewportCommand},
 };
 use eframe::egui::{ViewportBuilder, ViewportId};
-use winit::window::Window;
 use zeroize::Zeroize;
 use engine::{
     file_io::{
