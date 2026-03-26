@@ -22,7 +22,6 @@ use sha3::Sha3_256;
 use libsodium_sys::rust_wrappings::aes256gcm::{aes256gcm_decrypt, aes256gcm_decrypt_from_ptr, aes256gcm_encrypt, aes256gcm_encrypt_from_ptr_to_sodium_box, AesKey, AesNonce, AES_KEY_SIZE, AES_NONCE_SIZE, AES_OUT_AUTH_TAG_SIZE};
 use libsodium_sys::rust_wrappings::hasher::Sha256;
 use libsodium_sys::rust_wrappings::sodium_box::SodiumBox;
-use machineid_rs::{get_disk_id, get_hwid, get_mac_address};
 
 struct SecretBoxRef;
 
@@ -35,7 +34,6 @@ impl ArchiveWith<SecretBox<[u8]>> for SecretBoxRef {
         ArchivedVec::resolve_from_slice(exposed, resolver, out);
     }
 }
-
 impl<S: Fallible + ?Sized> SerializeWith<SecretBox<[u8]>, S> for SecretBoxRef
 where
     S: rkyv::ser::Writer + rkyv::ser::Allocator,
@@ -45,7 +43,6 @@ where
         ArchivedVec::serialize_from_slice(exposed, serializer)
     }
 }
-
 impl<D: Fallible + ?Sized> DeserializeWith<Archived<Vec<u8>>, SecretBox<[u8]>, D> for SecretBoxRef {
     fn deserialize_with(field: &Archived<Vec<u8>>, _deserializer: &mut D) -> Result<SecretBox<[u8]>, D::Error> {
         Ok(SecretBox::new(field.as_slice().into()))
@@ -53,14 +50,54 @@ impl<D: Fallible + ?Sized> DeserializeWith<Archived<Vec<u8>>, SecretBox<[u8]>, D
 }
 
 #[derive(Archive, Deserialize, Serialize)]
+pub struct EncryptedSiteName {
+    #[rkyv(with = SecretBoxRef)]
+    full: SecretBox<[u8] >,
+    #[rkyv(with = SecretBoxRef)]
+    reg: SecretBox<[u8] >,
+}
+impl EncryptedSiteName {
+    pub fn full_as_bytes(&self) -> &[u8] {
+        self.full.expose_secret().as_ref()
+    }
+    pub fn reg_as_bytes(&self) -> &[u8] {
+        self.reg.expose_secret().as_ref()
+    }
+}
+impl Zeroize for EncryptedSiteName {
+    fn zeroize(&mut self) {
+        self.full.zeroize();
+        self.reg.zeroize();
+    }
+}
+impl ZeroizeOnDrop for EncryptedSiteName {}
+
+#[derive(Archive, Deserialize, Serialize)]
+pub struct EncryptedUserID (
+    #[rkyv(with = SecretBoxRef)]
+    SecretBox<[u8]>,
+);
+impl EncryptedUserID {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.expose_secret().as_ref()
+    }
+}
+impl Zeroize for EncryptedUserID {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
+    }
+}
+impl ZeroizeOnDrop for EncryptedUserID {}
+
+#[derive(Archive, Deserialize, Serialize)]
 pub struct EncryptedUserPW (
     #[rkyv(with = SecretBoxRef)]
     SecretBox<[u8]>,
 );
 impl EncryptedUserPW {
-    pub fn from_vec(v: Vec<u8>) -> EncryptedUserPW {
-        let secret_boxed = SecretBox::new(v.into_boxed_slice());
-        EncryptedUserPW (secret_boxed)
+    pub fn from_vec(mut v: Vec<u8>) -> Self {
+        let secret_boxed = SecretBox::from(Box::from(v));
+        EncryptedUserPW(secret_boxed)
     }
     pub fn as_bytes(&self) -> &[u8] {
         self.0.expose_secret().as_ref()
@@ -72,6 +109,7 @@ impl Zeroize for EncryptedUserPW {
     }
 }
 impl ZeroizeOnDrop for EncryptedUserPW {}
+
 
 const USER_PW_NONCE_SIZE: usize = AES_NONCE_SIZE;
 pub struct UserPWNonce {
