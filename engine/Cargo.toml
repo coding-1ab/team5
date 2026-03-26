@@ -22,4 +22,5 @@ psl = "*"
 url = { path = "fork/url-2.5.8-fork" }
 libsodium-sys-stable = { path = "fork/libsodium-sys-stable-1.23.2-fork" }
 sysinfo = { path = "fork/sysinfo-0.29.11-fork" }
-machineid-rs = { path = "fork/machineid-rs-1.2.4-fork", default-features = true }
+#machineid-rs = { path = "fork/machineid-rs-1.2.4-fork", default-features = true }
+machinedid-rs = "*"
