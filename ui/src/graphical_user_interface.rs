@@ -17,6 +17,7 @@ use eframe::{
     egui::{self, Context, ViewportCommand},
 };
 use eframe::egui::{ViewportBuilder, ViewportId};
+use winit::window::Window;
 use zeroize::Zeroize;
 use engine::{
     file_io::{
@@ -41,7 +42,6 @@ use engine::{
     header::DBHeader,
     sodium::rust_wrappings::x25519::PubKey
 };
-use engine::master_secrets::MasterPWError;
 use crate::command_builder::{CommandBuilder, CommandValue};
 
 #[derive(Debug)]
@@ -602,7 +602,7 @@ impl eframe::App for GraphicalUserInterface {
             return;
         }
         ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize([700.0, 700.0].into()));
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize([800.0, 600.0].into()));
         self.user_main_view(ctx);
     }
 }

@@ -153,7 +153,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
                     ui.label(&*error_message);
 
-                    if ui.button("submit").clicked() {
+                    if ui.button("submit").clicked() || ctx.input(|input| input.key_pressed(egui::Key::Enter)) {
                         Self::handle_accept(&mut self.inner, error_message, window_open);
                     }
                 });
