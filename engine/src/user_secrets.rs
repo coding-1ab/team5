@@ -7,7 +7,6 @@ use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::manual_zeroize;
 use argon2::{Argon2, Params};
 use std::{hint, process};
-use std::arch::x86_64::__get_cpuid_max;
 use rand::prelude::*;
 use rand::rngs::OsRng;
 use sysinfo::{CpuExt, Pid, PidExt, ProcessExt, System, SystemExt};
