@@ -169,6 +169,7 @@ fn compile_libsodium_traditional(
     let build_compiler = cc::Build::new().get_compiler();
     let mut compiler = build_compiler.path().to_str().unwrap().to_string();
     let mut cflags = env::var("CFLAGS").unwrap_or_default();
+    cflags.push_str(" -UNDEBUG");
     if !cflags.contains("-fPIC") {
         cflags.push_str(" -fPIC");
     }
