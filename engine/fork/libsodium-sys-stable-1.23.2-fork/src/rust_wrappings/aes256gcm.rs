@@ -105,6 +105,7 @@ pub fn aes256gcm_encrypt_from_ptr(
     let mut actual_ciphertext_len: c_ulonglong = 0;
     let ciphertext_len = plaintext_len as c_ulonglong + AES_OUT_AUTH_TAG_SIZE as c_ulonglong;
     let mut ciphertext = Vec::with_capacity(ciphertext_len as usize);
+    unsafe { ciphertext.set_len(ciphertext_len as usize); }
     unsafe {
         crypto_aead_aes256gcm_encrypt(
             ciphertext.as_mut_ptr(), addr_of_mut!(actual_ciphertext_len),
@@ -123,7 +124,7 @@ pub fn aes256gcm_encrypt_from_ptr_to_sodium_box(
 ) -> SodiumBox<u8> {
     let mut actual_ciphertext_len: c_ulonglong = 0;
     let ciphertext_len = plaintext_len as c_ulonglong + AES_OUT_AUTH_TAG_SIZE as c_ulonglong;
-    let mut ciphertext = SodiumBox::new_with_size(ciphertext_len as usize);
+    let mut ciphertext = SodiumBox::<u8>::new_with_size(ciphertext_len as usize);
     if unsafe {
         crypto_aead_aes256gcm_encrypt(
             ciphertext.as_mut_ptr(), addr_of_mut!(actual_ciphertext_len),
@@ -144,7 +145,7 @@ pub fn aes256gcm_encrypt_to_sodium_box(
 ) -> SodiumBox<u8> {
     let mut actual_ciphertext_len: c_ulonglong = 0;
     let ciphertext_len = plaintext.len() as c_ulonglong + AES_OUT_AUTH_TAG_SIZE as c_ulonglong;
-    let mut ciphertext = SodiumBox::new_with_size(ciphertext_len as usize);
+    let mut ciphertext = SodiumBox::<u8>::new_with_size(ciphertext_len as usize);
     unsafe {
         crypto_aead_aes256gcm_encrypt(
             ciphertext.as_mut_ptr(), addr_of_mut!(actual_ciphertext_len),
