@@ -168,8 +168,10 @@ fn compile_libsodium_traditional(
     // Decide on CC, CFLAGS and the --host configure argument
     let build_compiler = cc::Build::new().get_compiler();
     let mut compiler = build_compiler.path().to_str().unwrap().to_string();
-    let mut cflags = build_compiler.cflags_env().into_string().unwrap();
-    let mut ldflags = env::var("SODIUM_LDFLAGS").unwrap_or_default();
+    let mut cflags = env::var("CFLAGS").unwrap_or_default();
+    if !cflags.contains("-fPIC") {
+        cflags.push_str(" -fPIC");
+    }    let mut ldflags = env::var("SODIUM_LDFLAGS").unwrap_or_default();
     let host_arg;
     let help;
     let mut configure_extra = vec![];
@@ -284,8 +286,10 @@ fn compile_libsodium_traditional(
     if !ldflags.is_empty() {
         configure_cmd.env("LDFLAGS", &ldflags);
     }
-    if env::var("SODIUM_DISABLE_PIE").is_ok() {
-        configure_cmd.arg("--disable-pie");
+
+    configure_cmd.arg("--disable-pie");
+    if env::var("SODIUM_ENABLE_PIE").is_ok() {
+        // 필요시 override 로직 추가 가능
     }
     configure_cmd.arg("--disable-ssp");
     #[cfg(feature = "optimized")]
