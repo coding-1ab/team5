@@ -93,7 +93,7 @@ pub fn aes256gcm_encrypt(
             null(), nonce.as_ptr(), key.as_ptr()
         );
     }
-    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth (16) }}");
+    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth == 16 }}");
     ciphertext
 }
 
@@ -114,7 +114,7 @@ pub fn aes256gcm_encrypt_from_ptr(
             null(), nonce.as_ptr(), key.as_ptr()
         );
     }
-    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth (16) }}");
+    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth == 16 }}");
     ciphertext
 }
 
@@ -133,7 +133,7 @@ pub fn aes256gcm_encrypt_from_ptr_to_sodium_box(
             null(), nonce.as_ptr(), key.as_ptr()
         );
     }
-    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth (16) }}");
+    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth == 16 }}");
     ciphertext
 }
 
@@ -152,7 +152,7 @@ pub fn aes256gcm_encrypt_to_sodium_box(
             null(), nonce.as_ptr(), key.as_ptr()
         );
     }
-    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth (16) }}");
+    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth == 16 }}");
     ciphertext
 }
 
@@ -171,7 +171,7 @@ pub fn aes256gcm_encrypt_to_slice(
             null(), nonce.as_ptr(), key.as_ptr()
         );
     }
-    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth (16) }}");
+    assert_eq!(actual_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth == 16 }}");
 }
 
 
@@ -195,7 +195,7 @@ pub fn aes256gcm_decrypt(
     if rc != 0 {
         return Err( () )
     }
-    assert_eq!(actual_plaintext_len, plaintext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length - verifier tag langth (16) }}");
+    assert_eq!(actual_plaintext_len, plaintext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length - verifier tag langth == 16 }}");
     Ok ( plaintext )
 }
 
@@ -217,7 +217,7 @@ pub fn aes256gcm_decrypt_from_ptr(
     if rc != 0 {
         return Err( () )
     }
-    assert_eq!(actual_plaintext_len, plaintext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length - verifier tag langth (16) }}");
+    assert_eq!(actual_plaintext_len, plaintext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length - verifier tag langth == 16 }}");
     Ok ( plaintext )
 }
 
@@ -238,7 +238,7 @@ pub fn aes256gcm_decrypt_from_ptr(
 //             NULL.cast(), nonce.as_ptr(), key.as_ptr()
 //         );
 //     }
-//     assert_eq!(raw_ciphertext_len, ciphertext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length + verifier tag langth (16) }}");
+// assert_eq!("{{ == 16 }}");
 //     ciphertext
 // }
 //
@@ -254,7 +254,7 @@ pub fn aes256gcm_decrypt_from_ptr(
 //             nonce.as_ptr(), key.as_ptr()
 //         )
 //     };
-//     assert_eq!(raw_plaintext_len, plaintext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length - verifier tag langth (16) }}");
+// assert_eq!(actual_plaintext_len, plaintext_len, "AES-GCM ciphertext length mismatch of {{ plaintext length - verifier tag langth == 16 }}");
 //     if rc != 0 {
 //         return Err( () )
 //     }
