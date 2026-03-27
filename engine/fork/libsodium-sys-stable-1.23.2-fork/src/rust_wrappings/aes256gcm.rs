@@ -3,7 +3,7 @@ use core::ffi::{c_uchar, c_ulonglong};
 use core::ptr::{addr_of_mut, null, null_mut};
 use zeroize::Zeroize;
 use crate::rust_wrappings::sodium_box::SodiumBox;
-use crate::sodium_bindings::{crypto_aead_aes256gcm_ABYTES, crypto_aead_aes256gcm_decrypt, crypto_aead_aes256gcm_encrypt, randombytes_buf};
+use crate::sodium_bindings::{crypto_aead_aes256gcm_ABYTES, crypto_aead_aes256gcm_decrypt, crypto_aead_aes256gcm_encrypt, crypto_aead_aes256gcm_is_available, randombytes_buf};
 
 
 
@@ -125,6 +125,11 @@ pub fn aes256gcm_encrypt_from_ptr_to_sodium_box(
     let mut actual_ciphertext_len: c_ulonglong = 0;
     let ciphertext_len = plaintext_len as c_ulonglong + AES_OUT_AUTH_TAG_SIZE as c_ulonglong;
     let mut ciphertext = SodiumBox::<u8>::new_with_size(ciphertext_len as usize);
+    unsafe {
+        if crypto_aead_aes256gcm_is_available() == 0 {
+            panic!("AES256-GCM not available on this CPU");
+        }
+    }
     if unsafe {
         crypto_aead_aes256gcm_encrypt(
             ciphertext.as_mut_ptr(), addr_of_mut!(actual_ciphertext_len),
