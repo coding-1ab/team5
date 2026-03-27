@@ -1,12 +1,11 @@
 use crate::file_io::FileIOError;
-use bytemuck::{Pod, Zeroable};
 use crate::master_secrets::EncryptedDB;
+use bytemuck::{Pod, Zeroable};
 
 const SALT_LEN: usize = 32;
 const MAGIC_LEN: usize = 78;
 const VERSION_LEN: usize = 18;
 const HEADER_USED_LEN: usize = SALT_LEN + MAGIC_LEN + VERSION_LEN;
-
 
 type Magic = [u8; MAGIC_LEN];
 type Version = [u8; VERSION_LEN];
@@ -15,7 +14,8 @@ pub type CiphTxtChecksum = [u8; 64];
 pub type CipherTextLen = usize;
 
 /// Program internal magic literal
-const DB_MAGIC: Magic = *b"This is DB file of PW Manager. A Project Created By Team5 of 2025 Rust Study.\n";
+const DB_MAGIC: Magic =
+    *b"This is DB file of PW Manager. A Project Created By Team5 of 2025 Rust Study.\n";
 /// Program-internal DB format version
 const DB_VERSION: Version = *b"DB Ver: 0.1.2.000\n";
 
@@ -32,8 +32,7 @@ pub struct DBHeader {
 pub const HEADER_LEN: usize = size_of::<DBHeader>();
 
 impl DBHeader {
-    pub fn parse_header(bytes: &[u8])
-                        -> Result<(DBHeader, EncryptedDB), FileIOError> {
+    pub fn parse_header(bytes: &[u8]) -> Result<(DBHeader, EncryptedDB), FileIOError> {
         if bytes.len() < HEADER_LEN {
             return Err(FileIOError::InvalidHeader);
         }
@@ -50,7 +49,7 @@ impl DBHeader {
             return Err(FileIOError::DBVersionMissMatch);
         }
 
-        Ok( (header, body.to_vec()) )
+        Ok((header, body.to_vec()))
     }
 
     pub fn write_to(&self, out: &mut Vec<u8>) {

@@ -40,7 +40,7 @@ macro_rules! pid_decl {
         #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
         #[repr(transparent)]
         #[derive(Copy)]
-pub struct Pid(pub(crate) $typ);
+        pub struct Pid(pub(crate) $typ);
 
         impl From<usize> for Pid {
             fn from(v: usize) -> Self {

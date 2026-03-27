@@ -14,10 +14,10 @@ use alloc::vec::Vec;
 use core::cmp;
 use core::fmt::{self, Formatter};
 
+use crate::parser::{ParseError, ParseResult};
 use percent_encoding::{percent_decode, utf8_percent_encode, CONTROLS};
 #[cfg(feature = "serde")]
 use serde_derive::{Deserialize, Serialize};
-use crate::parser::{ParseError, ParseResult};
 
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

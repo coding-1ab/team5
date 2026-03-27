@@ -2771,7 +2771,6 @@ impl Url {
     fn byte_at(&self, i: u32) -> u8 {
         self.serialization.as_bytes()[i as usize]
     }
-
 }
 
 impl Drop for Url {
@@ -2793,10 +2792,18 @@ impl Drop for Url {
             self.path_start,
             self.query_start,
             self.fragment_start,
+        ) = (
+            0,
+            0,
+            0,
+            0,
+            HostInternal::None,
+            Default::default(),
+            0,
+            Default::default(),
+            Default::default(),
         )
-            = (0,0,0,0,HostInternal::None,Default::default(),0,Default::default(),Default::default())
     }
-
 }
 
 /// Parse a string as an URL, without a base URL or encoding override.

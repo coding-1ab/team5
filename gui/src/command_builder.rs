@@ -1,18 +1,18 @@
-use std::collections::{BTreeMap, HashMap};
 use anyhow::Error;
 use eframe::{egui, egui::TextEdit};
-use zeroize::Zeroize;
-use engine::{
-    data_base::{SiteName, DB},
-    user_secrets::{SessionKeyNonce, WrappedSessionKey}
-};
 use engine::data_base::UserID;
+use engine::{
+    data_base::{DB, SiteName},
+    user_secrets::{SessionKeyNonce, WrappedSessionKey},
+};
+use std::collections::{BTreeMap, HashMap};
+use zeroize::Zeroize;
 
 // 하나의 입력 필드를 표현
 pub struct InputField<'a> {
     pub label: &'static str,
     pub value: &'a mut String,
-    pub want_zeroize: bool,        // 에러 시 zeroize할지
+    pub want_zeroize: bool, // 에러 시 zeroize할지
 }
 
 // CommandBuilder 본체
@@ -26,11 +26,22 @@ pub struct CommandBuilder<'a, Output> {
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
     #[allow(clippy::complexity)]
-    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&(WrappedSessionKey, SessionKeyNonce)>, Option<&mut (WrappedSessionKey, SessionKeyNonce)>) -> Result<Output, Error> + 'a>>,
+    execute: Option<
+        Box<
+            dyn FnMut(
+                    &mut Vec<InputField>,
+                    Option<&mut DB>,
+                    Option<&(WrappedSessionKey, SessionKeyNonce)>,
+                    Option<&mut (WrappedSessionKey, SessionKeyNonce)>,
+                ) -> Result<Output, Error>
+                + 'a,
+        >,
+    >,
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new(title: &'static str, screen_name: &'static str) -> Self {   // command_fn은 이제 new()에서 안 받음
+    pub fn new(title: &'static str, screen_name: &'static str) -> Self {
+        // command_fn은 이제 new()에서 안 받음
         Self {
             title,
             screen_name,
@@ -48,7 +59,7 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self.database = Some(db);
         self
     }
-    
+
     pub fn set_key(mut self, key: &'a (WrappedSessionKey, SessionKeyNonce)) -> Self {
         self.key = Some(key);
         self
@@ -62,7 +73,13 @@ impl<'a, Output> CommandBuilder<'a, Output> {
     // ← 여기서 핵심 변경
     pub fn execute<F>(mut self, execute_fn: F) -> Self
     where
-        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&(WrappedSessionKey, SessionKeyNonce)>, Option<&mut (WrappedSessionKey, SessionKeyNonce)>) -> Result<Output, Error> + 'a,
+        F: FnMut(
+                &mut Vec<InputField>,
+                Option<&mut DB>,
+                Option<&(WrappedSessionKey, SessionKeyNonce)>,
+                Option<&mut (WrappedSessionKey, SessionKeyNonce)>,
+            ) -> Result<Output, Error>
+            + 'a,
     {
         self.execute = Some(Box::new(execute_fn));
         self
@@ -94,7 +111,10 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self
     }
 
-    pub fn error_message(self, error_message: &'a mut String) -> CommandBuilderWithError<'a, Output> {
+    pub fn error_message(
+        self,
+        error_message: &'a mut String,
+    ) -> CommandBuilderWithError<'a, Output> {
         CommandBuilderWithError {
             inner: self,
             error_message,
@@ -109,12 +129,7 @@ pub struct CommandBuilderWithError<'a, Output> {
 }
 
 impl<'a, Output> CommandBuilderWithError<'a, Output> {
-    pub fn show(
-        mut self,
-        context: &egui::Context,
-        button: egui::Response,
-        window_open: &mut bool,
-    ) {
+    pub fn show(mut self, context: &egui::Context, button: egui::Response, window_open: &mut bool) {
         if button.clicked() {
             *window_open = true;
         }
@@ -153,7 +168,9 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
                     ui.label(&*error_message);
 
-                    if ui.button("submit").clicked() || ctx.input(|input| input.key_pressed(egui::Key::Enter)) {
+                    if ui.button("submit").clicked()
+                        || ctx.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
                         Self::handle_accept(&mut self.inner, error_message, window_open);
                     }
                 });
@@ -173,7 +190,12 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
         let values = &mut builder.inputs;
 
-        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.key, builder.key_mut.as_deref_mut()) {
+        match builder.execute.as_mut().unwrap()(
+            values,
+            builder.database.as_deref_mut(),
+            builder.key,
+            builder.key_mut.as_deref_mut(),
+        ) {
             Ok(result) => {
                 (builder.on_success)(result);
                 *window_open = false;
@@ -267,8 +289,10 @@ pub struct CommandValue {
     pub add_user_password_with_site_name: AddUserPasswordWithSiteName,
     pub change_user_password_with_site_name: ChangeUserPasswordWithSiteName,
     pub remove_user_password_with_site_name: RemoveUserPasswordWithSiteName,
-    pub change_user_password_with_site_name_with_user_identifier: ChangeUserPasswordWithSiteNameWithUserIdentifier,
-    pub remove_user_password_with_site_name_with_user_identifier: RemoveUserPasswordWithSiteNameWithUserIdentifier
+    pub change_user_password_with_site_name_with_user_identifier:
+        ChangeUserPasswordWithSiteNameWithUserIdentifier,
+    pub remove_user_password_with_site_name_with_user_identifier:
+        RemoveUserPasswordWithSiteNameWithUserIdentifier,
 }
 
 /*

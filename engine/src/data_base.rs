@@ -1,13 +1,24 @@
-use crate::user_secrets::{EncryptedUserPW, WrappedSessionKey, decrypt_user_pw, encrypt_user_pw, SessionKey, SessionKeyNonce};
-use std::collections::{BTreeMap, HashMap};
+use crate::user_secrets::{
+    EncryptedUserPW, SessionKey, SessionKeyNonce, WrappedSessionKey, decrypt_user_pw,
+    encrypt_user_pw,
+};
 use rkyv::{Archive, Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::str::FromStr;
 
 #[derive(
-    Zeroize, ZeroizeOnDrop,
-    Archive, Serialize, Deserialize,
-    PartialEq, Eq, Debug, Ord, PartialOrd, Clone
+    Zeroize,
+    ZeroizeOnDrop,
+    Archive,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Debug,
+    Ord,
+    PartialOrd,
+    Clone,
 )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct UserPW(String);
@@ -28,7 +39,7 @@ impl UserPW {
         })
     }
     pub fn from_unchecked(input: String) -> Self {
-        Self {0: input}
+        Self { 0: input }
     }
     pub fn void() -> Self {
         Self { 0: String::new() }
@@ -39,7 +50,9 @@ impl UserPW {
 }
 impl FromStr for UserPW {
     type Err = UserPWError;
-    fn from_str(s: &str) -> Result<Self, UserPWError> { Ok(UserPW::new(s)?) }
+    fn from_str(s: &str) -> Result<Self, UserPWError> {
+        Ok(UserPW::new(s)?)
+    }
 }
 impl Display for UserPWError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -55,13 +68,10 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // const MAX_USER_ID_LEN: usize = 32;
 #[derive(
-    Zeroize, ZeroizeOnDrop,
-    Archive, Serialize, Deserialize,
-    PartialEq, Eq, Debug, Ord, PartialOrd,
+    Zeroize, ZeroizeOnDrop, Archive, Serialize, Deserialize, PartialEq, Eq, Debug, Ord, PartialOrd,
 )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
-#[derive(Hash)]
-#[derive(Clone)]
+#[derive(Hash, Clone)]
 pub struct UserID(String);
 
 #[derive(Debug)]
@@ -90,7 +100,9 @@ impl UserID {
 }
 impl FromStr for UserID {
     type Err = UserIDError;
-    fn from_str(s: &str) -> Result<Self, UserIDError> { Ok(UserID::new(s)?) }
+    fn from_str(s: &str) -> Result<Self, UserIDError> {
+        Ok(UserID::new(s)?)
+    }
 }
 impl Display for UserIDError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -106,7 +118,7 @@ use std::borrow::Borrow;
 use std::cmp::Ordering;
 use url::Url;
 
-#[derive(Zeroize, ZeroizeOnDrop, Archive, Serialize, Deserialize, Debug, Clone, )]
+#[derive(Zeroize, ZeroizeOnDrop, Archive, Serialize, Deserialize, Debug, Clone)]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct SiteName {
     full: String,
@@ -137,8 +149,7 @@ impl SiteName {
             format!("dummy://{}", input)
         };
 
-        let url = Url::parse(&with_scheme)
-            .map_err(|e| SiteNameError::InvalidUrl(e.to_string()))?;
+        let url = Url::parse(&with_scheme).map_err(|e| SiteNameError::InvalidUrl(e.to_string()))?;
         with_scheme.zeroize();
 
         let host = url.host_str().ok_or(SiteNameError::InvalidHost)?;
@@ -146,8 +157,7 @@ impl SiteName {
         // www canonicalization
         let canonical_full = host.strip_prefix("www.").unwrap_or(host);
 
-        let domain = psl::domain(canonical_full.as_bytes())
-            .ok_or(SiteNameError::InvalidDomain)?;
+        let domain = psl::domain(canonical_full.as_bytes()).ok_or(SiteNameError::InvalidDomain)?;
 
         let reg = std::str::from_utf8(domain.as_bytes())
             .map_err(|_| SiteNameError::InvalidDomain)?
@@ -197,7 +207,9 @@ impl Borrow<str> for SiteName {
 }
 impl FromStr for SiteName {
     type Err = SiteNameError;
-    fn from_str(s: &str) -> Result<Self, SiteNameError> { Ok(SiteName::new(s)?) }
+    fn from_str(s: &str) -> Result<Self, SiteNameError> {
+        Ok(SiteName::new(s)?)
+    }
 }
 impl Display for SiteNameError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -213,7 +225,7 @@ impl Display for SiteNameError {
             }
             SiteNameError::InvalidHost => {
                 write!(f, "Site name does not contain a valid host")
-            },
+            }
             &SiteNameError::InvalidDomain => {
                 write!(f, "Site name does not contain a valid domain")
             }
@@ -254,14 +266,18 @@ impl Display for DBIOError {
 
 impl Error for DBIOError {}
 
-
 #[inline(always)]
-pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: UserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
-                   -> Result<(), DBIOError> {
+pub fn add_user_pw(
+    db: &mut DB,
+    site_name: SiteName,
+    user_id: UserID,
+    user_pw: UserPW,
+    wrapped_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
+) -> Result<(), DBIOError> {
     let encrypted_pw = encrypt_user_pw(&site_name, &user_id, user_pw, wrapped_key, user_key_nonce)?;
 
-    let users = db.entry(site_name)
-        .or_insert_with(HashMap::new);
+    let users = db.entry(site_name).or_insert_with(HashMap::new);
 
     if users.get(&user_id).is_none() {
         users.insert(user_id, encrypted_pw);
@@ -272,24 +288,30 @@ pub fn add_user_pw(db: &mut DB, site_name: SiteName, user_id: UserID, user_pw: U
 }
 
 #[inline(always)]
-pub fn change_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID, new_pw: UserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
-                      -> Result<(), DBIOError> {
-    let users = db.get_mut(site_name)
-        .ok_or(DBIOError::SiteNotFound)?;
-    let password = users.get_mut(user_id)
-        .ok_or(DBIOError::UserNotFound)?;
+pub fn change_user_pw(
+    db: &mut DB,
+    site_name: &SiteName,
+    user_id: &UserID,
+    new_pw: UserPW,
+    wrapped_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
+) -> Result<(), DBIOError> {
+    let users = db.get_mut(site_name).ok_or(DBIOError::SiteNotFound)?;
+    let password = users.get_mut(user_id).ok_or(DBIOError::UserNotFound)?;
     password.zeroize();
     *password = encrypt_user_pw(site_name, user_id, new_pw, wrapped_key, user_key_nonce)?;
     Ok(())
 }
 
 #[inline(always)]
-pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Result<(), DBIOError> {
-    let users = db.get_mut(site_name)
-        .ok_or(DBIOError::SiteNotFound)?;
+pub fn remove_user_pw(
+    db: &mut DB,
+    site_name: &SiteName,
+    user_id: &UserID,
+) -> Result<(), DBIOError> {
+    let users = db.get_mut(site_name).ok_or(DBIOError::SiteNotFound)?;
 
-    users.remove(user_id)
-        .ok_or(DBIOError::UserNotFound)?;
+    users.remove(user_id).ok_or(DBIOError::UserNotFound)?;
 
     if users.is_empty() {
         db.remove(site_name);
@@ -299,22 +321,33 @@ pub fn remove_user_pw(db: &mut DB, site_name: &SiteName, user_id: &UserID) -> Re
 }
 
 #[inline(always)]
-pub fn get_user_pw(db: &DB, site_name: &SiteName, user_id: &UserID, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
-                   -> Result<UserPW, DBIOError> {
-    let users = db.get(site_name)
-        .ok_or(DBIOError::SiteNotFound)?;
+pub fn get_user_pw(
+    db: &DB,
+    site_name: &SiteName,
+    user_id: &UserID,
+    wrapped_key: &WrappedSessionKey,
+    user_key_nonce: &SessionKeyNonce,
+) -> Result<UserPW, DBIOError> {
+    let users = db.get(site_name).ok_or(DBIOError::SiteNotFound)?;
 
-    let encrypted_pw = users.get(user_id)
-        .ok_or(DBIOError::UserNotFound)?;
+    let encrypted_pw = users.get(user_id).ok_or(DBIOError::UserNotFound)?;
 
-    let pw = decrypt_user_pw(&site_name, &user_id, encrypted_pw, &wrapped_key, &user_key_nonce)?;
-    
-    Ok( pw )
+    let pw = decrypt_user_pw(
+        &site_name,
+        &user_id,
+        encrypted_pw,
+        &wrapped_key,
+        &user_key_nonce,
+    )?;
+
+    Ok(pw)
 }
 
 #[inline(always)]
-pub fn prefix_range<'a>(db: &'a DB, prefix: &str, )
-    -> impl Iterator<Item = (&'a SiteName, &'a HashMap<UserID, EncryptedUserPW>)> {
+pub fn prefix_range<'a>(
+    db: &'a DB,
+    prefix: &str,
+) -> impl Iterator<Item = (&'a SiteName, &'a HashMap<UserID, EncryptedUserPW>)> {
     let lower = SiteName::from_unchecked("", prefix);
     let mut upper_reg = prefix.to_string();
     upper_reg.push(char::MAX);
@@ -323,8 +356,13 @@ pub fn prefix_range<'a>(db: &'a DB, prefix: &str, )
     db.range(lower..upper)
 }
 
-pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedSessionKey, user_key_nonce: SessionKeyNonce) {
-    let range =  prefix_range(db, &*input_site);
+pub fn explor_db(
+    db: &mut DB,
+    input_site: String,
+    wrapped_key: &WrappedSessionKey,
+    user_key_nonce: SessionKeyNonce,
+) {
+    let range = prefix_range(db, &*input_site);
     for (site, credentials) in range {
         println!("Site: {}\n", site.as_str());
         for cred in credentials {
@@ -336,4 +374,3 @@ pub fn explor_db(db: &mut DB, input_site: String, wrapped_key: &WrappedSessionKe
         }
     }
 }
-
