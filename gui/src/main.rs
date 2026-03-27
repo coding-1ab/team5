@@ -13,6 +13,7 @@ use single_instance::SingleInstance;
 
 mod command_builder;
 mod graphical_user_interface;
+mod window;
 
 use eframe::egui::{ViewportBuilder, ViewportCommand};
 use graphical_user_interface::GraphicalUserInterface;

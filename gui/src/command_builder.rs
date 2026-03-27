@@ -129,27 +129,16 @@ pub struct CommandBuilderWithError<'a, Output> {
 }
 
 impl<'a, Output> CommandBuilderWithError<'a, Output> {
-    pub fn show(mut self, context: &egui::Context, button: egui::Response, window_open: &mut bool) {
-        if button.clicked() {
-            *window_open = true;
-        }
-
-        if !*window_open {
-            return;
-        }
-
-        let error_message = &mut *self.error_message; // mutable borrow
-
+    pub fn show(mut self, context: &egui::Context) -> bool {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of(self.inner.title),
             egui::ViewportBuilder::default().with_title(self.inner.title),
             move |ctx, _| {
-                if ctx.input(|i| i.viewport().close_requested()) {
-                    *window_open = false;
-                    return;
+                if ctx.input(|i| i.viewport().close_requested()) { 
+                    return false;
                 }
 
-                egui::CentralPanel::default().show(ctx, |ui| {
+                let inner_response = egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label(self.inner.screen_name);
 
                     for field in &mut self.inner.inputs {
@@ -166,45 +155,42 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                         }
                     }
 
-                    ui.label(&*error_message);
+                    ui.label(&*self.error_message);
 
                     if ui.button("submit").clicked()
                         || ctx.input(|input| input.key_pressed(egui::Key::Enter))
                     {
-                        Self::handle_accept(&mut self.inner, error_message, window_open);
+                        return Self::handle_accept(&mut self.inner, self.error_message);
                     }
+                    true
                 });
+                
+                inner_response.inner
             },
-        );
+        )
     }
 
     fn handle_accept(
         builder: &mut CommandBuilder<'_, Output>,
         error_message: &mut String,
-        window_open: &mut bool,
-    ) {
+    ) -> bool {
         if builder.inputs.iter().any(|f| f.value.trim().is_empty()) {
             *error_message = "모든 필드를 입력해주세요!".to_string();
-            return;
+            return false;
         }
 
         let values = &mut builder.inputs;
 
-        match builder.execute.as_mut().unwrap()(
-            values,
-            builder.database.as_deref_mut(),
-            builder.key,
-            builder.key_mut.as_deref_mut(),
-        ) {
+        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.key, builder.key_mut.as_deref_mut(), ) {
             Ok(result) => {
                 (builder.on_success)(result);
-                *window_open = false;
                 error_message.clear();
                 for field in &mut builder.inputs {
                     if field.want_zeroize {
                         field.value.zeroize();
                     }
                 }
+                return false;
             }
             Err(err) => {
                 *error_message = err.to_string();
@@ -217,82 +203,13 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                 }
             }
         }
+        true
     }
 }
 
 #[derive(Default)]
-pub struct AddUserPassword {
-    pub site_name: String,
-    pub user_identifier: String,
-    pub password: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
-pub struct ChangeUserPassword {
-    pub site_name: String,
-    pub user_identifier: String,
-    pub password: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
-pub struct RemoveUserPassword {
-    pub site_name: String,
-    pub user_identifier: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
-pub struct ChangeMasterPassword {
-    pub password: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
-pub struct AddUserPasswordWithSiteName {
-    pub user_identifier: BTreeMap<SiteName, String>,
-    pub password: BTreeMap<SiteName, String>,
-    pub error_message: BTreeMap<SiteName, String>,
-}
-
-#[derive(Default)]
-pub struct ChangeUserPasswordWithSiteName {
-    pub user_identifier: BTreeMap<SiteName, String>,
-    pub password: BTreeMap<SiteName, String>,
-    pub error_message: BTreeMap<SiteName, String>,
-}
-
-#[derive(Default)]
-pub struct RemoveUserPasswordWithSiteName {
-    pub user_identifier: BTreeMap<SiteName, String>,
-    pub error_message: BTreeMap<SiteName, String>,
-}
-
-#[derive(Default)]
-pub struct ChangeUserPasswordWithSiteNameWithUserIdentifier {
-    pub password: BTreeMap<SiteName, HashMap<UserID, String>>,
-    pub error_message: BTreeMap<SiteName, HashMap<UserID, String>>,
-}
-
-#[derive(Default)]
-pub struct RemoveUserPasswordWithSiteNameWithUserIdentifier {
-    pub error_message: BTreeMap<SiteName, HashMap<UserID, String>>,
-}
-
-#[derive(Default)]
 pub struct CommandValue {
-    pub add_user_password: AddUserPassword,
-    pub change_user_password: ChangeUserPassword,
-    pub remove_user_password: RemoveUserPassword,
-    pub change_master_password: ChangeMasterPassword,
-    pub add_user_password_with_site_name: AddUserPasswordWithSiteName,
-    pub change_user_password_with_site_name: ChangeUserPasswordWithSiteName,
-    pub remove_user_password_with_site_name: RemoveUserPasswordWithSiteName,
-    pub change_user_password_with_site_name_with_user_identifier:
-        ChangeUserPasswordWithSiteNameWithUserIdentifier,
-    pub remove_user_password_with_site_name_with_user_identifier:
-        RemoveUserPasswordWithSiteNameWithUserIdentifier,
+    
 }
 
 /*
