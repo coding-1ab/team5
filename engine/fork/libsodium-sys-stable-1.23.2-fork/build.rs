@@ -171,7 +171,9 @@ fn compile_libsodium_traditional(
     let mut cflags = env::var("CFLAGS").unwrap_or_default();
     if !cflags.contains("-fPIC") {
         cflags.push_str(" -fPIC");
-    }    let mut ldflags = env::var("SODIUM_LDFLAGS").unwrap_or_default();
+    }
+    let mut ldflags = env::var("SODIUM_LDFLAGS").unwrap_or_default();
+    ldflags.push_str(" -no-pie");
     let host_arg;
     let help;
     let mut configure_extra = vec![];
