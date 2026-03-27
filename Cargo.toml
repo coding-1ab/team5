@@ -19,6 +19,7 @@ members = ["engine", "cli", "ui"]
 [dependencies]
 cli = {path = "./cli"}
 single-instance = "*"
+libsodium-sys-stable = { path = "engine/fork/libsodium-sys-stable-1.23.2-fork" }
 
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
