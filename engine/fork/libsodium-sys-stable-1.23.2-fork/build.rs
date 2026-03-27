@@ -174,7 +174,7 @@ fn compile_libsodium_traditional(
         cflags.push_str(" -fPIC");
     }
     let mut ldflags = env::var("SODIUM_LDFLAGS").unwrap_or_default();
-    ldflags.push_str(" -no-pie");
+    // ldflags.push_str(" -no-pie");
     let host_arg;
     let help;
     let mut configure_extra = vec![];
@@ -304,7 +304,11 @@ fn compile_libsodium_traditional(
         .arg(&prefix_arg)
         .arg(&host_arg)
         .args(configure_extra)
-        .arg("--enable-shared=no")
+        .arg("--disable-shared")
+        .arg("--enable-static")
+        .arg("--with-pic")
+        .arg("--disable-ssp")
+        .arg("--enable-shared=no") // 기존 것도 유지 (중복 허용)
         .arg("--disable-dependency-tracking")
         .output();
     let configure_output = match configure_output {
