@@ -540,22 +540,33 @@ fn main() {
         find_libsodium_env();
         return;
     }
-    if use_pkg_isset {
-        if shared_isset {
-            println!("cargo:warning=SODIUM_SHARED has no effect with SODIUM_USE_PKG_CONFIG");
-        }
-        if !find_libsodium_pkgconfig() && !find_libsodium_vpkg() {
-            panic!("libsodium not found via pkg-config or vcpkg");
-        }
-        return;
-    }
+    // if use_pkg_isset {
+    //     if shared_isset {
+    //         println!("cargo:warning=SODIUM_SHARED has no effect with SODIUM_USE_PKG_CONFIG");
+    //     }
+    //     if !find_libsodium_pkgconfig() && !find_libsodium_vpkg() {
+    //         panic!("libsodium not found via pkg-config or vcpkg");
+    //     }
+    //     return;
+    // }
     if shared_isset {
         println!("cargo:warning=SODIUM_SHARED has no effect for building libsodium from source");
+    }
+    if Target::get().name.contains("windows-gnu") {
+        let install_dir = get_cargo_install_dir();
+        let lib_dir =
+            extract_libsodium_precompiled_mingw("win64", Path::new("source"), &install_dir);
+
+        println!("cargo:rustc-link-search=native={}", lib_dir.to_str().unwrap());
+        println!("cargo:rustc-link-lib=static=sodium");
+        println!("cargo:include={}", install_dir.join("include").to_str().unwrap());
+        return;
     }
     let res = install_from_source();
     if res.is_ok() {
         return;
     }
+    panic!("Failed to build libsodium from source: {}", res.unwrap_err());
     // If we can't build from source, try to find precompiled binaries
     match Target::get().name.as_str() {
         "i686-pc-windows-msvc" => {
