@@ -3,6 +3,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(clippy::all)] // we can't control bindgen output to make clippy happy
+#![allow(dead_code)]
 
 extern crate libc;
 extern crate alloc;
