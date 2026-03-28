@@ -1,9 +1,6 @@
 use single_instance::SingleInstance;
 use libsodium_sys::rust_wrappings::init::sodium_init;
 
-#[cfg(not(target_pointer_width = "64"))]
-compile_error!("이 코드는 64비트 환경(usize가 8바이트)에서만 컴파일됩니다.");
-
 
 fn main() -> std::io::Result<()> {
     // let instance = SingleInstance::new("team-5").unwrap();

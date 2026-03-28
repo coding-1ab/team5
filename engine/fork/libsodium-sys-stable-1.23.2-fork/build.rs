@@ -162,197 +162,171 @@ fn compile_libsodium_traditional(
     target: &str,
     source_dir: &Path,
     install_dir: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, String>
+{
     use std::{fs, process::Command, str};
 
-    // Decide on CC, CFLAGS and the --host configure argument
+    // 컴파일러 설정
     let build_compiler = cc::Build::new().get_compiler();
     let mut compiler = build_compiler.path().to_str().unwrap().to_string();
-    let mut cflags = env::var("CFLAGS").unwrap_or_default();
-    cflags.push_str(" -UNDEBUG");
-    cflags.push_str(" -fno-omit-frame-pointer");
-    if !cflags.contains("-fPIC") {
-        cflags.push_str(" -fPIC");
-    }
-    let mut ldflags = env::var("SODIUM_LDFLAGS").unwrap_or_default();
+
+    // 🔥 CFLAGS 완전 고정 (외부 환경 제거)
+    let mut cflags = String::from("-O2 -fno-strict-aliasing -fno-omit-frame-pointer -UNDEBUG");
+
+    // 🔥 LDFLAGS도 최소화
+    let mut ldflags = String::new();
+
     let host_arg;
     let help;
     let mut configure_extra = vec![];
 
-    if target.contains("-wasi") {
-        // Handle wasm32-wasi (wasip1) and wasm32-wasip2 targets
-        // Also compatible with Wasmer WASIX (superset of WASI)
-        // Zig compiles to wasm32-wasi which is compatible with both
+    if target.contains("-wasi")
+    {
         compiler = "zig cc".to_string();
         cflags += " -target wasm32-wasi";
         ldflags += " -target wasm32-wasi";
         host_arg = "--host=wasm32-wasi".to_string();
+
         configure_extra.push("--disable-ssp");
         configure_extra.push("--without-pthreads");
+
         env::set_var("AR", "zig ar");
         env::set_var("RANLIB", "zig ranlib");
-        help = "The Zig SDK needs to be installed in order to cross-compile to WebAssembly.\n\
-                For WASI component support, use Rust 1.82+ with:\n\
-                cargo build --target wasm32-wasip2 --features wasi-component\n\
-                For Wasmer WAI support, use:\n\
-                cargo build --target wasm32-wasi --features wasmer-wai\n";
-    } else if target.contains("-ios") {
-        // Determine Xcode directory path
+
+        help = "Zig required for wasm target";
+    }
+    else if target.contains("-ios")
+    {
         let xcode_select_output = Command::new("xcode-select").arg("-p").output().unwrap();
-        if !xcode_select_output.status.success() {
+        if !xcode_select_output.status.success()
+        {
             return Err("Failed to run xcode-select -p".to_string());
         }
-        let xcode_dir = str::from_utf8(&xcode_select_output.stdout)
-            .unwrap()
-            .trim()
-            .to_string();
 
-        // Determine SDK directory paths
+        let xcode_dir = str::from_utf8(&xcode_select_output.stdout).unwrap().trim().to_string();
+
         let sdk_dir_simulator = Path::new(&xcode_dir)
-            .join("Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk")
-            .to_str()
-            .unwrap()
-            .to_string();
+            .join("Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk");
+
         let sdk_dir_ios = Path::new(&xcode_dir)
-            .join("Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk")
-            .to_str()
-            .unwrap()
-            .to_string();
+            .join("Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk");
 
-        // Min versions
-        let ios_simulator_version_min = "9.0.0";
-        let ios_version_min = "9.0.0";
-
-        match target {
-            "aarch64-apple-ios" => {
-                cflags += " -arch arm64";
-                cflags += &format!(" -isysroot {sdk_dir_ios}");
-                cflags += &format!(" -mios-version-min={ios_version_min}");
-                host_arg = "--host=aarch64-apple-darwin23".to_string();
-            }
-            "armv7-apple-ios" => {
-                cflags += " -arch armv7";
-                cflags += &format!(" -isysroot {sdk_dir_ios}");
-                cflags += &format!(" -mios-version-min={ios_version_min}");
-                cflags += " -mthumb";
-                host_arg = "--host=arm-apple-darwin23".to_string();
-            }
-            "armv7s-apple-ios" => {
-                cflags += " -arch armv7s";
-                cflags += &format!(" -isysroot {sdk_dir_ios}");
-                cflags += &format!(" -mios-version-min={ios_version_min}");
-                cflags += " -mthumb";
-                host_arg = "--host=arm-apple-darwin23".to_string();
-            }
-            "x86_64-apple-ios" => {
-                cflags += " -arch x86_64";
-                cflags += &format!(" -isysroot {sdk_dir_simulator}");
-                cflags += &format!(" -mios-simulator-version-min={ios_simulator_version_min}");
-                host_arg = "--host=x86_64-apple-darwin23".to_string();
-            }
-            "aarch64-apple-ios-sim" => {
-                cflags += " -arch arm64";
-                cflags += &format!(" -isysroot {sdk_dir_simulator}");
-                cflags += &format!(" -mios-simulator-version-min={ios_simulator_version_min}");
-                host_arg = "--host=aarch64-apple-darwin23".to_string();
-            }
-            _ => return Err(format!("Unknown iOS build target: {}", target)),
+        match target
+        {
+            "aarch64-apple-ios" =>
+                {
+                    cflags += &format!(" -arch arm64 -isysroot {} -mios-version-min=9.0",
+                                       sdk_dir_ios.to_str().unwrap());
+                    host_arg = "--host=aarch64-apple-darwin".to_string();
+                }
+            "x86_64-apple-ios" =>
+                {
+                    cflags += &format!(" -arch x86_64 -isysroot {} -mios-simulator-version-min=9.0",
+                                       sdk_dir_simulator.to_str().unwrap());
+                    host_arg = "--host=x86_64-apple-darwin".to_string();
+                }
+            _ =>
+                {
+                    return Err(format!("Unknown iOS target: {}", target));
+                }
         }
+
         help = "";
-    } else {
-        if target.contains("i686") {
-            compiler += " -m32 -maes";
+    }
+    else
+    {
+        if target.contains("i686")
+        {
+            compiler += " -m32";
             cflags += " -march=i686";
         }
+
         let host = env::var("HOST").unwrap();
         host_arg = format!("--host={target}");
-        let cross_compiling = target != host;
-        help = if cross_compiling {
-            "***********************************************************\n\
-             Use the 'cargo zigbuild' command to cross-compile Rust code\n\
-             with C dependencies such as libsodium.\n\
-             ***********************************************************\n"
-        } else {
+
+        help = if target != host
+        {
+            "Use cargo zigbuild for cross compile"
+        }
+        else
+        {
             ""
         };
     }
 
-    // Run `./configure`
+    // 🔥 configure 실행
     let prefix_arg = format!("--prefix={}", install_dir.to_str().unwrap());
-    let mut configure_cmd = Command::new(fs::canonicalize(source_dir.join("configure")).unwrap());
-    if !compiler.is_empty() {
-        configure_cmd.env("CC", &compiler);
-    }
-    if !cflags.is_empty() {
-        configure_cmd.env("CFLAGS", &cflags);
-    }
-    if !ldflags.is_empty() {
-        configure_cmd.env("LDFLAGS", &ldflags);
-    }
 
-    configure_cmd.arg("--disable-pie");
-    if env::var("SODIUM_ENABLE_PIE").is_ok() {
-        // 필요시 override 로직 추가 가능
-    }
-    configure_cmd.arg("--disable-ssp");
-    #[cfg(feature = "optimized")]
-    configure_cmd.arg("--enable-opt");
-    #[cfg(feature = "minimal")]
-    configure_cmd.arg("--enable-minimal");
+    let mut configure_cmd =
+        Command::new(fs::canonicalize(source_dir.join("configure")).unwrap());
+
+    configure_cmd
+        .env("CC", &compiler)
+        .env("CFLAGS", &cflags)
+        .env("LDFLAGS", &ldflags);
+
+    // 🔥 핵심 옵션 (충돌 제거)
+    configure_cmd
+        .arg("--disable-shared")
+        .arg("--enable-static")
+        .arg("--disable-pie")
+        .arg("--disable-ssp")
+        .arg("--disable-dependency-tracking");
+
     let configure_output = configure_cmd
         .current_dir(source_dir)
         .arg(&prefix_arg)
         .arg(&host_arg)
         .args(configure_extra)
-        .arg("--disable-shared")
-        .arg("--enable-static")
-        .arg("--with-pic")
-        .arg("--disable-ssp")
-        .arg("--enable-shared=no") // 기존 것도 유지 (중복 허용)
-        .arg("--disable-dependency-tracking")
         .output();
-    let configure_output = match configure_output {
+
+    let configure_output = match configure_output
+    {
         Ok(output) => output,
-        Err(error) => {
-            return Err(format!("Failed to run './configure': {}\n{}", error, help));
-        }
+        Err(error) =>
+            {
+                return Err(format!("Failed to run './configure': {}\n{}", error, help));
+            }
     };
-    if !configure_output.status.success() {
+
+    if !configure_output.status.success()
+    {
         return Err(format!(
-            "\n{:?}\nCFLAGS={}\nLDFLAGS={}\nCC={}\n{}\n{}\n{}\n",
-            configure_cmd,
+            "\nCONFIGURE FAILED\nCFLAGS={}\nCC={}\n{}\n{}\n",
             cflags,
-            ldflags,
             compiler,
             String::from_utf8_lossy(&configure_output.stdout),
             String::from_utf8_lossy(&configure_output.stderr),
-            help
         ));
     }
 
-    let j_arg = format!("-j{}", env::var("NUM_JOBS").unwrap());
+    // 🔥 make install
+    let j_arg = format!("-j{}", env::var("NUM_JOBS").unwrap_or_else(|_| "1".to_string()));
 
-    // Run `make install`
-    let mut install_cmd = Command::new("make");
-    let install_output = install_cmd
+    let install_output = Command::new("make")
         .current_dir(source_dir)
         .arg(j_arg)
         .arg("install")
         .output();
-    let install_output = match install_output {
-        Ok(install_output) => install_output,
-        Err(error) => {
-            return Err(format!("Failed to run 'make install': {}\n", error));
-        }
+
+    let install_output = match install_output
+    {
+        Ok(o) => o,
+        Err(e) =>
+            {
+                return Err(format!("Failed to run 'make install': {}", e));
+            }
     };
-    if !install_output.status.success() {
-        panic!(
-            "\n{}\n{}\n{}\n",
-            String::from_utf8_lossy(&configure_output.stdout),
+
+    if !install_output.status.success()
+    {
+        return Err(format!(
+            "\nMAKE INSTALL FAILED\n{}\n{}\n",
             String::from_utf8_lossy(&install_output.stdout),
-            String::from_utf8_lossy(&install_output.stderr)
-        );
+            String::from_utf8_lossy(&install_output.stderr),
+        ));
     }
+
     Ok(install_dir.join("lib"))
 }
 

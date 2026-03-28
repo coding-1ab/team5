@@ -6,6 +6,9 @@ use crate::rust_wrappings::sodium_box::SodiumBox;
 use crate::sodium_bindings::{crypto_aead_aes256gcm_ABYTES, crypto_aead_aes256gcm_decrypt, crypto_aead_aes256gcm_encrypt, crypto_aead_aes256gcm_is_available, randombytes_buf};
 
 
+#[cfg(not(target_arch = "x86_64"))]
+compile_error!("이 프로젝트는 x86(64비트) 아키텍처에서만 컴파일 됩니다.");
+
 
 pub const AES_KEY_SIZE: usize = 32;
 pub struct AesKey {
