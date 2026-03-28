@@ -160,171 +160,79 @@ fn get_precompiled_lib_dir_msvc_arm64(install_dir: &Path) -> PathBuf {
 // Compile libsodium from source using the traditional autoconf procedure, and return the directory containing the compiled library
 fn compile_libsodium_traditional(
     target: &str,
-    source_dir: &Path,
-    install_dir: &Path,
-) -> Result<PathBuf, String>
+    source_dir: &std::path::Path,
+    install_dir: &std::path::Path,
+) -> Result<std::path::PathBuf, String>
 {
-    use std::{fs, process::Command, str};
+    use std::process::Command;
 
-    // 컴파일러 설정
-    let build_compiler = cc::Build::new().get_compiler();
-    let mut compiler = build_compiler.path().to_str().unwrap().to_string();
+    // 환경 변수 설정 (완전 deterministic 빌드)
+    let mut configure = Command::new("./configure");
 
-    // 🔥 CFLAGS 완전 고정 (외부 환경 제거)
-    let mut cflags = String::from("-O2 -fno-strict-aliasing -fno-omit-frame-pointer -UNDEBUG");
-
-    // 🔥 LDFLAGS도 최소화
-    let mut ldflags = String::new();
-
-    let host_arg;
-    let help;
-    let mut configure_extra = vec![];
-
-    if target.contains("-wasi")
-    {
-        compiler = "zig cc".to_string();
-        cflags += " -target wasm32-wasi";
-        ldflags += " -target wasm32-wasi";
-        host_arg = "--host=wasm32-wasi".to_string();
-
-        configure_extra.push("--disable-ssp");
-        configure_extra.push("--without-pthreads");
-
-        env::set_var("AR", "zig ar");
-        env::set_var("RANLIB", "zig ranlib");
-
-        help = "Zig required for wasm target";
-    }
-    else if target.contains("-ios")
-    {
-        let xcode_select_output = Command::new("xcode-select").arg("-p").output().unwrap();
-        if !xcode_select_output.status.success()
-        {
-            return Err("Failed to run xcode-select -p".to_string());
-        }
-
-        let xcode_dir = str::from_utf8(&xcode_select_output.stdout).unwrap().trim().to_string();
-
-        let sdk_dir_simulator = Path::new(&xcode_dir)
-            .join("Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk");
-
-        let sdk_dir_ios = Path::new(&xcode_dir)
-            .join("Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk");
-
-        match target
-        {
-            "aarch64-apple-ios" =>
-                {
-                    cflags += &format!(" -arch arm64 -isysroot {} -mios-version-min=9.0",
-                                       sdk_dir_ios.to_str().unwrap());
-                    host_arg = "--host=aarch64-apple-darwin".to_string();
-                }
-            "x86_64-apple-ios" =>
-                {
-                    cflags += &format!(" -arch x86_64 -isysroot {} -mios-simulator-version-min=9.0",
-                                       sdk_dir_simulator.to_str().unwrap());
-                    host_arg = "--host=x86_64-apple-darwin".to_string();
-                }
-            _ =>
-                {
-                    return Err(format!("Unknown iOS target: {}", target));
-                }
-        }
-
-        help = "";
-    }
-    else
-    {
-        if target.contains("i686")
-        {
-            compiler += " -m32";
-            cflags += " -march=i686";
-        }
-
-        let host = env::var("HOST").unwrap();
-        host_arg = format!("--host={target}");
-
-        help = if target != host
-        {
-            "Use cargo zigbuild for cross compile"
-        }
-        else
-        {
-            ""
-        };
-    }
-
-    // 🔥 configure 실행
-    let prefix_arg = format!("--prefix={}", install_dir.to_str().unwrap());
-
-    let mut configure_cmd =
-        Command::new(fs::canonicalize(source_dir.join("configure")).unwrap());
-
-    configure_cmd
-        .env("CC", &compiler)
-        .env("CFLAGS", &cflags)
-        .env("LDFLAGS", &ldflags);
-
-    // 🔥 핵심 옵션 (충돌 제거)
-    configure_cmd
+    configure
+        .current_dir(source_dir)
+        .env("CFLAGS", "-O2 -fPIC")
+        .env("LDFLAGS", "")
         .arg("--disable-shared")
         .arg("--enable-static")
-        .arg("--disable-pie")
         .arg("--disable-ssp")
-        .arg("--disable-dependency-tracking");
+        .arg(format!("--prefix={}", install_dir.to_str().unwrap()));
 
-    let configure_output = configure_cmd
+    println!("cargo:warning=Running autoreconf...");
+
+    let status = Command::new("autoreconf")
         .current_dir(source_dir)
-        .arg(&prefix_arg)
-        .arg(&host_arg)
-        .args(configure_extra)
-        .output();
+        .arg("-fi")
+        .status()
+        .map_err(|e| format!("autoreconf failed: {e}"))?;
 
-    let configure_output = match configure_output
+    if !status.success()
     {
-        Ok(output) => output,
-        Err(error) =>
-            {
-                return Err(format!("Failed to run './configure': {}\n{}", error, help));
-            }
-    };
-
-    if !configure_output.status.success()
-    {
-        return Err(format!(
-            "\nCONFIGURE FAILED\nCFLAGS={}\nCC={}\n{}\n{}\n",
-            cflags,
-            compiler,
-            String::from_utf8_lossy(&configure_output.stdout),
-            String::from_utf8_lossy(&configure_output.stderr),
-        ));
+        return Err("autoreconf failed".into());
     }
 
-    // 🔥 make install
-    let j_arg = format!("-j{}", env::var("NUM_JOBS").unwrap_or_else(|_| "1".to_string()));
+    println!("cargo:warning=Running configure...");
 
-    let install_output = Command::new("make")
+    let status = configure
+        .status()
+        .map_err(|e| format!("configure failed: {e}"))?;
+
+    if !status.success()
+    {
+        return Err("configure failed".into());
+    }
+
+    println!("cargo:warning=Running make clean...");
+
+    let _ = Command::new("make")
         .current_dir(source_dir)
-        .arg(j_arg)
+        .arg("clean")
+        .status();
+
+    println!("cargo:warning=Running make...");
+
+    let status = Command::new("make")
+        .current_dir(source_dir)
+        .arg("-j")
+        .status()
+        .map_err(|e| format!("make failed: {e}"))?;
+
+    if !status.success()
+    {
+        return Err("make failed".into());
+    }
+
+    println!("cargo:warning=Running make install...");
+
+    let status = Command::new("make")
+        .current_dir(source_dir)
         .arg("install")
-        .output();
+        .status()
+        .map_err(|e| format!("make install failed: {e}"))?;
 
-    let install_output = match install_output
+    if !status.success()
     {
-        Ok(o) => o,
-        Err(e) =>
-            {
-                return Err(format!("Failed to run 'make install': {}", e));
-            }
-    };
-
-    if !install_output.status.success()
-    {
-        return Err(format!(
-            "\nMAKE INSTALL FAILED\n{}\n{}\n",
-            String::from_utf8_lossy(&install_output.stdout),
-            String::from_utf8_lossy(&install_output.stderr),
-        ));
+        return Err("make install failed".into());
     }
 
     Ok(install_dir.join("lib"))
