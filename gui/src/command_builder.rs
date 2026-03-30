@@ -208,8 +208,14 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 }
 
 #[derive(Default)]
+pub struct ChangeMasterPassword {
+    pub password: String,
+    pub error_message: String,
+}
+
+#[derive(Default)]
 pub struct CommandValue {
-    
+    pub change_master_password: ChangeMasterPassword
 }
 
 /*

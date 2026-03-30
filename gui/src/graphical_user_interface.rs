@@ -314,14 +314,7 @@ impl GraphicalUserInterface {
         button: egui::Response,
     ) {
         CommandBuilder::new("change master password", "change master password")
-            .sensitive_input(
-                "master password",
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_master_password
-                    .password,
-            )
+            .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password, )
             .set_database(&mut self.data_base)
             .set_key_mut(self.key.as_mut().expect("unreachable"))
             .execute(|inputs, data_base, _, key_mut| {
@@ -351,18 +344,8 @@ impl GraphicalUserInterface {
                 Ok(())
             })
             .on_success(|_| {})
-            .error_message(
-                &mut self
-                    .string_values
-                    .command_value
-                    .change_master_password
-                    .error_message,
-            )
-            .show(
-                context,
-                button,
-                &mut self.window_open_list.change_master_password,
-            );
+            .error_message(&mut self.string_values.command_value.change_master_password.error_message, )
+            .show(context, button, &mut self.window_open_list.change_master_password, );
     }
 
     pub(crate) fn save_data_base(&mut self) -> Result<(), SaveError> {
