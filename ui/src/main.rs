@@ -31,11 +31,7 @@ fn main() {
 }
 
 #[cfg(feature = "gui")]
-use eframe::CreationContext;
-
-#[cfg(feature = "gui")]
-fn init_fonts(cc: &CreationContext) {
-    use std::fs;
+fn init_fonts(cc: &eframe::CreationContext) {
     use eframe::{
         egui,
         egui::FontData,
@@ -44,7 +40,7 @@ fn init_fonts(cc: &CreationContext) {
     let nanum_gothic_font_data = FontData::from_static(include_bytes!("../NanumGothic.ttf"));
     let nanum_gothic_insert_font_family = InsertFontFamily {
         family: egui::FontFamily::Proportional,
-        priority: FontPriority::Lowest,
+        priority: FontPriority::Highest,
     };
     let nanum_gothic_font = FontInsert::new("nanum_gothic", nanum_gothic_font_data, vec![nanum_gothic_insert_font_family]);
     cc.egui_ctx.add_font(nanum_gothic_font);
