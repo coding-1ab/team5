@@ -7,7 +7,6 @@ use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
 use crate::manual_zeroize;
 use argon2::{Argon2, Params};
 use std::{hint, process};
-use rand::prelude::*;
 use rand::rngs::OsRng;
 use sysinfo::{CpuExt, Pid, PidExt, ProcessExt, System, SystemExt};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -16,7 +15,6 @@ use rkyv::rancor::Fallible;
 use rkyv::vec::{ArchivedVec, VecResolver};
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 use sha3::digest::generic_array::GenericArray;
-use sha3::digest::Update;
 use sha3::Sha3_256;
 use libsodium_sys::rust_wrappings::aes256gcm::{aes256gcm_decrypt, aes256gcm_decrypt_from_ptr, aes256gcm_encrypt, aes256gcm_encrypt_from_ptr_to_sodium_box, AesKey, AesNonce, AES_KEY_SIZE, AES_NONCE_SIZE, AES_OUT_AUTH_TAG_SIZE};
 use libsodium_sys::rust_wrappings::hasher::Sha256;
@@ -378,7 +376,7 @@ pub fn unwrap_session_key(wrapped_key: &WrappedSessionKey, nonce: &SessionKeyNon
     Ok(session_key)
 }
 
-
+//todo
 pub fn encrypt_user_pw(site: &SiteName, id: &UserID, user_pw: UserPW, wrapped_key: &WrappedSessionKey, user_key_nonce: &SessionKeyNonce)
                        -> Result<EncryptedUserPW, DBIOError> {
     let session_key: AesKey = unwrap_session_key(wrapped_key, user_key_nonce)?.into();

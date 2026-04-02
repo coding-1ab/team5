@@ -10,7 +10,7 @@ use std::str::FromStr;
     PartialEq, Eq, Debug, Ord, PartialOrd, Clone
 )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
-pub struct UserPW(String);
+pub struct UserPW(pub(crate) String);
 #[derive(Debug)]
 pub enum UserPWError {
     Empty,
@@ -62,7 +62,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 #[derive(Hash)]
 #[derive(Clone)]
-pub struct UserID(String);
+pub struct UserID(pub(crate) String);
 
 #[derive(Debug)]
 pub enum UserIDError {
@@ -109,7 +109,7 @@ use url::Url;
 #[derive(Zeroize, ZeroizeOnDrop, Archive, Serialize, Deserialize, Debug, Clone, )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct SiteName {
-    full: String,
+    pub(crate) full: String,
     pub(crate) reg: String,
 }
 #[derive(Debug)]

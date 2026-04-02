@@ -170,10 +170,10 @@ fn compile_libsodium_traditional(
     let build_compiler = cc::Build::new().get_compiler();
     let mut compiler = build_compiler.path().to_str().unwrap().to_string();
 
-    // 🔥 CFLAGS 완전 고정 (외부 환경 제거)
+    // CFLAGS 고정 (외부 환경 제거)
     let mut cflags = String::from("-O2 -fno-strict-aliasing -fno-omit-frame-pointer -UNDEBUG");
 
-    // 🔥 LDFLAGS도 최소화
+    // LDFLAGS 최소화
     let mut ldflags = String::new();
 
     let host_arg;
@@ -254,7 +254,7 @@ fn compile_libsodium_traditional(
         };
     }
 
-    // 🔥 configure 실행
+    // configure 실행
     let prefix_arg = format!("--prefix={}", install_dir.to_str().unwrap());
 
     let mut configure_cmd =
@@ -265,7 +265,6 @@ fn compile_libsodium_traditional(
         .env("CFLAGS", &cflags)
         .env("LDFLAGS", &ldflags);
 
-    // 🔥 핵심 옵션 (충돌 제거)
     configure_cmd
         .arg("--disable-shared")
         .arg("--enable-static")
@@ -300,7 +299,7 @@ fn compile_libsodium_traditional(
         ));
     }
 
-    // 🔥 make install
+    // make install
     let j_arg = format!("-j{}", env::var("NUM_JOBS").unwrap_or_else(|_| "1".to_string()));
 
     let install_output = Command::new("make")
@@ -355,8 +354,8 @@ fn retrieve_and_verify_archive(filename: &str, signature_filename: &str) -> Vec<
             .unwrap();
         let signature = Signature::from_file(&signature_path)
             .unwrap_or_else(|_| panic!("Failed to open signature file [{:?}]", &signature_path));
-        pk.verify(&archive_bin, &signature, false);
-        //    .expect("Invalid signature");
+        pk.verify(&archive_bin, &signature, false)
+            .expect("Invalid signature");
         return archive_bin;
     }
 
@@ -409,8 +408,8 @@ fn retrieve_and_verify_archive(filename: &str, signature_filename: &str) -> Vec<
             .unwrap();
     }
     let signature = Signature::from_file(signature_filename).unwrap();
-    pk.verify(&archive_bin, &signature, false);
-    //    .expect("Invalid signature");
+    pk.verify(&archive_bin, &signature, false)
+        .expect("Invalid signature");
 
     archive_bin
 }
