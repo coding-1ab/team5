@@ -29,7 +29,6 @@ pub enum RootSaveType {
 #[derive(Default)]
 pub struct ExistingUser {
     password: String,
-    warning_message: String,
     error_message: String,
     reset: Option<Reset>
 }
@@ -44,7 +43,8 @@ impl ExistingUser {
         data_base: &mut DB,
         graphical_user_interface_public_key: &mut Option<PubKey>,
         key: &mut Option<KeyPair>,
-        login: &mut bool
+        login: &mut bool,
+        warning_message: &String,
     ) -> bool {
         let mut keep = true;
 
@@ -101,7 +101,7 @@ impl ExistingUser {
                             self.reset = None;
                         }
                     }
-                    ui.label(&self.warning_message);
+                    ui.label(warning_message);
                 });
             },
         );
@@ -115,7 +115,6 @@ pub struct FirstLogin {
     password: String,
     recheck_password: String,
     error_message: String,
-    warning_message: String,
 }
 
 impl FirstLogin {
@@ -128,6 +127,7 @@ impl FirstLogin {
         graphical_user_interface_public_key: &mut Option<PubKey>,
         login: &mut bool,
         root_window: &mut Option<RootSave>,
+        warning_message: &String,
     ) -> bool {
         let mut keep = true;
 
@@ -196,7 +196,7 @@ impl FirstLogin {
                             return;
                         }
                     }
-                    ui.label(&self.warning_message);
+                    ui.label(warning_message);
                 });
             },
         );

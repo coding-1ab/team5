@@ -54,7 +54,6 @@ struct UserState {
 #[derive(Default)]
 struct WindowOpenList {
     root: Option<RootSave>,
-    login: bool,
     add_user_password: Option<AddUserPassword>,
     change_user_password: Option<ChangeUserPassword>,
     remove_user_password: Option<RemoveUserPassword>,
@@ -73,9 +72,6 @@ struct WindowOpenList {
 
 #[derive(Default)]
 struct MasterLogin {
-    password: String,
-    recheck_password: String,
-    error_message: String,
     warning_message: String,
 }
 
@@ -83,28 +79,14 @@ struct MasterLogin {
 struct StringValues {
     search_data_base: String,
     save_data_base_label: String,
-    save_error: String,
-    reset_error: String,
     master_login: MasterLogin,
-    command_value: CommandValue,
 }
-
-/*
-ChangeUserPW {site: SiteName, id: UserID, pw: UserPW},
-RemoveUserPW {site: SiteName, id: UserID},
-GetUserPW {site: SiteName, id: UserID},
-PrefixSearch {site: String},
-ChangeMasterPW,
-SaveDB,
-ExitAppWithSave,
-ExitAppWithoutSave,
-*/
 
 #[derive(Default)]
 pub struct GraphicalUserInterface {
     login: bool,
     string_values: StringValues,
-    pub(crate) window_open_list: WindowOpenList,
+    window_open_list: WindowOpenList,
     data_base: DB,
     data_base_header: DBHeader,
     key: Option<KeyPair>,
@@ -133,7 +115,8 @@ impl GraphicalUserInterface {
                                 &mut self.data_base,
                                 &mut self.public_key,
                                 &mut self.key,
-                                &mut self.login
+                                &mut self.login,
+                                &self.string_values.master_login.warning_message
                             ) {
                                 self.window_open_list.existing_user = None;
                                 return;
@@ -152,7 +135,8 @@ impl GraphicalUserInterface {
                                 &mut self.data_base,
                                 &mut self.public_key,
                                 &mut self.login,
-                                &mut self.window_open_list.root
+                                &mut self.window_open_list.root,
+                                &self.string_values.master_login.warning_message
                             ) {
                                 self.window_open_list.first_login = None;
                                 return;
@@ -182,9 +166,7 @@ impl GraphicalUserInterface {
         };
     }
 
-
-
-    pub(crate) fn save_data_base(&mut self) -> Result<(), SaveError> {
+    fn save_data_base(&mut self) -> Result<(), SaveError> {
         let encrypt_db = encrypt_db(
             &self.data_base,
             self.public_key.as_ref().ok_or(SaveError::NotingPublicKey)?,
