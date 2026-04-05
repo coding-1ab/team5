@@ -33,8 +33,7 @@ fn main() {
         "eframe example",
         options,
         Box::new(|cc| {
-            cc.egui_ctx
-                .send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
+            //cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
             init_fonts(cc);
             Ok(Box::new(GraphicalUserInterface::default()))
         }),

@@ -37,6 +37,7 @@ impl RootSave {
                         if ui.button("noting save").clicked() {
                             return Some(RootSaveType::NotingSave);
                         }
+                        None
                     });
                     ui.label(&self.error_message);
                 });
@@ -165,7 +166,7 @@ pub struct AddUserPasswordWithSiteName {
 
 impl AddUserPasswordWithSiteName {
     pub fn display(&mut self, context: &Context, key: &(WrappedSessionKey, SessionKeyNonce), data_base: &mut DB, site_name: &SiteName) -> bool {
-        CommandBuilder::new(&format!("add user password with {}", site_name.as_str()), &format!("add user password with {}", site_name.as_str()))
+        CommandBuilder::new("add user password with", "add user password with")
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
             .set_database(data_base)

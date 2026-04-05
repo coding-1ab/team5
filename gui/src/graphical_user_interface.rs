@@ -345,7 +345,7 @@ impl GraphicalUserInterface {
             })
             .on_success(|_| {})
             .error_message(&mut self.string_values.command_value.change_master_password.error_message, )
-            .show(context, button, &mut self.window_open_list.change_master_password, );
+            .show(context);
     }
 
     pub(crate) fn save_data_base(&mut self) -> Result<(), SaveError> {
