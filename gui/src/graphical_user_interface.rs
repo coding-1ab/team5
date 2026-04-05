@@ -3,10 +3,12 @@ use std::{
     error::Error,
     fmt::Display,
 };
-use eframe::egui::{ViewportBuilder, ViewportId};
-use eframe::{
-    egui::TextBuffer,
-    egui::{self, Context, ViewportCommand},
+use eframe::egui::{
+    self,
+    Context,
+    ViewportBuilder,
+    ViewportCommand,
+    ViewportId,
 };
 use zeroize::Zeroize;
 use engine::{
@@ -17,11 +19,22 @@ use engine::{
     sodium::rust_wrappings::x25519::PubKey,
     user_secrets::{SessionKeyNonce, WrappedSessionKey},
 };
-use crate::{
-    command_builder::CommandValue,
-    window::{exit_root, AddUserPassword, AddUserPasswordWithSiteName, ChangeUserPassword, ChangeUserPasswordWithSiteName, ChangeUserPasswordWithSiteNameWithUserIdentifier, ExistingUser, FirstLogin, RemoveUserPassword, RemoveUserPasswordWithSiteName, RemoveUserPasswordWithSiteNameWithUserIdentifier, RootSave, RootSaveType}
+use crate::window::{
+    exit_root,
+    AddUserPassword,
+    AddUserPasswordWithSiteName,
+    ChangeMasterPassword,
+    ChangeUserPassword,
+    ChangeUserPasswordWithSiteName,
+    ChangeUserPasswordWithSiteNameWithUserIdentifier,
+    ExistingUser,
+    FirstLogin,
+    RemoveUserPassword,
+    RemoveUserPasswordWithSiteName,
+    RemoveUserPasswordWithSiteNameWithUserIdentifier,
+    RootSave,
+    RootSaveType,
 };
-use crate::window::ChangeMasterPassword;
 
 pub type KeyPair = (WrappedSessionKey, SessionKeyNonce);
 
