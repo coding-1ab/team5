@@ -1,18 +1,14 @@
-use std::collections::{BTreeMap, HashMap};
 use anyhow::Error;
 use eframe::{egui, egui::TextEdit};
+use engine::data_base::DB;
 use zeroize::Zeroize;
-use engine::{
-    data_base::{SiteName, DB},
-    user_secrets::{SessionKeyNonce, WrappedSessionKey}
-};
-use engine::data_base::UserID;
+use crate::graphical_user_interface::KeyPair;
 
 // 하나의 입력 필드를 표현
 pub struct InputField<'a> {
     pub label: &'static str,
     pub value: &'a mut String,
-    pub want_zeroize: bool,        // 에러 시 zeroize할지
+    pub want_zeroize: bool, // 에러 시 zeroize할지
 }
 
 // CommandBuilder 본체
@@ -21,16 +17,27 @@ pub struct CommandBuilder<'a, Output> {
     screen_name: &'a str,
     inputs: Vec<InputField<'a>>,
     database: Option<&'a mut DB>,
-    key: Option<&'a (WrappedSessionKey, SessionKeyNonce)>,
-    key_mut: Option<&'a mut (WrappedSessionKey, SessionKeyNonce)>,
+    key: Option<&'a KeyPair>,
+    key_mut: Option<&'a mut KeyPair>,
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
     #[allow(clippy::complexity)]
-    execute: Option<Box<dyn FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&(WrappedSessionKey, SessionKeyNonce)>, Option<&mut (WrappedSessionKey, SessionKeyNonce)>) -> Result<Output, Error> + 'a>>,
+    execute: Option<
+        Box<
+            dyn FnMut(
+                    &mut Vec<InputField>,
+                    Option<&mut DB>,
+                    Option<&KeyPair>,
+                    Option<&mut KeyPair>,
+                ) -> Result<Output, Error>
+                + 'a,
+        >,
+    >,
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new(title: &'static str, screen_name: &'static str) -> Self {   // command_fn은 이제 new()에서 안 받음
+    pub fn new(title: &'static str, screen_name: &'static str) -> Self {
+        // command_fn은 이제 new()에서 안 받음
         Self {
             title,
             screen_name,
@@ -48,13 +55,13 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self.database = Some(db);
         self
     }
-    
-    pub fn set_key(mut self, key: &'a (WrappedSessionKey, SessionKeyNonce)) -> Self {
+
+    pub fn set_key(mut self, key: &'a KeyPair) -> Self {
         self.key = Some(key);
         self
     }
 
-    pub fn set_key_mut(mut self, key: &'a mut (WrappedSessionKey, SessionKeyNonce)) -> Self {
+    pub fn set_key_mut(mut self, key: &'a mut KeyPair) -> Self {
         self.key_mut = Some(key);
         self
     }
@@ -62,7 +69,13 @@ impl<'a, Output> CommandBuilder<'a, Output> {
     // ← 여기서 핵심 변경
     pub fn execute<F>(mut self, execute_fn: F) -> Self
     where
-        F: FnMut(&mut Vec<InputField>, Option<&mut DB>, Option<&(WrappedSessionKey, SessionKeyNonce)>, Option<&mut (WrappedSessionKey, SessionKeyNonce)>) -> Result<Output, Error> + 'a,
+        F: FnMut(
+                &mut Vec<InputField>,
+                Option<&mut DB>,
+                Option<&KeyPair>,
+                Option<&mut KeyPair>,
+            ) -> Result<Output, Error>
+            + 'a,
     {
         self.execute = Some(Box::new(execute_fn));
         self
@@ -94,7 +107,10 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self
     }
 
-    pub fn error_message(self, error_message: &'a mut String) -> CommandBuilderWithError<'a, Output> {
+    pub fn error_message(
+        self,
+        error_message: &'a mut String,
+    ) -> CommandBuilderWithError<'a, Output> {
         CommandBuilderWithError {
             inner: self,
             error_message,
@@ -109,32 +125,16 @@ pub struct CommandBuilderWithError<'a, Output> {
 }
 
 impl<'a, Output> CommandBuilderWithError<'a, Output> {
-    pub fn show(
-        mut self,
-        context: &egui::Context,
-        button: egui::Response,
-        window_open: &mut bool,
-    ) {
-        if button.clicked() {
-            *window_open = true;
-        }
-
-        if !*window_open {
-            return;
-        }
-
-        let error_message = &mut *self.error_message; // mutable borrow
-
+    pub fn show(mut self, context: &egui::Context) -> bool {
         context.show_viewport_immediate(
             egui::ViewportId::from_hash_of(self.inner.title),
             egui::ViewportBuilder::default().with_title(self.inner.title),
             move |ctx, _| {
-                if ctx.input(|i| i.viewport().close_requested()) {
-                    *window_open = false;
-                    return;
+                if ctx.input(|i| i.viewport().close_requested()) { 
+                    return false;
                 }
 
-                egui::CentralPanel::default().show(ctx, |ui| {
+                let inner_response = egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label(self.inner.screen_name);
 
                     for field in &mut self.inner.inputs {
@@ -151,38 +151,42 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                         }
                     }
 
-                    ui.label(&*error_message);
+                    ui.label(&*self.error_message);
 
-                    if ui.button("submit").clicked() || ctx.input(|input| input.key_pressed(egui::Key::Enter)) {
-                        Self::handle_accept(&mut self.inner, error_message, window_open);
+                    if ui.button("submit").clicked()
+                        || ctx.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
+                        return Self::handle_accept(&mut self.inner, self.error_message);
                     }
+                    true
                 });
+                
+                inner_response.inner
             },
-        );
+        )
     }
 
     fn handle_accept(
         builder: &mut CommandBuilder<'_, Output>,
         error_message: &mut String,
-        window_open: &mut bool,
-    ) {
+    ) -> bool {
         if builder.inputs.iter().any(|f| f.value.trim().is_empty()) {
             *error_message = "모든 필드를 입력해주세요!".to_string();
-            return;
+            return false;
         }
 
         let values = &mut builder.inputs;
 
-        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.key, builder.key_mut.as_deref_mut()) {
+        match builder.execute.as_mut().unwrap()(values, builder.database.as_deref_mut(), builder.key, builder.key_mut.as_deref_mut(), ) {
             Ok(result) => {
                 (builder.on_success)(result);
-                *window_open = false;
                 error_message.clear();
                 for field in &mut builder.inputs {
                     if field.want_zeroize {
                         field.value.zeroize();
                     }
                 }
+                return false;
             }
             Err(err) => {
                 *error_message = err.to_string();
@@ -195,30 +199,8 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                 }
             }
         }
+        true
     }
-}
-
-#[derive(Default)]
-pub struct AddUserPassword {
-    pub site_name: String,
-    pub user_identifier: String,
-    pub password: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
-pub struct ChangeUserPassword {
-    pub site_name: String,
-    pub user_identifier: String,
-    pub password: String,
-    pub error_message: String,
-}
-
-#[derive(Default)]
-pub struct RemoveUserPassword {
-    pub site_name: String,
-    pub user_identifier: String,
-    pub error_message: String,
 }
 
 #[derive(Default)]
@@ -228,47 +210,8 @@ pub struct ChangeMasterPassword {
 }
 
 #[derive(Default)]
-pub struct AddUserPasswordWithSiteName {
-    pub user_identifier: BTreeMap<SiteName, String>,
-    pub password: BTreeMap<SiteName, String>,
-    pub error_message: BTreeMap<SiteName, String>,
-}
-
-#[derive(Default)]
-pub struct ChangeUserPasswordWithSiteName {
-    pub user_identifier: BTreeMap<SiteName, String>,
-    pub password: BTreeMap<SiteName, String>,
-    pub error_message: BTreeMap<SiteName, String>,
-}
-
-#[derive(Default)]
-pub struct RemoveUserPasswordWithSiteName {
-    pub user_identifier: BTreeMap<SiteName, String>,
-    pub error_message: BTreeMap<SiteName, String>,
-}
-
-#[derive(Default)]
-pub struct ChangeUserPasswordWithSiteNameWithUserIdentifier {
-    pub password: BTreeMap<SiteName, HashMap<UserID, String>>,
-    pub error_message: BTreeMap<SiteName, HashMap<UserID, String>>,
-}
-
-#[derive(Default)]
-pub struct RemoveUserPasswordWithSiteNameWithUserIdentifier {
-    pub error_message: BTreeMap<SiteName, HashMap<UserID, String>>,
-}
-
-#[derive(Default)]
 pub struct CommandValue {
-    pub add_user_password: AddUserPassword,
-    pub change_user_password: ChangeUserPassword,
-    pub remove_user_password: RemoveUserPassword,
-    pub change_master_password: ChangeMasterPassword,
-    pub add_user_password_with_site_name: AddUserPasswordWithSiteName,
-    pub change_user_password_with_site_name: ChangeUserPasswordWithSiteName,
-    pub remove_user_password_with_site_name: RemoveUserPasswordWithSiteName,
-    pub change_user_password_with_site_name_with_user_identifier: ChangeUserPasswordWithSiteNameWithUserIdentifier,
-    pub remove_user_password_with_site_name_with_user_identifier: RemoveUserPasswordWithSiteNameWithUserIdentifier
+    pub change_master_password: ChangeMasterPassword
 }
 
 /*

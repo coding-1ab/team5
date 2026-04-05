@@ -1,5 +1,5 @@
 [package]
-name = "ui"
+name = "gui"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,8 +10,4 @@ zeroize = { workspace = true }
 single-instance = { workspace = true }
 anyhow = "1.0.101"
 winit = "0.30.13"
-
-[features]
-gui = []
-cui = []
 

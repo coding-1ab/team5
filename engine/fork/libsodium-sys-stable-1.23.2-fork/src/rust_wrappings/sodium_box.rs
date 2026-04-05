@@ -1,12 +1,10 @@
+use crate::sodium_bindings::{sodium_free, sodium_malloc, sodium_memzero};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 use core::ptr::copy_nonoverlapping;
 use secrecy::SecretBox;
 use zeroize::Zeroize;
-use crate::sodium_bindings::{sodium_free, sodium_malloc, sodium_memzero};
-
-
 
 #[derive(Debug)]
 pub struct SodiumBox<T> {
@@ -18,10 +16,8 @@ impl<T> SodiumBox<T> {
         self.len
     }
     pub fn new_with_size(len: usize) -> SodiumBox<T> {
-        let ptr: *mut T = unsafe {
-            sodium_malloc(len * size_of::<T>()).cast()
-        };
-        Self {ptr, len}
+        let ptr: *mut T = unsafe { sodium_malloc(len * size_of::<T>()).cast() };
+        Self { ptr, len }
     }
     pub fn from_raw(src: *const T, len: usize) -> SodiumBox<T> {
         unsafe {
@@ -29,7 +25,7 @@ impl<T> SodiumBox<T> {
 
             ptr.copy_from_nonoverlapping(src, len);
 
-            Self {ptr, len}
+            Self { ptr, len }
         }
     }
     pub fn from_slice(s: &[T]) -> SodiumBox<T> {
@@ -38,7 +34,7 @@ impl<T> SodiumBox<T> {
 
             ptr.copy_from_nonoverlapping(s.as_ptr(), s.len());
 
-            Self {ptr, len: s.len()}
+            Self { ptr, len: s.len() }
         }
     }
     pub fn copy_to(&self, ptr: *mut T) {
@@ -56,23 +52,27 @@ impl<T> SodiumBox<T> {
         let ptr: *mut U = self.ptr.cast();
         let mut len = self.len;
         let _ = mem::ManuallyDrop::new(self);
-        const{ assert!(size_of::<T>() % size_of::<U>() == 0) }
+        const { assert!(size_of::<T>() % size_of::<U>() == 0) }
         len *= (size_of::<T>() / size_of::<U>());
-        SodiumBox::<U> {ptr, len} // todo!
+        SodiumBox::<U> { ptr, len } // todo!
     }
 }
-impl<T> Into<SecretBox<[T]>> for SodiumBox<T> where [T]: Zeroize {
+impl<T> Into<SecretBox<[T]>> for SodiumBox<T>
+where
+    [T]: Zeroize,
+{
     fn into(self) -> SecretBox<[T]> {
         let mut boxed = Box::new_uninit_slice(self.len());
         self.copy_to(boxed.as_mut_ptr() as *mut T);
-        let boxed_slice: Box<[T]> = unsafe {
-            boxed.assume_init()
-        };
+        let boxed_slice: Box<[T]> = unsafe { boxed.assume_init() };
         let _ = mem::ManuallyDrop::new(self);
         SecretBox::new(boxed_slice)
     }
 }
-impl<T> Into<Vec<T>> for SodiumBox<T> where [T]: Zeroize {
+impl<T> Into<Vec<T>> for SodiumBox<T>
+where
+    [T]: Zeroize,
+{
     fn into(self) -> Vec<T> {
         let mut v = Vec::with_capacity(self.len);
         unsafe {

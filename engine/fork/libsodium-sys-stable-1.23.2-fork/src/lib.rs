@@ -5,8 +5,8 @@
 #![allow(clippy::all)] // we can't control bindgen output to make clippy happy
 #![allow(dead_code)]
 
-extern crate libc;
 extern crate alloc;
+extern crate libc;
 
 mod sodium_bindings;
 
