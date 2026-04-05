@@ -1,35 +1,29 @@
-use anyhow::anyhow;
+use std::{
+    collections::{BTreeMap, HashMap},
+    error::Error,
+    fmt::Display,
+};
 use eframe::egui::{ViewportBuilder, ViewportId};
 use eframe::{
     egui::TextBuffer,
     egui::{self, Context, ViewportCommand},
 };
+use zeroize::Zeroize;
 use engine::{
-    data_base::{
-        DB, SiteName, UserID, UserPW, add_user_pw, change_user_pw, get_user_pw, prefix_range,
-        remove_user_pw,
-    },
-    file_io::{
-        DB_BAK_FILE, DB_FILE, FileIOError, check_can_directly_exit, load_db,
-        mark_as_graceful_exited_to_file, mark_as_ungraceful_exited_to_file, save_db,
-    },
+    data_base::{DB, SiteName, UserID, get_user_pw, prefix_range},
+    file_io::{FileIOError, load_db, mark_as_graceful_exited_to_file, save_db},
     header::DBHeader,
-    master_secrets::{
-        EncryptedDB, change_master_pw, decrypt_db, encrypt_db, first_login, general_login,
-        master_pw_validation,
-    },
+    master_secrets::encrypt_db,
     sodium::rust_wrappings::x25519::PubKey,
     user_secrets::{SessionKeyNonce, WrappedSessionKey},
 };
-use std::{
-    collections::{BTreeMap, HashMap},
-    error::Error,
-    fmt::Display,
-    fs,
+use crate::{
+    command_builder::CommandValue,
+    window::{exit_root, AddUserPassword, AddUserPasswordWithSiteName, ChangeUserPassword, ChangeUserPasswordWithSiteName, ChangeUserPasswordWithSiteNameWithUserIdentifier, ExistingUser, FirstLogin, RemoveUserPassword, RemoveUserPasswordWithSiteName, RemoveUserPasswordWithSiteNameWithUserIdentifier, RootSave, RootSaveType}
 };
-use zeroize::Zeroize;
-use crate::command_builder::{CommandBuilder, CommandValue};
-use crate::window::{AddUserPassword, AddUserPasswordWithSiteName, ChangeUserPassword, ChangeUserPasswordWithSiteName, ChangeUserPasswordWithSiteNameWithUserIdentifier, RemoveUserPassword, RemoveUserPasswordWithSiteName, RemoveUserPasswordWithSiteNameWithUserIdentifier, RootSave, RootSaveType};
+use crate::window::ChangeMasterPassword;
+
+pub type KeyPair = (WrappedSessionKey, SessionKeyNonce);
 
 #[derive(Debug)]
 enum SaveError {
@@ -59,12 +53,12 @@ struct UserState {
 
 #[derive(Default)]
 struct WindowOpenList {
-    pub(crate) root: Option<RootSave>,
+    root: Option<RootSave>,
     login: bool,
     add_user_password: Option<AddUserPassword>,
     change_user_password: Option<ChangeUserPassword>,
     remove_user_password: Option<RemoveUserPassword>,
-    change_master_password: bool,
+    change_master_password: Option<ChangeMasterPassword>,
     add_user_password_with_site_name: BTreeMap<SiteName, AddUserPasswordWithSiteName>,
     change_user_password_with_site_name: BTreeMap<SiteName, ChangeUserPasswordWithSiteName>,
     remove_user_password_with_site_name: BTreeMap<SiteName, RemoveUserPasswordWithSiteName>,
@@ -72,7 +66,8 @@ struct WindowOpenList {
         BTreeMap<SiteName, HashMap<UserID, ChangeUserPasswordWithSiteNameWithUserIdentifier>>,
     remove_user_password_with_site_name_with_user_identifier:
         BTreeMap<SiteName, HashMap<UserID, RemoveUserPasswordWithSiteNameWithUserIdentifier>>,
-    reset: bool,
+    existing_user: Option<ExistingUser>,
+    first_login: Option<FirstLogin>,
     user_state: UserState,
 }
 
@@ -112,165 +107,11 @@ pub struct GraphicalUserInterface {
     pub(crate) window_open_list: WindowOpenList,
     data_base: DB,
     data_base_header: DBHeader,
-    key: Option<(WrappedSessionKey, SessionKeyNonce)>,
+    key: Option<KeyPair>,
     public_key: Option<PubKey>,
 }
 
 impl GraphicalUserInterface {
-    fn existing_user(&mut self, context: &Context, encrypted_data_base: &EncryptedDB) {
-        context.show_viewport_immediate(
-            ViewportId::from_hash_of("master_login"),
-            ViewportBuilder::default()
-                .with_title("마스터 로그인")
-                .with_inner_size([300.0, 175.0]),
-            |ctx, _| {
-                if ctx.input(|i| i.viewport().close_requested()) {
-                    self.exit_root(context);
-                }
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.label("input master password");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.string_values.master_login.password)
-                            .password(true),
-                    );
-                    ui.label(&self.string_values.master_login.error_message);
-                    if ui.button("login").clicked() {
-                        loading(context);
-                        if let Err(error) =
-                            master_pw_validation(&self.string_values.master_login.password)
-                        {
-                            self.string_values.master_login.error_message = error.to_string();
-                            return;
-                        }
-                        let (secret_key, public_key, wrapped_session_key, session_key_nonce) =
-                            general_login(
-                                &mut self.string_values.master_login.password,
-                                &self.data_base_header.master_pw_salt,
-                            );
-                        self.string_values.master_login.password.zeroize();
-                        self.string_values.master_login.recheck_password.zeroize();
-                        let decrypted_data_base = match decrypt_db(encrypted_data_base, secret_key)
-                        {
-                            Ok(decrypted_data_base) => decrypted_data_base,
-                            Err(error) => {
-                                self.string_values.master_login.error_message = error.to_string();
-                                return;
-                            }
-                        };
-                        self.data_base = decrypted_data_base;
-                        self.public_key = Some(public_key);
-                        self.key = Some((wrapped_session_key, session_key_nonce));
-                        self.login = true;
-                    }
-                    if ui.button("reset").clicked() {
-                        self.window_open_list.reset = true;
-                    }
-                    if self.window_open_list.reset {
-                        ctx.show_viewport_immediate(
-                            ViewportId::from_hash_of("reset"),
-                            ViewportBuilder::default().with_title("reset"),
-                            |ctx, _| {
-                                egui::CentralPanel::default().show(ctx, |ui| {
-                                    ui.label("리셋하겠습니까? 복구할 수 없습니다.");
-                                    ui.horizontal(|ui| {
-                                        if ui.button("submit").clicked() {
-                                            match fs::remove_file(DB_FILE)
-                                                .and_then(|_| fs::remove_file(DB_BAK_FILE))
-                                            {
-                                                Ok(_) => self.window_open_list.reset = false,
-                                                Err(error) => {
-                                                self.string_values.save_error =
-                                                        error.to_string();
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                        if ui.button("cancel").clicked() {
-                                            self.window_open_list.reset = false;
-                                        }
-                                        ui.label(&self.string_values.reset_error);
-                                    })
-                                })
-                            },
-                        );
-                    }
-                    ui.label(&self.string_values.master_login.warning_message);
-                });
-            },
-        );
-    }
-
-    fn first_login(&mut self, context: &Context) {
-        context.show_viewport_immediate(
-            ViewportId::from_hash_of("first_master_login"),
-            ViewportBuilder::default()
-                .with_title("첫 마스터 로그인")
-                .with_inner_size([300.0, 175.0]),
-            |ctx, _| {
-                if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                    self.exit_root(context);
-                    return;
-                }
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.label("input new master password");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.string_values.master_login.password)
-                            .password(true),
-                    );
-                    ui.label("recheck master password");
-                    ui.add(
-                        egui::TextEdit::singleline(
-                            &mut self.string_values.master_login.recheck_password,
-                        )
-                        .password(true),
-                    );
-                    ui.label(&self.string_values.master_login.error_message);
-                    if ui.button("Accept").clicked() {
-                        loading(context);
-                        if let Err(err) =
-                            master_pw_validation(&self.string_values.master_login.password)
-                        {
-                            self.string_values.master_login.error_message =
-                                format!("Master password validation error: {}", err);
-                            self.string_values.master_login.password.zeroize();
-                            self.string_values.master_login.recheck_password.zeroize();
-                            return;
-                        }
-                        if self.string_values.master_login.password
-                            == self.string_values.master_login.recheck_password
-                        {
-                            let (
-                                public_key,
-                                data_base_header_salt,
-                                wrapped_session_key,
-                                session_key_nonce,
-                            ) = first_login(self.string_values.master_login.password.take());
-                            self.string_values.master_login.password.zeroize();
-                            self.string_values.master_login.recheck_password.zeroize();
-                            self.data_base_header.master_pw_salt = data_base_header_salt;
-                            self.key = Some((wrapped_session_key, session_key_nonce));
-                            self.data_base = DB::default();
-                            save_db(
-                                &mut self.data_base_header,
-                                encrypt_db(&self.data_base, &public_key),
-                            )
-                            .expect("unreachable");
-                            self.public_key = Some(public_key);
-                            self.login = true;
-                        } else {
-                            self.string_values.master_login.password.zeroize();
-                            self.string_values.master_login.recheck_password.zeroize();
-                            self.string_values.master_login.error_message =
-                                "password is mismatch".to_string();
-                            return;
-                        }
-                    }
-                    ui.label(&self.string_values.master_login.warning_message);
-                });
-            },
-        );
-    }
-
     fn login(&mut self, ctx: &Context) {
         match load_db() {
             Ok((user_warning, data_base_header, encrypted_data_base)) => {
@@ -280,10 +121,43 @@ impl GraphicalUserInterface {
                 }
                 match encrypted_data_base {
                     Some(encrypted_data_base) => {
-                        self.existing_user(ctx, &encrypted_data_base);
+                        if self.window_open_list.existing_user.is_none() {
+                            self.window_open_list.existing_user = Some(ExistingUser::default())
+                        }
+                        if let Some(existing_user) = &mut self.window_open_list.existing_user {
+                            if !existing_user.display(
+                                ctx,
+                                &encrypted_data_base,
+                                &mut self.window_open_list.root,
+                                &self.data_base_header.master_pw_salt,
+                                &mut self.data_base,
+                                &mut self.public_key,
+                                &mut self.key,
+                                &mut self.login
+                            ) {
+                                self.window_open_list.existing_user = None;
+                                return;
+                            }
+                        }
                     }
                     None => {
-                        self.first_login(ctx);
+                        if self.window_open_list.first_login.is_none() {
+                            self.window_open_list.first_login = Some(FirstLogin::default())
+                        }
+                        if let Some(first_login) = &mut self.window_open_list.first_login {
+                            if !first_login.display(
+                                ctx,
+                                &mut self.data_base_header,
+                                &mut self.key,
+                                &mut self.data_base,
+                                &mut self.public_key,
+                                &mut self.login,
+                                &mut self.window_open_list.root
+                            ) {
+                                self.window_open_list.first_login = None;
+                                return;
+                            }
+                        }
                     }
                 }
             }
@@ -296,7 +170,7 @@ impl GraphicalUserInterface {
                         .with_inner_size([350.0, 25.0]),
                     |ctx, _| {
                         if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                            self.exit_root(ctx);
+                            exit_root(ctx, &mut self.window_open_list.root);
                             return;
                         }
                         egui::CentralPanel::default().show(ctx, |ui| {
@@ -308,45 +182,7 @@ impl GraphicalUserInterface {
         };
     }
 
-    fn graphical_user_interface_change_master_password(
-        &mut self,
-        context: &Context,
-        button: egui::Response,
-    ) {
-        CommandBuilder::new("change master password", "change master password")
-            .sensitive_input("master password", &mut self.string_values.command_value.change_master_password.password, )
-            .set_database(&mut self.data_base)
-            .set_key_mut(self.key.as_mut().expect("unreachable"))
-            .execute(|inputs, data_base, _, key_mut| {
-                let data_base = data_base.expect("unreachable");
-                if let Err(error) = master_pw_validation(inputs[0].value) {
-                    return Err(error.into());
-                }
-                let Some((wrapped_session_key, session_key_nonce)) = key_mut else {
-                    return Err(anyhow!("unreachable"));
-                };
-                loading(context);
-                let (public_key, salt) = change_master_pw(
-                    data_base,
-                    inputs[0].value.take(),
-                    wrapped_session_key,
-                    session_key_nonce,
-                )?;
 
-                self.data_base_header.master_pw_salt = salt;
-                self.public_key = Some(public_key);
-
-                save_db(
-                    &mut self.data_base_header,
-                    encrypt_db(data_base, self.public_key.as_ref().expect("unreachable")),
-                )?;
-                mark_as_graceful_exited_to_file()?;
-                Ok(())
-            })
-            .on_success(|_| {})
-            .error_message(&mut self.string_values.command_value.change_master_password.error_message, )
-            .show(context);
-    }
 
     pub(crate) fn save_data_base(&mut self) -> Result<(), SaveError> {
         let encrypt_db = encrypt_db(
@@ -375,7 +211,7 @@ impl GraphicalUserInterface {
             });
 
             ui.horizontal(|ui| {
-                let change_master_password_button = ui.button("change master password").on_hover_text("change master password");
+
                 if ui.button("add user password").on_hover_text("add user password").clicked() {
                     self.window_open_list.add_user_password = Some(AddUserPassword::default());
                 }
@@ -400,10 +236,14 @@ impl GraphicalUserInterface {
                         self.window_open_list.remove_user_password = None;
                     }
                 }
-                self.graphical_user_interface_change_master_password(
-                    ctx,
-                    change_master_password_button,
-                );
+                if ui.button("change master password").on_hover_text("change master password").clicked() {
+                    self.window_open_list.change_master_password = Some(ChangeMasterPassword::default())
+                }
+                if let Some(change_master_password) = &mut self.window_open_list.change_master_password {
+                    if !change_master_password.display(ctx, &mut self.data_base, self.key.as_mut().expect("unreachable"), &mut self.data_base_header, &mut self.public_key) {
+                        self.window_open_list.change_master_password = None;
+                    }
+                }
             });
             ui.label("search");
             ui.add(egui::TextEdit::singleline(
@@ -530,14 +370,6 @@ impl GraphicalUserInterface {
             }
         }
     }
-
-
-    fn exit_root(&mut self, context: &Context) {
-        if check_can_directly_exit() {
-            context.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close)
-        }
-        self.window_open_list.root = Some(RootSave::default());
-    }
 }
 
 impl eframe::App for GraphicalUserInterface {
@@ -581,7 +413,7 @@ impl eframe::App for GraphicalUserInterface {
 
 
 
-fn loading(context: &Context) {
+pub(crate) fn loading(context: &Context) {
     context.show_viewport_immediate(
         ViewportId::from_hash_of("loading"),
         ViewportBuilder::default().with_title("loading"),

@@ -1,12 +1,8 @@
 use anyhow::Error;
 use eframe::{egui, egui::TextEdit};
-use engine::data_base::UserID;
-use engine::{
-    data_base::{DB, SiteName},
-    user_secrets::{SessionKeyNonce, WrappedSessionKey},
-};
-use std::collections::{BTreeMap, HashMap};
+use engine::data_base::DB;
 use zeroize::Zeroize;
+use crate::graphical_user_interface::KeyPair;
 
 // 하나의 입력 필드를 표현
 pub struct InputField<'a> {
@@ -21,8 +17,8 @@ pub struct CommandBuilder<'a, Output> {
     screen_name: &'a str,
     inputs: Vec<InputField<'a>>,
     database: Option<&'a mut DB>,
-    key: Option<&'a (WrappedSessionKey, SessionKeyNonce)>,
-    key_mut: Option<&'a mut (WrappedSessionKey, SessionKeyNonce)>,
+    key: Option<&'a KeyPair>,
+    key_mut: Option<&'a mut KeyPair>,
     on_success: Box<dyn FnMut(Output) + 'a>,
     // execute closure를 저장
     #[allow(clippy::complexity)]
@@ -31,8 +27,8 @@ pub struct CommandBuilder<'a, Output> {
             dyn FnMut(
                     &mut Vec<InputField>,
                     Option<&mut DB>,
-                    Option<&(WrappedSessionKey, SessionKeyNonce)>,
-                    Option<&mut (WrappedSessionKey, SessionKeyNonce)>,
+                    Option<&KeyPair>,
+                    Option<&mut KeyPair>,
                 ) -> Result<Output, Error>
                 + 'a,
         >,
@@ -60,12 +56,12 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         self
     }
 
-    pub fn set_key(mut self, key: &'a (WrappedSessionKey, SessionKeyNonce)) -> Self {
+    pub fn set_key(mut self, key: &'a KeyPair) -> Self {
         self.key = Some(key);
         self
     }
 
-    pub fn set_key_mut(mut self, key: &'a mut (WrappedSessionKey, SessionKeyNonce)) -> Self {
+    pub fn set_key_mut(mut self, key: &'a mut KeyPair) -> Self {
         self.key_mut = Some(key);
         self
     }
@@ -76,8 +72,8 @@ impl<'a, Output> CommandBuilder<'a, Output> {
         F: FnMut(
                 &mut Vec<InputField>,
                 Option<&mut DB>,
-                Option<&(WrappedSessionKey, SessionKeyNonce)>,
-                Option<&mut (WrappedSessionKey, SessionKeyNonce)>,
+                Option<&KeyPair>,
+                Option<&mut KeyPair>,
             ) -> Result<Output, Error>
             + 'a,
     {
