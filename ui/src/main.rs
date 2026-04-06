@@ -3,22 +3,24 @@
 #![deny(clippy::complexity)]
 #![deny(clippy::too_many_lines)]
 
-use eframe::CreationContext;
 use eframe::{
+    CreationContext,
     egui,
     egui::FontData,
     epaint::text::{FontInsert, FontPriority, InsertFontFamily},
+    egui::ViewportBuilder
 };
 use single_instance::SingleInstance;
+use libsodium_sys::rust_wrappings::init::sodium_init;
+use graphical_user_interface::GraphicalUserInterface;
 
 mod command_builder;
 mod graphical_user_interface;
 mod window;
 
-use eframe::egui::{ViewportBuilder, ViewportCommand};
-use graphical_user_interface::GraphicalUserInterface;
 
 fn main() {
+    sodium_init().expect("이거 깨지면 답없음");
     let instance = SingleInstance::new("team5").unwrap();
     if !instance.is_single() {
         return;

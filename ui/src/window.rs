@@ -4,7 +4,6 @@ use eframe::{
     egui,
     egui::{Context, ViewportBuilder, ViewportCommand, ViewportId}
 };
-use eframe::egui::TextBuffer;
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
@@ -368,7 +367,7 @@ pub struct RemoveUserPassword {
 }
 
 impl RemoveUserPassword {
-    pub fn display(&mut self, context: &Context, key: &KeyPair, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, context: &Context, data_base: &mut DB) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)

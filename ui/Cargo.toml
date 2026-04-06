@@ -9,5 +9,4 @@ eframe = { version = "0.33.3" }
 zeroize = { workspace = true }
 single-instance = { workspace = true }
 anyhow = "1.0.101"
-winit = "0.30.13"
-
+libsodium-sys-stable = { path = "../engine/fork/libsodium-sys-stable-1.23.2-fork"}

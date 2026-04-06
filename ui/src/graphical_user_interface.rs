@@ -77,9 +77,9 @@ struct WindowOpenList {
     change_user_password_with_site_name: BTreeMap<SiteName, ChangeUserPasswordWithSiteName>,
     remove_user_password_with_site_name: BTreeMap<SiteName, RemoveUserPasswordWithSiteName>,
     change_user_password_with_site_name_with_user_identifier:
-        BTreeMap<SiteName, HashMap<UserID, ChangeUserPasswordWithSiteNameWithUserIdentifier>>,
+    BTreeMap<SiteName, HashMap<UserID, ChangeUserPasswordWithSiteNameWithUserIdentifier>>,
     remove_user_password_with_site_name_with_user_identifier:
-        BTreeMap<SiteName, HashMap<UserID, RemoveUserPasswordWithSiteNameWithUserIdentifier>>,
+    BTreeMap<SiteName, HashMap<UserID, RemoveUserPasswordWithSiteNameWithUserIdentifier>>,
     existing_user: Option<ExistingUser>,
     first_login: Option<FirstLogin>,
     user_state: UserState,
@@ -98,16 +98,10 @@ struct StringValues {
 }
 
 #[derive(Default)]
-struct Cache {
-    encrypted_data_base: Option<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>)>
-}
-
-#[derive(Default)]
 pub struct GraphicalUserInterface {
     login: bool,
     string_values: StringValues,
     window_open_list: WindowOpenList,
-    cache: Cache,
     data_base: DB,
     data_base_header: DBHeader,
     key: Option<KeyPair>,
@@ -116,79 +110,74 @@ pub struct GraphicalUserInterface {
 
 impl GraphicalUserInterface {
     fn login(&mut self, ctx: &Context) {
-        if self.cache.encrypted_data_base.is_none() {
-            self.cache.encrypted_data_base = match load_db() {
-                Ok(data) => Some(data),
-                Err(error) => {
-                    ctx.show_viewport_immediate(
-                        ViewportId::from_hash_of("master_login_err"),
-                        ViewportBuilder::default()
-                            .with_title("error")
-                            .with_always_on_top()
-                            .with_inner_size([350.0, 25.0]),
-                        |ctx, _| {
-                            if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                                exit_root(ctx, &mut self.window_open_list.root);
+        match load_db() {
+            Ok((user_warning, data_base_header, encrypted_data_base)) => {
+                self.data_base_header = data_base_header;
+                if let Some(user_warning) = user_warning {
+                    self.string_values.master_login.warning_message = user_warning.to_string();
+                }
+                match encrypted_data_base {
+                    Some(encrypted_data_base) => {
+                        if self.window_open_list.existing_user.is_none() {
+                            self.window_open_list.existing_user = Some(ExistingUser::default())
+                        }
+                        if let Some(existing_user) = &mut self.window_open_list.existing_user {
+                            if !existing_user.display(
+                                ctx,
+                                &encrypted_data_base,
+                                &mut self.window_open_list.root,
+                                &self.data_base_header.master_pw_salt,
+                                &mut self.data_base,
+                                &mut self.public_key,
+                                &mut self.key,
+                                &mut self.login,
+                                &self.string_values.master_login.warning_message
+                            ) {
+                                self.window_open_list.existing_user = None;
                                 return;
                             }
-                            egui::CentralPanel::default().show(ctx, |ui| {
-                                ui.label(format!("Error loading db: {}", error));
-                            });
-                        },
-                    );
-                    return;
-                }
-            };
-        }
-        let Some((user_warning, data_base_header, encrypted_data_base)) = &self.cache.encrypted_data_base else {
-            return;
-        };
-
-        self.data_base_header = *data_base_header;
-        if let Some(user_warning) = user_warning {
-            self.string_values.master_login.warning_message = user_warning.to_string();
-        }
-        match encrypted_data_base {
-            Some(encrypted_data_base) => {
-                if self.window_open_list.existing_user.is_none() {
-                    self.window_open_list.existing_user = Some(ExistingUser::default())
-                }
-                if let Some(existing_user) = &mut self.window_open_list.existing_user {
-                    if !existing_user.display(
-                        ctx,
-                        &encrypted_data_base,
-                        &mut self.window_open_list.root,
-                        &self.data_base_header.master_pw_salt,
-                        &mut self.data_base,
-                        &mut self.public_key,
-                        &mut self.key,
-                        &mut self.login,
-                        &self.string_values.master_login.warning_message
-                    ) {
-                        self.window_open_list.existing_user = None;
-                        return;
+                        }
+                    }
+                    None => {
+                        if self.window_open_list.first_login.is_none() {
+                            self.window_open_list.first_login = Some(FirstLogin::default())
+                        }
+                        if let Some(first_login) = &mut self.window_open_list.first_login {
+                            if !first_login.display(
+                                ctx,
+                                &mut self.data_base_header,
+                                &mut self.key,
+                                &mut self.data_base,
+                                &mut self.public_key,
+                                &mut self.login,
+                                &mut self.window_open_list.root,
+                                &self.string_values.master_login.warning_message
+                            ) {
+                                self.window_open_list.first_login = None;
+                                return;
+                            }
+                        }
                     }
                 }
             }
-            None => {
-                if self.window_open_list.first_login.is_none() {
-                    self.window_open_list.first_login = Some(FirstLogin::default())
-                }
-                if let Some(first_login) = &mut self.window_open_list.first_login {
-                    if !first_login.display(
-                        ctx,
-                        &mut self.data_base_header,
-                        &mut self.key,
-                        &mut self.data_base,
-                        &mut self.public_key,
-                        &mut self.login,
-                        &mut self.window_open_list.root,
-                        &self.string_values.master_login.warning_message
-                    ) {
-                        self.window_open_list.first_login = None;
-                        return;
-                    }
-                }
+            Err(error) => {
+                ctx.show_viewport_immediate(
+                    ViewportId::from_hash_of("master_login_err"),
+                    ViewportBuilder::default()
+                        .with_title("error")
+                        .with_always_on_top()
+                        .with_inner_size([350.0, 25.0]),
+                    |ctx, _| {
+                        if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                            exit_root(ctx, &mut self.window_open_list.root);
+                            return;
+                        }
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            ui.label(format!("Error loading db: {}", error));
+                        });
+                    },
+                );
+                return;
             }
         }
     }
@@ -241,7 +230,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.remove_user_password = Some(RemoveUserPassword::default());
                 }
                 if let Some(remove_user_password) = &mut self.window_open_list.remove_user_password {
-                    if !remove_user_password.display(ctx, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
+                    if !remove_user_password.display(ctx, &mut self.data_base) {
                         self.window_open_list.remove_user_password = None;
                     }
                 }
@@ -397,7 +386,7 @@ impl eframe::App for GraphicalUserInterface {
                     let result = self.save_data_base();
                     let error_message = &mut self.window_open_list.root.as_mut().unwrap().error_message;
                     if let Err(_) = result {
-                         *error_message = "failed save".to_string();
+                        *error_message = "failed save".to_string();
                     } else {
                         *error_message = "saved".to_string();
                         ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
