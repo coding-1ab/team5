@@ -78,7 +78,7 @@ pub fn master_pw_validation(raw_pw: &String) -> Result<(), MasterPWError> {
 }
 
 #[inline(always)]
-fn master_pw_kdf(master_pw: &String, salt: &Salt) -> SecKey {
+fn master_pw_kdf(master_pw: &str, salt: &Salt) -> SecKey {
     let params = Params::new(
         128 * 1024, // 메모리 요구량 (KB 단위)
         1,          // 반복 횟수
@@ -146,7 +146,7 @@ pub fn general_login(
 pub fn first_login(master_pw: &mut String) -> (PubKey, Salt, WrappedSessionKey, SessionKeyNonce) {
     let mut salt = Salt::default();
     OsRng.fill_bytes(salt.as_mut_slice());
-    let sec_key = master_pw_kdf(&master_pw, &salt);
+    let sec_key = master_pw_kdf(master_pw.trim(), &salt);
 
     master_pw.zeroize();
 
@@ -164,7 +164,7 @@ pub fn change_master_pw(
 ) -> Result<(PubKey, Salt), DBIOError> {
     let mut salt = Salt::default();
     OsRng.fill_bytes(salt.as_mut_slice());
-    let sec_key = master_pw_kdf(&new_master_pw, &salt);
+    let sec_key = master_pw_kdf(new_master_pw.trim(), &salt);
 
     new_master_pw.zeroize();
 
