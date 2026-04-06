@@ -174,7 +174,7 @@ impl FirstLogin {
                                 data_base_header_salt,
                                 wrapped_session_key,
                                 session_key_nonce,
-                            ) = first_login(self.password.take());
+                            ) = first_login(&mut self.password);
                             self.password.zeroize();
                             self.recheck_password.zeroize();
                             data_base_header.master_pw_salt = data_base_header_salt;
@@ -571,7 +571,7 @@ impl ChangeMasterPassword {
                 loading(context);
                 let (public_key, salt) = change_master_pw(
                     data_base,
-                    inputs[0].value.take(),
+                    &mut inputs[0].value,
                     wrapped_session_key,
                     session_key_nonce,
                 )?;

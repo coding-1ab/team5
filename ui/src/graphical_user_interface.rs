@@ -19,6 +19,8 @@ use engine::{
     sodium::rust_wrappings::x25519::PubKey,
     user_secrets::{SessionKeyNonce, WrappedSessionKey},
 };
+use engine::file_io::FileIOWarn;
+use engine::master_secrets::EncryptedDB;
 use crate::window::{
     exit_root,
     AddUserPassword,
@@ -96,10 +98,16 @@ struct StringValues {
 }
 
 #[derive(Default)]
+struct Cache {
+    encrypted_data_base: Option<(Option<FileIOWarn>, DBHeader, Option<EncryptedDB>)>
+}
+
+#[derive(Default)]
 pub struct GraphicalUserInterface {
     login: bool,
     string_values: StringValues,
     window_open_list: WindowOpenList,
+    cache: Cache,
     data_base: DB,
     data_base_header: DBHeader,
     key: Option<KeyPair>,
@@ -108,75 +116,81 @@ pub struct GraphicalUserInterface {
 
 impl GraphicalUserInterface {
     fn login(&mut self, ctx: &Context) {
-        match load_db() {
-            Ok((user_warning, data_base_header, encrypted_data_base)) => {
-                self.data_base_header = data_base_header;
-                if let Some(user_warning) = user_warning {
-                    self.string_values.master_login.warning_message = user_warning.to_string();
-                }
-                match encrypted_data_base {
-                    Some(encrypted_data_base) => {
-                        if self.window_open_list.existing_user.is_none() {
-                            self.window_open_list.existing_user = Some(ExistingUser::default())
-                        }
-                        if let Some(existing_user) = &mut self.window_open_list.existing_user {
-                            if !existing_user.display(
-                                ctx,
-                                &encrypted_data_base,
-                                &mut self.window_open_list.root,
-                                &self.data_base_header.master_pw_salt,
-                                &mut self.data_base,
-                                &mut self.public_key,
-                                &mut self.key,
-                                &mut self.login,
-                                &self.string_values.master_login.warning_message
-                            ) {
-                                self.window_open_list.existing_user = None;
+        if self.cache.encrypted_data_base.is_none() {
+            self.cache.encrypted_data_base = match load_db() {
+                Ok(data) => Some(data),
+                Err(error) => {
+                    ctx.show_viewport_immediate(
+                        ViewportId::from_hash_of("master_login_err"),
+                        ViewportBuilder::default()
+                            .with_title("error")
+                            .with_always_on_top()
+                            .with_inner_size([350.0, 25.0]),
+                        |ctx, _| {
+                            if ctx.input(|input_state| input_state.viewport().close_requested()) {
+                                exit_root(ctx, &mut self.window_open_list.root);
                                 return;
                             }
-                        }
-                    }
-                    None => {
-                        if self.window_open_list.first_login.is_none() {
-                            self.window_open_list.first_login = Some(FirstLogin::default())
-                        }
-                        if let Some(first_login) = &mut self.window_open_list.first_login {
-                            if !first_login.display(
-                                ctx,
-                                &mut self.data_base_header,
-                                &mut self.key,
-                                &mut self.data_base,
-                                &mut self.public_key,
-                                &mut self.login,
-                                &mut self.window_open_list.root,
-                                &self.string_values.master_login.warning_message
-                            ) {
-                                self.window_open_list.first_login = None;
-                                return;
-                            }
-                        }
-                    }
+                            egui::CentralPanel::default().show(ctx, |ui| {
+                                ui.label(format!("Error loading db: {}", error));
+                            });
+                        },
+                    );
+                    return;
                 }
-            }
-            Err(err) => {
-                ctx.show_viewport_immediate(
-                    ViewportId::from_hash_of("master_login_err"),
-                    ViewportBuilder::default()
-                        .with_title("error")
-                        .with_always_on_top()
-                        .with_inner_size([350.0, 25.0]),
-                    |ctx, _| {
-                        if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                            exit_root(ctx, &mut self.window_open_list.root);
-                            return;
-                        }
-                        egui::CentralPanel::default().show(ctx, |ui| {
-                            ui.label(format!("Error loading db: {}", err));
-                        });
-                    },
-                );
-            }
+            };
+        }
+        let Some((user_warning, data_base_header, encrypted_data_base)) = &self.cache.encrypted_data_base else {
+            return;
         };
+
+        self.data_base_header = *data_base_header;
+        if let Some(user_warning) = user_warning {
+            self.string_values.master_login.warning_message = user_warning.to_string();
+        }
+        match encrypted_data_base {
+            Some(encrypted_data_base) => {
+                if self.window_open_list.existing_user.is_none() {
+                    self.window_open_list.existing_user = Some(ExistingUser::default())
+                }
+                if let Some(existing_user) = &mut self.window_open_list.existing_user {
+                    if !existing_user.display(
+                        ctx,
+                        &encrypted_data_base,
+                        &mut self.window_open_list.root,
+                        &self.data_base_header.master_pw_salt,
+                        &mut self.data_base,
+                        &mut self.public_key,
+                        &mut self.key,
+                        &mut self.login,
+                        &self.string_values.master_login.warning_message
+                    ) {
+                        self.window_open_list.existing_user = None;
+                        return;
+                    }
+                }
+            }
+            None => {
+                if self.window_open_list.first_login.is_none() {
+                    self.window_open_list.first_login = Some(FirstLogin::default())
+                }
+                if let Some(first_login) = &mut self.window_open_list.first_login {
+                    if !first_login.display(
+                        ctx,
+                        &mut self.data_base_header,
+                        &mut self.key,
+                        &mut self.data_base,
+                        &mut self.public_key,
+                        &mut self.login,
+                        &mut self.window_open_list.root,
+                        &self.string_values.master_login.warning_message
+                    ) {
+                        self.window_open_list.first_login = None;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     fn save_data_base(&mut self) -> Result<(), SaveError> {
