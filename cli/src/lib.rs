@@ -10,7 +10,7 @@ use std::process::exit;
 use std::string::String;
 use zeroize::*;
 
-fn main() {
+fn cli_app() {
     let instance = SingleInstance::new("team5").unwrap();
     if !instance.is_single() {
         return;
