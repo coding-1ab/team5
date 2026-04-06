@@ -143,7 +143,7 @@ pub fn general_login(
 
     (sec_key, pub_key, wrapped_session_key, session_key_nonce)
 }
-pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedSessionKey, SessionKeyNonce) {
+pub fn first_login(master_pw: &mut String) -> (PubKey, Salt, WrappedSessionKey, SessionKeyNonce) {
     let mut salt = Salt::default();
     OsRng.fill_bytes(salt.as_mut_slice());
     let sec_key = master_pw_kdf(&master_pw, &salt);
@@ -158,7 +158,7 @@ pub fn first_login(mut master_pw: String) -> (PubKey, Salt, WrappedSessionKey, S
 }
 pub fn change_master_pw(
     db: &mut DB,
-    mut new_master_pw: String,
+    new_master_pw: &mut String,
     wrapped_session_key: &mut WrappedSessionKey,
     session_key_nonce: &mut SessionKeyNonce,
 ) -> Result<(PubKey, Salt), DBIOError> {
