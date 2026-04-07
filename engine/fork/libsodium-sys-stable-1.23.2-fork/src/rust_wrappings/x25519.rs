@@ -23,7 +23,7 @@ impl PubKey {
     }
     pub fn from_raw(src: *const u8) -> Self {
         Self {
-            inner: SodiumBox::from_raw(src, ECIES_PK_SIZE),
+            inner: SodiumBox::from_raw(src, Self::SIZE),
         }
     }
     pub fn as_ptr(&self) -> *const u8 {
