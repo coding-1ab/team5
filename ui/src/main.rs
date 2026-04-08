@@ -3,6 +3,8 @@
 #![deny(clippy::complexity)]
 #![deny(clippy::too_many_lines)]
 
+use std::thread;
+use std::time::Duration;
 use eframe::{
     CreationContext,
     egui,
@@ -18,7 +20,6 @@ mod command_builder;
 mod graphical_user_interface;
 mod window;
 
-
 fn main() {
     sodium_init().expect("이거 깨지면 답없음");
     let instance = SingleInstance::new("team5").unwrap();
@@ -31,7 +32,7 @@ fn main() {
         viewport: ViewportBuilder::default().with_visible(false),
         ..eframe::NativeOptions::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "eframe example",
         options,
         Box::new(|cc| {
@@ -39,8 +40,8 @@ fn main() {
             init_fonts(cc);
             Ok(Box::new(GraphicalUserInterface::default()))
         }),
-    )
-    .unwrap();
+    );
+    dbg!(result);
 }
 
 fn init_fonts(cc: &CreationContext) {

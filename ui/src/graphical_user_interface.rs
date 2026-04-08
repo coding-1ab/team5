@@ -3,13 +3,7 @@ use std::{
     error::Error,
     fmt::Display,
 };
-use eframe::egui::{
-    self,
-    Context,
-    ViewportBuilder,
-    ViewportCommand,
-    ViewportId,
-};
+use eframe::egui::{self, Context, Ui, ViewportBuilder, ViewportCommand, ViewportId};
 use zeroize::Zeroize;
 use engine::{
     data_base::{DB, SiteName, UserID, get_user_pw, prefix_range},
@@ -167,12 +161,12 @@ impl GraphicalUserInterface {
                         .with_title("error")
                         .with_always_on_top()
                         .with_inner_size([350.0, 25.0]),
-                    |ctx, _| {
-                        if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                            exit_root(ctx, &mut self.window_open_list.root);
+                    |ui, _| {
+                        if ui.input(|input_state| input_state.viewport().close_requested()) {
+                            exit_root(ui, &mut self.window_open_list.root);
                             return;
                         }
-                        egui::CentralPanel::default().show(ctx, |ui| {
+                        egui::CentralPanel::default().show_inside(ui, |ui| {
                             ui.label(format!("Error loading db: {}", error));
                         });
                     },
@@ -190,12 +184,12 @@ impl GraphicalUserInterface {
         save_db(&mut self.data_base_header, encrypt_db).map_err(SaveError::from)
     }
 
-    fn user_main_view(&mut self, ctx: &Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn user_main_view(&mut self, ui: &mut Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 let save_data_base = ui.button("save data base");
                 if save_data_base.clicked() {
-                    loading(ctx);
+                    loading(ui);
                     match self.save_data_base() {
                         Ok(()) => {
                             self.string_values.save_data_base_label = "saved data base".to_string();
@@ -214,7 +208,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.add_user_password = Some(AddUserPassword::default());
                 }
                 if let Some(add_user_password) = &mut self.window_open_list.add_user_password {
-                    if !add_user_password.display(ctx, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
+                    if !add_user_password.display(ui, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
                         self.window_open_list.add_user_password = None;
                     }
                 }
@@ -222,7 +216,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.change_user_password = Some(ChangeUserPassword::default());
                 }
                 if let Some(change_user_password) = &mut self.window_open_list.change_user_password {
-                    if !change_user_password.display(ctx, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
+                    if !change_user_password.display(ui, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
                         self.window_open_list.change_user_password = None;
                     }
                 }
@@ -230,7 +224,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.remove_user_password = Some(RemoveUserPassword::default());
                 }
                 if let Some(remove_user_password) = &mut self.window_open_list.remove_user_password {
-                    if !remove_user_password.display(ctx, &mut self.data_base) {
+                    if !remove_user_password.display(ui, &mut self.data_base) {
                         self.window_open_list.remove_user_password = None;
                     }
                 }
@@ -238,7 +232,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.change_master_password = Some(ChangeMasterPassword::default())
                 }
                 if let Some(change_master_password) = &mut self.window_open_list.change_master_password {
-                    if !change_master_password.display(ctx, &mut self.data_base, self.key.as_mut().expect("unreachable"), &mut self.data_base_header, &mut self.public_key) {
+                    if !change_master_password.display(ui, &mut self.data_base, self.key.as_mut().expect("unreachable"), &mut self.data_base_header, &mut self.public_key) {
                         self.window_open_list.change_master_password = None;
                     }
                 }
@@ -268,11 +262,11 @@ impl GraphicalUserInterface {
                 }
             });
 
-            self.user_passwords_windows(ctx);
+            self.user_passwords_windows(ui);
         });
     }
 
-    fn user_passwords_windows(&mut self, context: &Context) {
+    fn user_passwords_windows(&mut self, ui: &mut Ui) {
         let user_state = &mut self.window_open_list.user_state;
         let UserState {
             user_data,
@@ -280,23 +274,23 @@ impl GraphicalUserInterface {
         } = user_state;
         for (site_name, is_open) in site_names {
             if *is_open {
-                context.show_viewport_immediate(
+                ui.show_viewport_immediate(
                     ViewportId::from_hash_of(format!("{}_user_data", site_name.as_str())),
                     ViewportBuilder::default().with_title(format!("{} user data", site_name.as_str())),
-                    |context, _| {
-                        if context.input(|input_state| { input_state.viewport().close_requested() }) {
+                    |ui, _| {
+                        if ui.input(|input_state| { input_state.viewport().close_requested() }) {
                             user_data.remove(site_name);
                             *is_open = false;
                         }
 
-                        egui::CentralPanel::default().show(context, |ui| {
+                        egui::CentralPanel::default().show_inside(ui, |ui| {
                             ui.label(site_name.as_str());
                             ui.horizontal(|ui| {
                                 if ui.button("add user password").on_hover_text("add user password").clicked() {
                                     self.window_open_list.add_user_password_with_site_name.insert(site_name.clone(), AddUserPasswordWithSiteName::default());
                                 }
                                 if let Some(add_user_password_site_name) = self.window_open_list.add_user_password_with_site_name.get_mut(site_name) {
-                                    if !add_user_password_site_name.display(context, self.key.as_ref().unwrap(), &mut self.data_base, site_name) {
+                                    if !add_user_password_site_name.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name) {
                                         self.window_open_list.add_user_password_with_site_name.remove(site_name);
                                     }
                                 }
@@ -304,7 +298,7 @@ impl GraphicalUserInterface {
                                     self.window_open_list.change_user_password_with_site_name.insert(site_name.clone(), ChangeUserPasswordWithSiteName::default());
                                 }
                                 if let Some(change_user_password_with_site_name) = self.window_open_list.change_user_password_with_site_name.get_mut(site_name) {
-                                    if !change_user_password_with_site_name.display(context, self.key.as_ref().unwrap(), &mut self.data_base, site_name) {
+                                    if !change_user_password_with_site_name.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name) {
                                         self.window_open_list.change_user_password_with_site_name.remove(site_name);
                                     }
                                 }
@@ -312,7 +306,7 @@ impl GraphicalUserInterface {
                                     self.window_open_list.remove_user_password_with_site_name.insert(site_name.clone(), RemoveUserPasswordWithSiteName::default());
                                 }
                                 if let Some(remove_user_password_with_site_name) = self.window_open_list.remove_user_password_with_site_name.get_mut(site_name) {
-                                    if !remove_user_password_with_site_name.display(context, &mut self.data_base, site_name) {
+                                    if !remove_user_password_with_site_name.display(ui, &mut self.data_base, site_name) {
                                         self.window_open_list.remove_user_password_with_site_name.remove(site_name);
                                     }
                                 }
@@ -329,7 +323,7 @@ impl GraphicalUserInterface {
                                                 self.window_open_list.change_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().entry(user_identifier.clone()).or_default();
                                             }
                                             if let Some(change_user_password_with_size_name_with_user_identifier) = self.window_open_list.change_user_password_with_site_name_with_user_identifier.get_mut(site_name).and_then(|value| value.get_mut(&user_identifier)) {
-                                                if !change_user_password_with_size_name_with_user_identifier.display(context, self.key.as_ref().unwrap(), &mut self.data_base, site_name, &user_identifier) {
+                                                if !change_user_password_with_size_name_with_user_identifier.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name, &user_identifier) {
                                                     self.window_open_list.change_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().remove(&user_identifier);
                                                 }
                                             }
@@ -337,7 +331,7 @@ impl GraphicalUserInterface {
                                                 self.window_open_list.remove_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().entry(user_identifier.clone()).or_default();
                                             }
                                             if let Some(remove_user_password_with_size_name_with_user_identifier) = self.window_open_list.remove_user_password_with_site_name_with_user_identifier.get_mut(site_name).and_then(|value| value.get_mut(&user_identifier)) {
-                                                if !remove_user_password_with_size_name_with_user_identifier.display(context, &mut self.data_base, site_name, &user_identifier) {
+                                                if !remove_user_password_with_size_name_with_user_identifier.display(ui, &mut self.data_base, site_name, &user_identifier) {
                                                     self.window_open_list.remove_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().remove(&user_identifier);
                                                 }
                                             }
@@ -371,13 +365,13 @@ impl GraphicalUserInterface {
 }
 
 impl eframe::App for GraphicalUserInterface {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        if ctx.input(|input| input.viewport().close_requested()) && self.window_open_list.root.is_none() {
-            ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::CancelClose);
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        if ui.input(|input| input.viewport().close_requested()) && self.window_open_list.root.is_none() {
+            ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::CancelClose);
             self.window_open_list.root = Some(RootSave::default());
         }
 
-        if let Some(display) = self.window_open_list.root.as_mut().and_then(|root_save| root_save.display(ctx)) {
+        if let Some(display) = self.window_open_list.root.as_mut().and_then(|root_save| root_save.display(ui)) {
             match display {
                 RootSaveType::Cancel => {
                     self.window_open_list.root = None;
@@ -389,23 +383,23 @@ impl eframe::App for GraphicalUserInterface {
                         *error_message = "failed save".to_string();
                     } else {
                         *error_message = "saved".to_string();
-                        ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+                        ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
                     }
                 }
                 RootSaveType::DontSave => {
                     mark_as_graceful_exited_to_file().unwrap();
-                    ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+                    ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
                 }
             }
         }
 
         if !self.login {
-            self.login(ctx);
+            self.login(ui);
             return;
         }
-        ctx.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize([800.0, 600.0].into()));
-        self.user_main_view(ctx);
+        ui.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
+        ui.send_viewport_cmd(ViewportCommand::InnerSize([800.0, 600.0].into()));
+        self.user_main_view(ui);
     }
 }
 
