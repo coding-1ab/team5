@@ -392,7 +392,7 @@ impl eframe::App for GraphicalUserInterface {
                         ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
                     }
                 }
-                RootSaveType::NotingSave => {
+                RootSaveType::DontSave => {
                     mark_as_graceful_exited_to_file().unwrap();
                     ctx.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
                 }

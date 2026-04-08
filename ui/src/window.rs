@@ -22,7 +22,7 @@ use crate::{
 pub enum RootSaveType {
     Cancel,
     SaveOnExit,
-    NotingSave
+    DontSave
 }
 
 #[derive(Default)]
@@ -266,8 +266,8 @@ impl RootSave {
                         if ui.button("save on exit").clicked() {
                             root_save_type = Some(RootSaveType::SaveOnExit);
                         }
-                        if ui.button("noting save").clicked() {
-                            root_save_type = Some(RootSaveType::NotingSave);
+                        if ui.button("don't save").clicked() {
+                            root_save_type = Some(RootSaveType::DontSave);
                         }
                     });
                     ui.label(&self.error_message);
