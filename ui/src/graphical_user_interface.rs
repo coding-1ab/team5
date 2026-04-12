@@ -341,6 +341,22 @@ impl GraphicalUserInterface {
                                                     self.window_open_list.remove_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().remove(&user_identifier);
                                                 }
                                             }
+                                            let copy_password_button = ui.button("copy password");
+                                            if copy_password_button.clicked() {
+                                                let user_password = {
+                                                    let Some((wrapped_session_key, session_key_nonce)) = &self.key else {
+                                                        return;
+                                                    };
+                                                    match get_user_pw(&self.data_base, site_name, &user_identifier, wrapped_session_key, session_key_nonce) {
+                                                        Ok(password) => password,
+                                                        Err(error) => {
+                                                            ui.label(format!("error: {}", error));
+                                                            return;
+                                                        }
+                                                    }
+                                                };
+                                                context.copy_text(user_password.as_str().to_string());
+                                            }
                                             let view_password_button = ui.button("view password");
                                             if view_password_button.is_pointer_button_down_on() {
                                                 let mut user_password = {
