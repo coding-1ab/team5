@@ -1,8 +1,3 @@
-[package]
-name = "team5"
-version = "0.1.0"
-edition = "2024"
-
 [profile.dev]
 opt-level = 0
 debug = true
@@ -15,14 +10,12 @@ debug = false
 
 [workspace]
 members = ["engine", "cli", "ui"]
-
-[dependencies]
-cli = {path = "./cli"}
-single-instance = "*"
-libsodium-sys-stable = { path = "engine/fork/libsodium-sys-stable-1.23.2-fork" }
+resolver = "3"
 
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
 arboard = "*"
+cli = {path = "./cli"}
 single-instance = "*"
+libsodium-sys-stable = { path = "engine/fork/libsodium-sys-stable-1.23.2-fork" }
 
