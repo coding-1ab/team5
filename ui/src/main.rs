@@ -1,10 +1,11 @@
 #![deny(unused_mut)]
+#![deny(unused_crate_dependencies)]
+#![deny(deprecated)]
 #![deny(clippy::cognitive_complexity)]
 #![deny(clippy::complexity)]
 #![deny(clippy::too_many_lines)]
+#![warn(unused)]
 
-use std::thread;
-use std::time::Duration;
 use eframe::{
     CreationContext,
     egui,

@@ -1,5 +1,6 @@
 use anyhow::Error;
 use eframe::{egui, egui::TextEdit};
+use eframe::egui::Ui;
 use engine::data_base::DB;
 use zeroize::Zeroize;
 use crate::graphical_user_interface::KeyPair;
@@ -125,16 +126,16 @@ pub struct CommandBuilderWithError<'a, Output> {
 }
 
 impl<'a, Output> CommandBuilderWithError<'a, Output> {
-    pub fn show(mut self, context: &egui::Context) -> bool {
-        context.show_viewport_immediate(
+    pub fn show(mut self, ui: &mut Ui) -> bool {
+        ui.show_viewport_immediate(
             egui::ViewportId::from_hash_of(self.inner.title),
             egui::ViewportBuilder::default().with_title(self.inner.title),
-            move |ctx, _| {
-                if ctx.input(|i| i.viewport().close_requested()) { 
+            |ui, _| {
+                if ui.input(|i| i.viewport().close_requested()) {
                     return false;
                 }
 
-                let inner_response = egui::CentralPanel::default().show(ctx, |ui| {
+                let inner_response = egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.label(self.inner.screen_name);
 
                     for field in &mut self.inner.inputs {
@@ -154,7 +155,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
                     ui.label(&*self.error_message);
 
                     if ui.button("submit").clicked()
-                        || ctx.input(|input| input.key_pressed(egui::Key::Enter))
+                        || ui.input(|input| input.key_pressed(egui::Key::Enter))
                     {
                         return Self::handle_accept(&mut self.inner, self.error_message);
                     }

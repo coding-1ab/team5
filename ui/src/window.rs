@@ -4,6 +4,7 @@ use eframe::{
     egui,
     egui::{Context, ViewportBuilder, ViewportCommand, ViewportId}
 };
+use eframe::egui::Ui;
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
@@ -35,7 +36,7 @@ pub struct ExistingUser {
 impl ExistingUser {
     pub fn display(
         &mut self,
-        context: &Context,
+        ui: &mut Ui,
         encrypted_data_base: &EncryptedDB,
         root_window: &mut Option<RootSave>,
         master_password_salt: &Salt,
@@ -47,16 +48,16 @@ impl ExistingUser {
     ) -> bool {
         let mut keep = true;
 
-        context.show_viewport_immediate(
+        ui.show_viewport_immediate(
             ViewportId::from_hash_of("master_login"),
             ViewportBuilder::default()
                 .with_title("마스터 로그인")
                 .with_inner_size([300.0, 175.0]),
-            |ctx, _| {
-                if ctx.input(|i| i.viewport().close_requested()) {
-                    exit_root(context, root_window);
+            |ui, _| {
+                if ui.input(|i| i.viewport().close_requested()) {
+                    exit_root(ui, root_window);
                 }
-                egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.label("input master password");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.password)
@@ -64,7 +65,7 @@ impl ExistingUser {
                     );
                     ui.label(&self.error_message);
                     if ui.button("login").clicked() {
-                        loading(context);
+                        loading(ui);
                         if let Err(error) =
                             master_pw_validation(&self.password)
                         {
@@ -96,7 +97,7 @@ impl ExistingUser {
                         self.reset = Some(Reset::default());
                     }
                     if let Some(reset) = &mut self.reset {
-                        if !reset.display(context) {
+                        if !reset.display(ui) {
                             self.reset = None;
                         }
                     }
@@ -119,7 +120,7 @@ pub struct FirstLogin {
 impl FirstLogin {
     pub fn display(
         &mut self,
-        context: &Context,
+        ui: &mut Ui,
         data_base_header: &mut DBHeader,
         key: &mut Option<KeyPair>,
         data_base: &mut DB,
@@ -130,17 +131,17 @@ impl FirstLogin {
     ) -> bool {
         let mut keep = true;
 
-        context.show_viewport_immediate(
+        ui.show_viewport_immediate(
             ViewportId::from_hash_of("first_master_login"),
             ViewportBuilder::default()
                 .with_title("첫 마스터 로그인")
                 .with_inner_size([300.0, 175.0]),
-            |ctx, _| {
-                if ctx.input(|input_state| input_state.viewport().close_requested()) {
-                    exit_root(context, root_window);
+            |ui, _| {
+                if ui.input(|input_state| input_state.viewport().close_requested()) {
+                    exit_root(ui, root_window);
                     return;
                 }
-                egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.label("input new master password");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.password)
@@ -155,7 +156,7 @@ impl FirstLogin {
                     );
                     ui.label(&self.error_message);
                     if ui.button("Accept").clicked() {
-                        loading(context);
+                        loading(ui);
                         if let Err(err) =
                             master_pw_validation(&self.password)
                         {
@@ -210,14 +211,14 @@ struct Reset {
 }
 
 impl Reset {
-    pub fn display(&mut self, context: &Context) -> bool {
+    pub fn display(&mut self, ui: &mut Ui) -> bool {
         let mut keep = true;
 
-        context.show_viewport_immediate(
+        ui.show_viewport_immediate(
             ViewportId::from_hash_of("reset"),
             ViewportBuilder::default().with_title("reset"),
             |ctx, _| {
-                egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show_inside(ctx, |ui| {
                     ui.label("리셋하겠습니까? 복구할 수 없습니다.");
                     ui.horizontal(|ui| {
                         if ui.button("submit").clicked() {
@@ -249,16 +250,16 @@ pub struct RootSave {
 }
 
 impl RootSave {
-    pub fn display(&mut self, context: &Context) -> Option<RootSaveType> {
+    pub fn display(&mut self, ui: &mut Ui) -> Option<RootSaveType> {
         let mut root_save_type = None;
 
-        context.show_viewport_immediate(
+        ui.show_viewport_immediate(
             ViewportId::from_hash_of("close"),
             ViewportBuilder::default()
                 .with_title("close")
                 .with_inner_size([250.0, 50.0]),
             |ctx, _| {
-                egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show_inside(ctx, |ui| {
                     ui.horizontal(|ui| {
                         if ui.button("cancel").clicked() {
                             root_save_type = Some(RootSaveType::Cancel);
@@ -288,7 +289,7 @@ pub struct AddUserPassword {
 }
 
 impl AddUserPassword {
-    pub fn display(&mut self, context: &Context, key: &KeyPair, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB) -> bool {
         CommandBuilder::new("add user password", "add user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
@@ -315,7 +316,7 @@ impl AddUserPassword {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -328,7 +329,7 @@ pub struct ChangeUserPassword {
 }
 
 impl ChangeUserPassword {
-    pub fn display(&mut self, context: &Context, key: &KeyPair, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB) -> bool {
         CommandBuilder::new("change user password", "change user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
@@ -355,7 +356,7 @@ impl ChangeUserPassword {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -367,7 +368,7 @@ pub struct RemoveUserPassword {
 }
 
 impl RemoveUserPassword {
-    pub fn display(&mut self, context: &Context, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, data_base: &mut DB) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
@@ -385,7 +386,7 @@ impl RemoveUserPassword {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -397,7 +398,7 @@ pub struct AddUserPasswordWithSiteName {
 }
 
 impl AddUserPasswordWithSiteName {
-    pub fn display(&mut self, context: &Context, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
         CommandBuilder::new("add user password with", "add user password with")
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
@@ -422,7 +423,7 @@ impl AddUserPasswordWithSiteName {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -434,7 +435,7 @@ pub struct ChangeUserPasswordWithSiteName {
 }
 
 impl ChangeUserPasswordWithSiteName {
-    pub fn display(&mut self, context: &Context, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
         CommandBuilder::new("change user password", "change user password")
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
@@ -459,7 +460,7 @@ impl ChangeUserPasswordWithSiteName {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -470,7 +471,7 @@ pub struct RemoveUserPasswordWithSiteName {
 }
 
 impl RemoveUserPasswordWithSiteName {
-    pub fn display(&mut self, context: &Context, data_base: &mut DB, site_name: &SiteName) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, data_base: &mut DB, site_name: &SiteName) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .input("user identifier", &mut self.user_identifier)
             .set_database(data_base)
@@ -482,7 +483,7 @@ impl RemoveUserPasswordWithSiteName {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -493,7 +494,7 @@ pub struct ChangeUserPasswordWithSiteNameWithUserIdentifier {
 }
 
 impl ChangeUserPasswordWithSiteNameWithUserIdentifier {
-    pub fn display(&mut self, context: &Context, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
         CommandBuilder::new("change user password", "change user password")
             .sensitive_input("password", &mut self.password)
             .set_database(data_base)
@@ -516,7 +517,7 @@ impl ChangeUserPasswordWithSiteNameWithUserIdentifier {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -526,7 +527,7 @@ pub struct RemoveUserPasswordWithSiteNameWithUserIdentifier {
 }
 
 impl RemoveUserPasswordWithSiteNameWithUserIdentifier {
-    pub fn display(&mut self, context: &Context, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
+    pub fn display(&mut self, ui: &mut Ui, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .set_database(data_base)
             .execute(|_, data_base, _, _| {
@@ -536,7 +537,7 @@ impl RemoveUserPasswordWithSiteNameWithUserIdentifier {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
@@ -549,7 +550,7 @@ pub struct ChangeMasterPassword {
 impl ChangeMasterPassword {
     pub fn display(
         &mut self,
-        context: &Context,
+        ui: &mut Ui,
         data_base: &mut DB,
         key: &mut KeyPair,
         data_base_header: &mut DBHeader,
@@ -567,7 +568,7 @@ impl ChangeMasterPassword {
                 let Some((wrapped_session_key, session_key_nonce)) = key_mut else {
                     return Err(anyhow!("unreachable"));
                 };
-                loading(context);
+                loading(ui);
                 let (public_key, salt) = change_master_pw(
                     data_base,
                     &mut inputs[0].value,
@@ -587,14 +588,14 @@ impl ChangeMasterPassword {
             })
             .on_success(|_| {})
             .error_message(&mut self.error_message)
-            .show(context)
+            .show(ui)
     }
 }
 
 
-pub fn exit_root(context: &Context, root_window: &mut Option<RootSave>) {
+pub fn exit_root(ui: &mut Ui, root_window: &mut Option<RootSave>) {
     if check_can_directly_exit() {
-        context.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close)
+        ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close)
     }
     *root_window = Some(RootSave::default());
 }

@@ -103,7 +103,7 @@ pub struct GraphicalUserInterface {
 }
 
 impl GraphicalUserInterface {
-    fn login(&mut self, ctx: &Context) {
+    fn login(&mut self, ui: &mut Ui) {
         match load_db() {
             Ok((user_warning, data_base_header, encrypted_data_base)) => {
                 self.data_base_header = data_base_header;
@@ -117,7 +117,7 @@ impl GraphicalUserInterface {
                         }
                         if let Some(existing_user) = &mut self.window_open_list.existing_user {
                             if !existing_user.display(
-                                ctx,
+                                ui,
                                 &encrypted_data_base,
                                 &mut self.window_open_list.root,
                                 &self.data_base_header.master_pw_salt,
@@ -138,7 +138,7 @@ impl GraphicalUserInterface {
                         }
                         if let Some(first_login) = &mut self.window_open_list.first_login {
                             if !first_login.display(
-                                ctx,
+                                ui,
                                 &mut self.data_base_header,
                                 &mut self.key,
                                 &mut self.data_base,
@@ -155,7 +155,7 @@ impl GraphicalUserInterface {
                 }
             }
             Err(error) => {
-                ctx.show_viewport_immediate(
+                ui.show_viewport_immediate(
                     ViewportId::from_hash_of("master_login_err"),
                     ViewportBuilder::default()
                         .with_title("error")
@@ -349,7 +349,7 @@ impl GraphicalUserInterface {
                                                         }
                                                     }
                                                 };
-                                                context.copy_text(user_password.as_str().to_string());
+                                                ui.copy_text(user_password.as_str().to_string());
                                             }
                                             let view_password_button = ui.button("view password");
                                             if view_password_button.is_pointer_button_down_on() {
@@ -421,12 +421,12 @@ impl eframe::App for GraphicalUserInterface {
 
 
 
-pub(crate) fn loading(context: &Context) {
-    context.show_viewport_immediate(
+pub(crate) fn loading(ui: &mut Ui) {
+    ui.show_viewport_immediate(
         ViewportId::from_hash_of("loading"),
         ViewportBuilder::default().with_title("loading"),
         |ctx, _| {
-            egui::CentralPanel::default().show(ctx, |ui| {
+            egui::CentralPanel::default().show_inside(ctx, |ui| {
                 ui.label("Loading...");
             });
         },

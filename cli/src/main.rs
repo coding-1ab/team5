@@ -10,7 +10,6 @@ use std::process::exit;
 use std::string::String;
 use zeroize::*;
 
-use single_instance::SingleInstance;
 use libsodium_sys::rust_wrappings::init::sodium_init;
 
 fn main() {
