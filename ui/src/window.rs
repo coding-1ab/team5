@@ -36,7 +36,7 @@ pub struct ExistingUser {
 impl ExistingUser {
     pub fn display(
         &mut self,
-        ui: &mut Ui,
+        ui: &Ui,
         encrypted_data_base: &EncryptedDB,
         root_window: &mut Option<RootSave>,
         master_password_salt: &Salt,
@@ -120,7 +120,7 @@ pub struct FirstLogin {
 impl FirstLogin {
     pub fn display(
         &mut self,
-        ui: &mut Ui,
+        ui: &Ui,
         data_base_header: &mut DBHeader,
         key: &mut Option<KeyPair>,
         data_base: &mut DB,
@@ -211,7 +211,7 @@ struct Reset {
 }
 
 impl Reset {
-    pub fn display(&mut self, ui: &mut Ui) -> bool {
+    pub fn display(&mut self, ui: &Ui) -> bool {
         let mut keep = true;
 
         ui.show_viewport_immediate(
@@ -250,7 +250,7 @@ pub struct RootSave {
 }
 
 impl RootSave {
-    pub fn display(&mut self, ui: &mut Ui) -> Option<RootSaveType> {
+    pub fn display(&mut self, ui: &Ui) -> Option<RootSaveType> {
         let mut root_save_type = None;
 
         ui.show_viewport_immediate(
@@ -289,7 +289,7 @@ pub struct AddUserPassword {
 }
 
 impl AddUserPassword {
-    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB) -> bool {
         CommandBuilder::new("add user password", "add user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
@@ -329,7 +329,7 @@ pub struct ChangeUserPassword {
 }
 
 impl ChangeUserPassword {
-    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB) -> bool {
         CommandBuilder::new("change user password", "change user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
@@ -368,7 +368,7 @@ pub struct RemoveUserPassword {
 }
 
 impl RemoveUserPassword {
-    pub fn display(&mut self, ui: &mut Ui, data_base: &mut DB) -> bool {
+    pub fn display(&mut self, ui: &Ui, data_base: &mut DB) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
@@ -398,7 +398,7 @@ pub struct AddUserPasswordWithSiteName {
 }
 
 impl AddUserPasswordWithSiteName {
-    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
         CommandBuilder::new("add user password with", "add user password with")
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
@@ -435,7 +435,7 @@ pub struct ChangeUserPasswordWithSiteName {
 }
 
 impl ChangeUserPasswordWithSiteName {
-    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName) -> bool {
         CommandBuilder::new("change user password", "change user password")
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
@@ -471,7 +471,7 @@ pub struct RemoveUserPasswordWithSiteName {
 }
 
 impl RemoveUserPasswordWithSiteName {
-    pub fn display(&mut self, ui: &mut Ui, data_base: &mut DB, site_name: &SiteName) -> bool {
+    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, site_name: &SiteName) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .input("user identifier", &mut self.user_identifier)
             .set_database(data_base)
@@ -494,7 +494,7 @@ pub struct ChangeUserPasswordWithSiteNameWithUserIdentifier {
 }
 
 impl ChangeUserPasswordWithSiteNameWithUserIdentifier {
-    pub fn display(&mut self, ui: &mut Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
         CommandBuilder::new("change user password", "change user password")
             .sensitive_input("password", &mut self.password)
             .set_database(data_base)
@@ -527,7 +527,7 @@ pub struct RemoveUserPasswordWithSiteNameWithUserIdentifier {
 }
 
 impl RemoveUserPasswordWithSiteNameWithUserIdentifier {
-    pub fn display(&mut self, ui: &mut Ui, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
+    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID) -> bool {
         CommandBuilder::new("remove user password", "remove user password")
             .set_database(data_base)
             .execute(|_, data_base, _, _| {
@@ -550,7 +550,7 @@ pub struct ChangeMasterPassword {
 impl ChangeMasterPassword {
     pub fn display(
         &mut self,
-        ui: &mut Ui,
+        ui: &Ui,
         data_base: &mut DB,
         key: &mut KeyPair,
         data_base_header: &mut DBHeader,
@@ -592,8 +592,7 @@ impl ChangeMasterPassword {
     }
 }
 
-
-pub fn exit_root(ui: &mut Ui, root_window: &mut Option<RootSave>) {
+pub fn exit_root(ui: &Ui, root_window: &mut Option<RootSave>) {
     if check_can_directly_exit() {
         ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close)
     }

@@ -126,7 +126,7 @@ pub struct CommandBuilderWithError<'a, Output> {
 }
 
 impl<'a, Output> CommandBuilderWithError<'a, Output> {
-    pub fn show(mut self, ui: &mut Ui) -> bool {
+    pub fn show(mut self, ui: &Ui) -> bool {
         ui.show_viewport_immediate(
             egui::ViewportId::from_hash_of(self.inner.title),
             egui::ViewportBuilder::default().with_title(self.inner.title),

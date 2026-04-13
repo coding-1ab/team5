@@ -103,7 +103,7 @@ pub struct GraphicalUserInterface {
 }
 
 impl GraphicalUserInterface {
-    fn login(&mut self, ui: &mut Ui) {
+    fn login(&mut self, ui: &Ui) {
         match load_db() {
             Ok((user_warning, data_base_header, encrypted_data_base)) => {
                 self.data_base_header = data_base_header;
@@ -266,7 +266,7 @@ impl GraphicalUserInterface {
         });
     }
 
-    fn user_passwords_windows(&mut self, ui: &mut Ui) {
+    fn user_passwords_windows(&mut self, ui: &Ui) {
         let user_state = &mut self.window_open_list.user_state;
         let UserState {
             user_data,
@@ -421,7 +421,7 @@ impl eframe::App for GraphicalUserInterface {
 
 
 
-pub(crate) fn loading(ui: &mut Ui) {
+pub(crate) fn loading(ui: &Ui) {
     ui.show_viewport_immediate(
         ViewportId::from_hash_of("loading"),
         ViewportBuilder::default().with_title("loading"),
