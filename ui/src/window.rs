@@ -4,7 +4,7 @@ use eframe::{
     egui,
     egui::{Context, ViewportBuilder, ViewportCommand, ViewportId}
 };
-use eframe::egui::Ui;
+use eframe::egui::{Key, Ui};
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
@@ -64,7 +64,7 @@ impl ExistingUser {
                             .password(true),
                     );
                     ui.label(&self.error_message);
-                    if ui.button("login").clicked() {
+                    if ui.button("login").clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
                         loading(ui);
                         if let Err(error) =
                             master_pw_validation(&self.password)
@@ -155,7 +155,7 @@ impl FirstLogin {
                             .password(true),
                     );
                     ui.label(&self.error_message);
-                    if ui.button("Accept").clicked() {
+                    if ui.button("Accept").clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
                         loading(ui);
                         if let Err(err) =
                             master_pw_validation(&self.password)
@@ -217,8 +217,8 @@ impl Reset {
         ui.show_viewport_immediate(
             ViewportId::from_hash_of("reset"),
             ViewportBuilder::default().with_title("reset"),
-            |ctx, _| {
-                egui::CentralPanel::default().show_inside(ctx, |ui| {
+            |ui, _| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.label("리셋하겠습니까? 복구할 수 없습니다.");
                     ui.horizontal(|ui| {
                         if ui.button("submit").clicked() {
@@ -258,8 +258,8 @@ impl RootSave {
             ViewportBuilder::default()
                 .with_title("close")
                 .with_inner_size([250.0, 50.0]),
-            |ctx, _| {
-                egui::CentralPanel::default().show_inside(ctx, |ui| {
+            |ui, _| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
                         if ui.button("cancel").clicked() {
                             root_save_type = Some(RootSaveType::Cancel);

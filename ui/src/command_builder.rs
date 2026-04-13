@@ -154,9 +154,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
                     ui.label(&*self.error_message);
 
-                    if ui.button("submit").clicked()
-                        || ui.input(|input| input.key_pressed(egui::Key::Enter))
-                    {
+                    if ui.button("submit").clicked() || ui.input(|input| input.key_pressed(egui::Key::Enter)) {
                         return Self::handle_accept(&mut self.inner, self.error_message);
                     }
                     true
