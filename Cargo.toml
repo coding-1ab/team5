@@ -19,3 +19,5 @@ cli = {path = "./cli"}
 single-instance = "*"
 libsodium-sys-stable = { path = "engine/fork/libsodium-sys-stable-1.23.2-fork" }
 
+[patch.crates-io]
+windows = { git = "https://github.com/microsoft/windows-rs.git", version = "0.62.2" }
