@@ -70,7 +70,7 @@ fn main() {
                 db_header.master_pw_salt,
                 wrapped_user_key,
                 user_key_nonce,
-            ) = first_login(master_pw_confirm);
+            ) = first_login(&mut master_pw_confirm);
 
             break;
         }
@@ -262,7 +262,7 @@ fn main() {
 
                     (pub_key, db_header.master_pw_salt) = match change_master_pw(
                         &mut db,
-                        master_pw_confirm,
+                        &mut master_pw_confirm,
                         &mut wrapped_user_key,
                         &mut user_key_nonce,
                     ) {
