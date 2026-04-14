@@ -10,7 +10,7 @@ use std::process::exit;
 use std::string::String;
 use zeroize::*;
 
-use libsodium_sys::rust_wrappings::init::sodium_init;
+use engine::init::sodium_init;
 
 fn main() {
     sodium_init().unwrap();
