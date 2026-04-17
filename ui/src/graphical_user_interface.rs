@@ -407,6 +407,7 @@ impl eframe::App for GraphicalUserInterface {
                     ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
                 }
             }
+            return;
         }
 
         if !self.login {

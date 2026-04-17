@@ -251,6 +251,10 @@ pub struct RootSave {
 
 impl RootSave {
     pub fn display(&mut self, ui: &Ui) -> Option<RootSaveType> {
+        if ui.input(|input_state| input_state.viewport().close_requested()) {
+            return Some(RootSaveType::Cancel)
+        }
+
         let mut root_save_type = None;
 
         ui.show_viewport_immediate(
