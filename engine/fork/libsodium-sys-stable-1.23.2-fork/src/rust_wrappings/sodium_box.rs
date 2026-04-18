@@ -57,21 +57,16 @@ impl<T> SodiumBox<T> {
         SodiumBox::<U> { ptr, len } // todo!
     }
 }
-impl<T> Into<SecretBox<[T]>> for SodiumBox<T>
-where
-    [T]: Zeroize,
+impl<T> Into<SecretBox<[T]>> for SodiumBox<T> where [T]: Zeroize
 {
     fn into(self) -> SecretBox<[T]> {
         let mut boxed = Box::new_uninit_slice(self.len());
         self.copy_to(boxed.as_mut_ptr() as *mut T);
         let boxed_slice: Box<[T]> = unsafe { boxed.assume_init() };
-        let _ = mem::ManuallyDrop::new(self);
         SecretBox::new(boxed_slice)
     }
 }
-impl<T> Into<Vec<T>> for SodiumBox<T>
-where
-    [T]: Zeroize,
+impl<T> Into<Vec<T>> for SodiumBox<T> where [T]: Zeroize,
 {
     fn into(self) -> Vec<T> {
         let mut v = Vec::with_capacity(self.len);
