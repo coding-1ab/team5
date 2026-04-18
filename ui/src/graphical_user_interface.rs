@@ -13,7 +13,7 @@ use engine::{
     sodium::rust_wrappings::x25519::PubKey,
     user_secrets::{SessionKeyNonce, WrappedSessionKey},
 };
-use engine::file_io::FileIOWarn;
+use engine::file_io::{check_can_directly_exit, FileIOWarn};
 use engine::master_secrets::EncryptedDB;
 use crate::window::{
     exit_root,
@@ -387,6 +387,12 @@ impl eframe::App for GraphicalUserInterface {
             self.window_open_list.root = Some(RootSave::default());
         }
 
+        if self.window_open_list.root.is_some() && check_can_directly_exit() {
+            self.window_open_list.root = None;
+            ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+            return;
+        }
+
         if let Some(root_save) = self.window_open_list.root.as_mut() {
             match root_save.display(ui) {
                 Some(display) => {
@@ -402,11 +408,13 @@ impl eframe::App for GraphicalUserInterface {
                             } else {
                                 *error_message = "saved".to_string();
                                 ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+                                return;
                             }
                         }
                         RootSaveType::DontSave => {
                             mark_as_graceful_exited_to_file().unwrap();
                             ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+                            return;
                         }
                     }
                 }
