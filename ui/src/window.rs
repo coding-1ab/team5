@@ -4,7 +4,7 @@ use eframe::{
     egui,
     egui::{Context, ViewportBuilder, ViewportCommand, ViewportId}
 };
-use eframe::egui::{Key, TextEdit, Ui};
+use eframe::egui::{Key, Pos2, TextEdit, Ui, Vec2};
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
@@ -46,14 +46,25 @@ impl ExistingUser {
         key: &mut Option<KeyPair>,
         login: &mut bool,
         warning_message: &String,
+        #[cfg(target_os = "windows")]
+        center: [usize; 2]
     ) -> bool {
         let mut keep = true;
 
+        let size = [300.0, 175.0];
+
+        let mut viewport_builder = ViewportBuilder::default().with_title("마스터 로그인")
+            .with_inner_size(size);
+
+        #[cfg(target_os = "windows")]
+        {
+            let center = [center[0] as f32 - size[0], center[1] as f32 - size[1]];
+            viewport_builder = viewport_builder.with_position(center);
+        }
+
         ui.show_viewport_immediate(
             ViewportId::from_hash_of("master_login"),
-            ViewportBuilder::default()
-                .with_title("마스터 로그인")
-                .with_inner_size([300.0, 175.0]),
+            viewport_builder,
             |ui, _| {
                 if ui.input(|i| i.viewport().close_requested()) {
                     exit_root(ui, root_window);
@@ -142,14 +153,25 @@ impl FirstLogin {
         login: &mut bool,
         root_window: &mut Option<RootSave>,
         warning_message: &String,
+        #[cfg(target_os = "windows")]
+        center: [usize; 2]
     ) -> bool {
         let mut keep = true;
 
+        let size = [300.0, 175.0];
+
+        let mut viewport_builder = ViewportBuilder::default().with_title("첫 마스터 로그인")
+            .with_inner_size(size);
+
+        #[cfg(target_os = "windows")]
+        {
+            let center = [center[0] as f32 - size[0], center[1] as f32 - size[1]];
+            viewport_builder = viewport_builder.with_position(center);
+        }
+
         ui.show_viewport_immediate(
             ViewportId::from_hash_of("first_master_login"),
-            ViewportBuilder::default()
-                .with_title("첫 마스터 로그인")
-                .with_inner_size([300.0, 175.0]),
+            viewport_builder,
             |ui, _| {
                 if ui.input(|input_state| input_state.viewport().close_requested()) {
                     exit_root(ui, root_window);
@@ -271,14 +293,23 @@ pub struct RootSave {
 }
 
 impl RootSave {
-    pub fn display(&mut self, ui: &Ui) -> Option<RootSaveType> {
+    pub fn display(&mut self, ui: &Ui, #[cfg(target_os = "windows")] center: [usize; 2]) -> Option<RootSaveType> {
         let mut root_save_type = None;
+
+        let size = [250.0, 50.0];
+
+        let mut viewport_builder = ViewportBuilder::default().with_title("close")
+            .with_inner_size(size);
+
+        #[cfg(target_os = "windows")]
+        {
+            let center = [center[0] as f32 - size[0], center[1] as f32 - size[1]];
+            viewport_builder = viewport_builder.with_position(center);
+        }
 
         ui.show_viewport_immediate(
             ViewportId::from_hash_of("close"),
-            ViewportBuilder::default()
-                .with_title("close")
-                .with_inner_size([250.0, 50.0]),
+            viewport_builder,
             |ui, _| {
                 if ui.input(|input_state| input_state.viewport().close_requested()) {
                     root_save_type = Some(RootSaveType::Cancel);
@@ -678,4 +709,14 @@ pub fn exit_root(ui: &Ui, root_window: &mut Option<RootSave>) {
         return;
     }
     *root_window = Some(RootSave::default());
+}
+
+pub fn get_center<Size: Into<Vec2>, Pos: Into<Pos2>>(size: Size, center: Pos) -> Pos2 {
+    let size = size.into();
+    let center = center.into();
+
+    egui::pos2(
+        center.x - size.x * 0.5,
+        center.y - size.y * 0.5,
+    )
 }

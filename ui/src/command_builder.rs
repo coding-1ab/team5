@@ -1,6 +1,6 @@
 use anyhow::Error;
 use eframe::{egui, egui::TextEdit};
-use eframe::egui::Ui;
+use eframe::egui::{Ui, Vec2, ViewportBuilder};
 use engine::data_base::DB;
 use zeroize::Zeroize;
 use crate::graphical_user_interface::KeyPair;
@@ -34,10 +34,13 @@ pub struct CommandBuilder<'a, Output> {
                 + 'a,
         >,
     >,
+    size: Vec2,
+    #[cfg(target_os = "windows")]
+    center: [usize; 2],
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new(title: &'static str, screen_name: &'static str) -> Self {
+    pub fn new<Size: Into<Vec2>>(title: &'static str, screen_name: &'static str, size: Option<Size>, #[cfg(target_os = "windows")] center: [usize; 2]) -> Self {
         // command_fn은 이제 new()에서 안 받음
         Self {
             title,
@@ -48,6 +51,9 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             key_mut: None,
             on_success: Box::new(|_| {}),
             execute: None,
+            size: size.unwrap_or([800.0, 600.0]),
+            #[cfg(target_os = "windows")]
+            center
         }
     }
 
@@ -117,6 +123,12 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             error_message,
         }
     }
+
+    #[cfg(target_os = "windows")]
+    pub fn center(mut self, center_position: [usize; 2]) -> Self {
+        self.center = center_position;
+        self
+    }
 }
 
 // 중간 Builder (error_message가 설정된 상태)
@@ -127,6 +139,17 @@ pub struct CommandBuilderWithError<'a, Output> {
 
 impl<'a, Output> CommandBuilderWithError<'a, Output> {
     pub fn show(mut self, ui: &Ui) -> bool {
+        let size = [300.0, 175.0];
+
+        let mut viewport_builder = ViewportBuilder::default().with_title(self.inner.title).with_inner_size(self.inner.size)
+            .with_inner_size(size);
+
+        #[cfg(target_os = "windows")]
+        {
+            let center = [self.inner.center[0] as f32 - self.inner.size[0], self.inner.center[1] as f32 - self.inner.size[1]];
+            viewport_builder = viewport_builder.with_position(center);
+        }
+
         ui.show_viewport_immediate(
             egui::ViewportId::from_hash_of(self.inner.title),
             egui::ViewportBuilder::default().with_title(self.inner.title),

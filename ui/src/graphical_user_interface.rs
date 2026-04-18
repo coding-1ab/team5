@@ -3,7 +3,8 @@ use std::{
     error::Error,
     fmt::Display,
 };
-use eframe::egui::{self, Ui, ViewportBuilder, ViewportCommand, ViewportId};
+use eframe::egui::{self, Pos2, Ui, ViewportBuilder, ViewportCommand, ViewportId};
+use eframe::wgpu::rwh::HasDisplayHandle;
 use zeroize::Zeroize;
 use engine::{
     data_base::{DB, SiteName, UserID, get_user_pw, prefix_range},
@@ -93,6 +94,7 @@ struct StringValues {
 #[derive(Default)]
 pub struct GraphicalUserInterface {
     login: bool,
+    pub center_pos: Pos2,
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
