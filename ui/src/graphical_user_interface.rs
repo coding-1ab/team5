@@ -388,7 +388,6 @@ impl eframe::App for GraphicalUserInterface {
         }
 
         if self.window_open_list.root.is_some() && check_can_directly_exit() {
-            self.window_open_list.root = None;
             ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
             return;
         }
