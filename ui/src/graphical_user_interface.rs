@@ -94,7 +94,6 @@ struct StringValues {
 #[derive(Default)]
 pub struct GraphicalUserInterface {
     login: bool,
-    pub center_pos: Pos2,
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
@@ -102,7 +101,7 @@ pub struct GraphicalUserInterface {
     key: Option<KeyPair>,
     public_key: Option<PubKey>,
     #[cfg(feature = "windows")]
-    center: [i32; 2]
+    pub center: [i32; 2]
 }
 
 impl GraphicalUserInterface {
