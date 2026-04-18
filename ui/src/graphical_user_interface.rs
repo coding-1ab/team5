@@ -3,7 +3,7 @@ use std::{
     error::Error,
     fmt::Display,
 };
-use eframe::egui::{self, Context, Ui, ViewportBuilder, ViewportCommand, ViewportId};
+use eframe::egui::{self, Ui, ViewportBuilder, ViewportCommand, ViewportId};
 use zeroize::Zeroize;
 use engine::{
     data_base::{DB, SiteName, UserID, get_user_pw, prefix_range},
@@ -13,8 +13,7 @@ use engine::{
     sodium::rust_wrappings::x25519::PubKey,
     user_secrets::{SessionKeyNonce, WrappedSessionKey},
 };
-use engine::file_io::{check_can_directly_exit, FileIOWarn};
-use engine::master_secrets::EncryptedDB;
+use engine::file_io::check_can_directly_exit;
 use crate::window::{
     exit_root,
     AddUserPassword,
@@ -382,7 +381,7 @@ impl GraphicalUserInterface {
 
 impl eframe::App for GraphicalUserInterface {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
-        if ui.input(|input| input.viewport().close_requested()) && self.window_open_list.root.is_none() {
+        if ui.input(|input| input.viewport().close_requested()) {
             ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::CancelClose);
             self.window_open_list.root = Some(RootSave::default());
         }
