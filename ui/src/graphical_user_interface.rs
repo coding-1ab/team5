@@ -101,7 +101,8 @@ pub struct GraphicalUserInterface {
     key: Option<KeyPair>,
     public_key: Option<PubKey>,
     #[cfg(target_os = "windows")]
-    pub center: [i32; 2]
+    pub center: [i32; 2],
+    loading: bool
 }
 
 impl GraphicalUserInterface {
@@ -195,8 +196,8 @@ impl GraphicalUserInterface {
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 let save_data_base = ui.button("save data base");
-                if save_data_base.clicked() {
-                    loading(ui);
+                if self.loading {
+                    self.loading = false;
                     match self.save_data_base() {
                         Ok(()) => {
                             self.string_values.save_data_base_label = "saved data base".to_string();
@@ -205,6 +206,11 @@ impl GraphicalUserInterface {
                             self.string_values.save_data_base_label = error.to_string();
                         }
                     }
+                }
+                if save_data_base.clicked() {
+                    ui.label("loading");
+                    self.loading = true;
+                    return;
                 }
                 ui.label(&self.string_values.save_data_base_label);
             });
