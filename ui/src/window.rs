@@ -265,7 +265,7 @@ impl Reset {
     pub fn display(&mut self, ui: &Ui) -> bool {
         let mut keep = true;
 
-        egui::Window::new("reset").resizable([false, false]).interactable(false).show(ui, |ui| {
+        egui::Window::new("reset").resizable([false, false]).interactable(false).title_bar(false).show(ui, |ui| {
             egui::CentralPanel::default().show_inside(ui, |ui| {
                 ui.label("리셋하겠습니까? 복구할 수 없습니다.");
                 ui.horizontal(|ui| {
