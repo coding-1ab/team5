@@ -62,7 +62,7 @@ impl ExistingUser {
         let mut viewport_builder = ViewportBuilder::default().with_title("마스터 로그인")
             .with_inner_size(size);
 
-        #[cfg(feature = "windows")]
+        #[cfg(target_os = "windows")]
         {
             let pixels_per_point = ui.native_pixels_per_point().unwrap_or(ui.pixels_per_point());
             let egui_center = [center[0] as f32 / pixels_per_point - size[0] / 2.0, center[1] as f32 / pixels_per_point - size[1] / 2.0];
