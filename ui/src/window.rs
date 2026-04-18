@@ -64,7 +64,7 @@ impl ExistingUser {
 
         #[cfg(feature = "windows")]
         {
-            let center = [center[0] as f32 - size[0], center[1] as f32 - size[1]];
+            let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
         }
 
@@ -171,7 +171,7 @@ impl FirstLogin {
 
         #[cfg(feature = "windows")]
         {
-            let center = [center[0] as f32 - size[0], center[1] as f32 - size[1]];
+            let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
         }
 
@@ -309,7 +309,7 @@ impl RootSave {
 
         #[cfg(feature = "windows")]
         {
-            let center = [center[0] as f32 - size[0], center[1] as f32 - size[1]];
+            let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
         }
 
