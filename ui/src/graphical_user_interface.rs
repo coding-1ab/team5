@@ -415,7 +415,7 @@ impl eframe::App for GraphicalUserInterface {
                         }
                     }
                 }
-                None => { return }
+                None => { }
             }
         }
 
