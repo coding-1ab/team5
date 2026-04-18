@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     error::Error,
     fmt::Display,
+    time::{Instant, Duration},
 };
 use eframe::egui::{self, Pos2, Ui, ViewportBuilder, ViewportCommand, ViewportId};
 use eframe::wgpu::rwh::{HasDisplayHandle, HasRawWindowHandle, HasWindowHandle};
@@ -94,15 +95,16 @@ struct StringValues {
 #[derive(Default)]
 pub struct GraphicalUserInterface {
     login: bool,
+    loading: bool,
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
     data_base_header: DBHeader,
     key: Option<KeyPair>,
     public_key: Option<PubKey>,
+    time: Option<Instant>,
     #[cfg(target_os = "windows")]
     pub center: [i32; 2],
-    loading: bool
 }
 
 impl GraphicalUserInterface {
@@ -200,6 +202,7 @@ impl GraphicalUserInterface {
                     self.loading = false;
                     match self.save_data_base() {
                         Ok(()) => {
+                            self.time = Some(Instant::now());
                             self.string_values.save_data_base_label = "saved data base".to_string();
                         }
                         Err(error) => {
@@ -436,6 +439,12 @@ impl eframe::App for GraphicalUserInterface {
         if !self.login {
             self.login(ui);
             return;
+        }
+
+        if let Some(time) = self.time {
+            if time.elapsed() > Duration::from_secs(1) {
+                self.string_values.save_data_base_label = "".to_string();
+            }
         }
 
         ui.add_enabled_ui(!self.window_open_list.root.is_some(), |ui| {
