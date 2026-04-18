@@ -40,10 +40,8 @@ fn main() {
         "eframe example",
         options,
         Box::new(|cc| {
-            #[cfg(target_os = "windows")]
+            #[cfg(feature = "windows")]
             let rect = get_monitor_center(get_hwnd(cc.raw_window_handle().unwrap()).unwrap());
-
-            println!("{:?}", rect);
             let graphical_user_interface = GraphicalUserInterface::default();
             cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false));
             //cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
@@ -68,7 +66,7 @@ fn init_fonts(cc: &CreationContext) {
     cc.egui_ctx.add_font(nanum_gothic_font);
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(feature = "windows")]
 use windows::Win32::{
     Foundation::{HWND, RECT},
     UI::WindowsAndMessaging::{GetWindowRect},
@@ -77,6 +75,7 @@ use windows::Win32::{
     },
 };
 
+#[cfg(feature = "windows")]
 fn get_hwnd(raw: RawWindowHandle) -> Option<HWND> {
     match raw {
         RawWindowHandle::Win32(handle) => {
@@ -86,7 +85,7 @@ fn get_hwnd(raw: RawWindowHandle) -> Option<HWND> {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(feature = "windows")]
 fn get_window_rect(hwnd: HWND) -> Option<(i32, i32, i32, i32)> {
     unsafe {
         let mut rect = RECT::default();
@@ -104,7 +103,7 @@ fn get_window_rect(hwnd: HWND) -> Option<(i32, i32, i32, i32)> {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(feature = "windows")]
 fn get_monitor_center(hwnd: HWND) -> Option<(i32, i32)> {
     unsafe {
         let hmonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);

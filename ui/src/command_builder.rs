@@ -35,12 +35,12 @@ pub struct CommandBuilder<'a, Output> {
         >,
     >,
     size: Vec2,
-    #[cfg(target_os = "windows")]
+    #[cfg(feature = "windows")]
     center: [i32; 2],
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new(title: &'static str, screen_name: &'static str, size: Option<Vec2>, #[cfg(target_os = "windows")] center: [i32; 2]) -> Self {
+    pub fn new(title: &'static str, screen_name: &'static str, size: Option<Vec2>, #[cfg(feature = "windows")] center: [i32; 2]) -> Self {
         // command_fn은 이제 new()에서 안 받음
         Self {
             title,
@@ -52,7 +52,7 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             on_success: Box::new(|_| {}),
             execute: None,
             size: size.unwrap_or(Vec2::new(800.0, 600.0)),
-            #[cfg(target_os = "windows")]
+            #[cfg(feature = "windows")]
             center
         }
     }
@@ -138,7 +138,7 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
         let mut viewport_builder = ViewportBuilder::default().with_title(self.inner.title).with_inner_size(self.inner.size)
             .with_inner_size(size);
 
-        #[cfg(target_os = "windows")]
+        #[cfg(feature = "windows")]
         {
             let center = [self.inner.center[0] as f32 - self.inner.size[0], self.inner.center[1] as f32 - self.inner.size[1]];
             viewport_builder = viewport_builder.with_position(center);
