@@ -52,7 +52,7 @@ impl ExistingUser {
         key: &mut Option<KeyPair>,
         login: &mut bool,
         warning_message: &String,
-        #[cfg(feature = "windows")]
+        #[cfg(target_os = "windows")]
         center: [i32; 2]
     ) -> bool {
         let mut keep = true;
@@ -160,7 +160,7 @@ impl FirstLogin {
         login: &mut bool,
         root_window: &mut Option<RootSave>,
         warning_message: &String,
-        #[cfg(feature = "windows")]
+        #[cfg(target_os = "windows")]
         center: [i32; 2]
     ) -> bool {
         let mut keep = true;
@@ -170,7 +170,7 @@ impl FirstLogin {
         let mut viewport_builder = ViewportBuilder::default().with_title("첫 마스터 로그인")
             .with_inner_size(size);
 
-        #[cfg(feature = "windows")]
+        #[cfg(target_os = "windows")]
         {
             let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
@@ -300,7 +300,7 @@ pub struct RootSave {
 }
 
 impl RootSave {
-    pub fn display(&mut self, ui: &Ui, #[cfg(feature = "windows")] center: [i32; 2]) -> Option<RootSaveType> {
+    pub fn display(&mut self, ui: &Ui, #[cfg(target_os = "windows")] center: [i32; 2]) -> Option<RootSaveType> {
         let mut root_save_type = None;
 
         let size = [250.0, 50.0];
@@ -308,7 +308,7 @@ impl RootSave {
         let mut viewport_builder = ViewportBuilder::default().with_title("close")
             .with_inner_size(size);
 
-        #[cfg(feature = "windows")]
+        #[cfg(target_os = "windows")]
         {
             let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
@@ -353,8 +353,8 @@ pub struct AddUserPassword {
 }
 
 impl AddUserPassword {
-    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("add user password", "add user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("add user password", "add user password", None, #[cfg(target_os = "windows")] center)
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
             .sensitive_input("password", &mut self.password)
@@ -393,8 +393,8 @@ pub struct ChangeUserPassword {
 }
 
 impl ChangeUserPassword {
-    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("change user password", "change user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("change user password", "change user password", None, #[cfg(target_os = "windows")] center)
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
             .sensitive_input("password", &mut self.password)
@@ -432,8 +432,8 @@ pub struct RemoveUserPassword {
 }
 
 impl RemoveUserPassword {
-    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("remove user password", "remove user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("remove user password", "remove user password", None, #[cfg(target_os = "windows")] center)
             .input("site name", &mut self.site_name)
             .input("user identifier", &mut self.identifier)
             .set_database(data_base)
@@ -462,8 +462,8 @@ pub struct AddUserPasswordWithSiteName {
 }
 
 impl AddUserPasswordWithSiteName {
-    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("add user password with", "add user password with", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("add user password with", "add user password with", None, #[cfg(target_os = "windows")] center)
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
             .set_database(data_base)
@@ -499,8 +499,8 @@ pub struct ChangeUserPasswordWithSiteName {
 }
 
 impl ChangeUserPasswordWithSiteName {
-    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("change user password", "change user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("change user password", "change user password", None, #[cfg(target_os = "windows")] center)
             .input("user identifier", &mut self.user_identifier)
             .sensitive_input("password", &mut self.password)
             .set_database(data_base)
@@ -535,8 +535,8 @@ pub struct RemoveUserPasswordWithSiteName {
 }
 
 impl RemoveUserPasswordWithSiteName {
-    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, site_name: &SiteName, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("remove user password", "remove user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, site_name: &SiteName, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("remove user password", "remove user password", None, #[cfg(target_os = "windows")] center)
             .input("user identifier", &mut self.user_identifier)
             .set_database(data_base)
             .execute(|inputs, data_base, _, _| {
@@ -558,8 +558,8 @@ pub struct ChangeUserPasswordWithSiteNameWithUserIdentifier {
 }
 
 impl ChangeUserPasswordWithSiteNameWithUserIdentifier {
-    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("change user password", "change user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, key: &KeyPair, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("change user password", "change user password", None, #[cfg(target_os = "windows")] center)
             .sensitive_input("password", &mut self.password)
             .set_database(data_base)
             .set_key(key)
@@ -591,8 +591,8 @@ pub struct RemoveUserPasswordWithSiteNameWithUserIdentifier {
 }
 
 impl RemoveUserPasswordWithSiteNameWithUserIdentifier {
-    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID, #[cfg(feature = "windows")] center: [i32; 2]) -> bool {
-        CommandBuilder::new("remove user password", "remove user password", None, #[cfg(feature = "windows")] center)
+    pub fn display(&mut self, ui: &Ui, data_base: &mut DB, site_name: &SiteName, user_identifier: &UserID, #[cfg(target_os = "windows")] center: [i32; 2]) -> bool {
+        CommandBuilder::new("remove user password", "remove user password", None, #[cfg(target_os = "windows")] center)
             .set_database(data_base)
             .execute(|_, data_base, _, _| {
                 remove_user_pw(data_base.expect("unreachable"), site_name, user_identifier)?;

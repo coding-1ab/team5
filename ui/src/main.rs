@@ -41,7 +41,7 @@ fn main() {
         options,
         Box::new(|cc| {
             let mut graphical_user_interface = GraphicalUserInterface::default();
-            #[cfg(feature = "windows")]
+            #[cfg(target_os = "windows")]
             {
                 let center = get_monitor_center(get_hwnd(cc.raw_window_handle().unwrap()).unwrap()).unwrap();
                 graphical_user_interface.center = center.into();
@@ -69,7 +69,7 @@ fn init_fonts(cc: &CreationContext) {
     cc.egui_ctx.add_font(nanum_gothic_font);
 }
 
-#[cfg(feature = "windows")]
+#[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{HWND, RECT},
     UI::WindowsAndMessaging::{GetWindowRect},
@@ -78,7 +78,7 @@ use windows::Win32::{
     },
 };
 
-#[cfg(feature = "windows")]
+#[cfg(target_os = "windows")]
 fn get_hwnd(raw: RawWindowHandle) -> Option<HWND> {
     match raw {
         RawWindowHandle::Win32(handle) => {
@@ -88,7 +88,7 @@ fn get_hwnd(raw: RawWindowHandle) -> Option<HWND> {
     }
 }
 
-#[cfg(feature = "windows")]
+#[cfg(target_os = "windows")]
 fn get_monitor_center(hwnd: HWND) -> Option<(i32, i32)> {
     unsafe {
         let hmonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
