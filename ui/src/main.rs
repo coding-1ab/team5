@@ -13,6 +13,7 @@ use eframe::{
     epaint::text::{FontInsert, FontPriority, InsertFontFamily},
     egui::ViewportBuilder
 };
+use eframe::egui::ViewportCommand;
 use single_instance::SingleInstance;
 use libsodium_sys::rust_wrappings::init::sodium_init;
 use graphical_user_interface::GraphicalUserInterface;
@@ -37,6 +38,7 @@ fn main() {
         "eframe example",
         options,
         Box::new(|cc| {
+            cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false));
             //cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
             init_fonts(cc);
             Ok(Box::new(GraphicalUserInterface::default()))

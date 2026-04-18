@@ -251,10 +251,6 @@ pub struct RootSave {
 
 impl RootSave {
     pub fn display(&mut self, ui: &Ui) -> Option<RootSaveType> {
-        if ui.input(|input_state| input_state.viewport().close_requested()) {
-            return Some(RootSaveType::Cancel)
-        }
-
         let mut root_save_type = None;
 
         ui.show_viewport_immediate(
@@ -263,6 +259,11 @@ impl RootSave {
                 .with_title("close")
                 .with_inner_size([250.0, 50.0]),
             |ui, _| {
+                if ui.input(|input_state| input_state.viewport().close_requested()) {
+                    root_save_type = Some(RootSaveType::Cancel);
+                    return;
+                }
+
                 egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
                         if ui.button("cancel").clicked() {

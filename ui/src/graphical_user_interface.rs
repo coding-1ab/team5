@@ -387,33 +387,38 @@ impl eframe::App for GraphicalUserInterface {
             self.window_open_list.root = Some(RootSave::default());
         }
 
-        if let Some(display) = self.window_open_list.root.as_mut().and_then(|root_save| root_save.display(ui)) {
-            match display {
-                RootSaveType::Cancel => {
-                    self.window_open_list.root = None;
-                }
-                RootSaveType::SaveOnExit => {
-                    let result = self.save_data_base();
-                    let error_message = &mut self.window_open_list.root.as_mut().unwrap().error_message;
-                    if let Err(_) = result {
-                        *error_message = "failed save".to_string();
-                    } else {
-                        *error_message = "saved".to_string();
-                        ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+        if let Some(root_save) = self.window_open_list.root.as_mut() {
+            match root_save.display(ui) {
+                Some(display) => {
+                    match display {
+                        RootSaveType::Cancel => {
+                            self.window_open_list.root = None;
+                        }
+                        RootSaveType::SaveOnExit => {
+                            let result = self.save_data_base();
+                            let error_message = &mut self.window_open_list.root.as_mut().unwrap().error_message;
+                            if let Err(_) = result {
+                                *error_message = "failed save".to_string();
+                            } else {
+                                *error_message = "saved".to_string();
+                                ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+                            }
+                        }
+                        RootSaveType::DontSave => {
+                            mark_as_graceful_exited_to_file().unwrap();
+                            ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+                        }
                     }
                 }
-                RootSaveType::DontSave => {
-                    mark_as_graceful_exited_to_file().unwrap();
-                    ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
-                }
+                None => { return }
             }
-            return;
         }
 
         if !self.login {
             self.login(ui);
             return;
         }
+        ui.send_viewport_cmd(ViewportCommand::Visible(true));
         ui.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
         ui.send_viewport_cmd(ViewportCommand::InnerSize([800.0, 600.0].into()));
         self.user_main_view(ui);
