@@ -60,7 +60,7 @@ impl ExistingUser {
         let size = [300.0, 175.0];
 
         let mut viewport_builder = ViewportBuilder::default().with_title("마스터 로그인")
-            .with_inner_size(size);
+            .with_inner_size(size).with_resizable(false);
 
         #[cfg(target_os = "windows")]
         {
@@ -168,7 +168,7 @@ impl FirstLogin {
         let size = [300.0, 175.0];
 
         let mut viewport_builder = ViewportBuilder::default().with_title("첫 마스터 로그인")
-            .with_inner_size(size);
+            .with_inner_size(size).with_resizable(false);
 
         #[cfg(target_os = "windows")]
         {
@@ -304,7 +304,7 @@ impl RootSave {
         let size = [250.0, 50.0];
 
         let mut viewport_builder = ViewportBuilder::default().with_title("close")
-            .with_inner_size(size);
+            .with_inner_size(size).with_resizable(false);
 
         #[cfg(target_os = "windows")]
         {

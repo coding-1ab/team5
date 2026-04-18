@@ -33,7 +33,7 @@ fn main() {
 
     let options = eframe::NativeOptions {
         centered: true,
-        viewport: ViewportBuilder::default().with_visible(false),
+        viewport: ViewportBuilder::default().with_visible(false).with_resizable(false),
         ..eframe::NativeOptions::default()
     };
     let result = eframe::run_native(
