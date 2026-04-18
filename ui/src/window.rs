@@ -616,10 +616,7 @@ impl ChangeMasterPassword {
     ) -> bool {
         let mut keep_open = true;
 
-        ui.show_viewport_immediate(
-            egui::ViewportId::from_hash_of("change master password"),
-            egui::ViewportBuilder::default().with_title("change master password"),
-            |ui, _| {
+        egui::Window::new("change master password").show(ui, |ui| {
                 if ui.input(|i| i.viewport().close_requested()) {
                     keep_open = false;
                     return;
