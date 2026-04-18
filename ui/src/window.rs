@@ -1,23 +1,29 @@
 use std::fs;
 use anyhow::{anyhow, Error};
-use eframe::{
-    egui,
-    egui::{Context, ViewportBuilder, ViewportCommand, ViewportId}
+use eframe::egui::{
+    self,
+    ViewportBuilder,
+    ViewportCommand,
+    ViewportId,
+    Key,
+    Pos2,
+    TextEdit,
+    Ui,
+    Vec2
 };
-use eframe::egui::{Key, Pos2, TextEdit, Ui, Vec2};
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
     file_io::{check_can_directly_exit, mark_as_ungraceful_exited_to_file, save_db, DB_BAK_FILE, DB_FILE},
     header::{DBHeader, Salt},
     master_secrets::{decrypt_db, encrypt_db, general_login, master_pw_validation, EncryptedDB},
-    x25519::PubKey
+    x25519::PubKey,
+    file_io::mark_as_graceful_exited_to_file,
+    master_secrets::{change_master_pw, first_login}
 };
-use engine::file_io::mark_as_graceful_exited_to_file;
-use engine::master_secrets::{change_master_pw, first_login};
 use crate::{
     command_builder::CommandBuilder,
-    graphical_user_interface::{loading, KeyPair}
+    graphical_user_interface::KeyPair
 };
 
 pub enum RootSaveType {

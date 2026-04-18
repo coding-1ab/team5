@@ -43,6 +43,7 @@ fn main() {
             #[cfg(feature = "windows")]
             let center = get_monitor_center(get_hwnd(cc.raw_window_handle().unwrap()).unwrap()).unwrap();
             let mut graphical_user_interface = GraphicalUserInterface::default();
+            #[cfg(feature = "windows")]
             graphical_user_interface.center = center.into();
             cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false));
             //cc.egui_ctx.send_viewport_cmd(ViewportCommand::Visible(false)); // 있으니까 입력이 안되는데?
