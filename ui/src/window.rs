@@ -109,8 +109,9 @@ impl ExistingUser {
                     }
                     ui.label(warning_message);
                     if login_button.clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
-                        ui.label("");
-                        ui.label("loading");
+                        ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                            ui.label("loading");
+                        });
                         self.loading = true;
                         return;
                     }
@@ -211,8 +212,9 @@ impl FirstLogin {
                         }
                     }
                     if sign_in_button.clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
-                        ui.label("");
-                        ui.label("loading");
+                        ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                            ui.label("loading");
+                        });
                         self.loading = true;
                     }
                     ui.label(warning_message);
@@ -657,7 +659,9 @@ impl ChangeMasterPassword {
                     }
 
                     if submit_button.clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
-                        ui.label("loading");
+                        ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                            ui.label("loading");
+                        });
                         self.loading = true;
                     }
                 });
