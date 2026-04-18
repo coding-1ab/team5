@@ -382,13 +382,12 @@ impl GraphicalUserInterface {
 impl eframe::App for GraphicalUserInterface {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         if ui.input(|input| input.viewport().close_requested()) {
-            ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::CancelClose);
-            self.window_open_list.root = Some(RootSave::default());
-        }
-
-        if self.window_open_list.root.is_some() && check_can_directly_exit() {
-            ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
-            return;
+            if check_can_directly_exit() {
+                ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+            } else {
+                ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::CancelClose);
+                self.window_open_list.root = Some(RootSave::default());
+            }
         }
 
         if let Some(root_save) = self.window_open_list.root.as_mut() {
@@ -424,10 +423,13 @@ impl eframe::App for GraphicalUserInterface {
             self.login(ui);
             return;
         }
-        ui.send_viewport_cmd(ViewportCommand::Visible(true));
-        ui.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
-        ui.send_viewport_cmd(ViewportCommand::InnerSize([800.0, 600.0].into()));
-        self.user_main_view(ui);
+
+        ui.add_enabled_ui(!self.window_open_list.root.is_some(), |ui| {
+            ui.send_viewport_cmd(ViewportCommand::Visible(true));
+            ui.send_viewport_cmd(ViewportCommand::Title("비밀번호 관리자".to_string()));
+            ui.send_viewport_cmd(ViewportCommand::InnerSize([800.0, 600.0].into()));
+            self.user_main_view(ui);
+        });
     }
 }
 

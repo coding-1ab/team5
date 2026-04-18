@@ -599,7 +599,8 @@ impl ChangeMasterPassword {
 
 pub fn exit_root(ui: &Ui, root_window: &mut Option<RootSave>) {
     if check_can_directly_exit() {
-        ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close)
+        ui.send_viewport_cmd_to(ViewportId::ROOT, ViewportCommand::Close);
+        return;
     }
     *root_window = Some(RootSave::default());
 }
