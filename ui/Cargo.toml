@@ -11,5 +11,5 @@ single-instance = { workspace = true }
 anyhow = "1.0.101"
 libsodium-sys-stable = { path = "../engine/fork/libsodium-sys-stable-1.23.2-fork"}
 
-[target.'cfg(target = "windows"'.dependencies]
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2" }

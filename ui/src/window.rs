@@ -264,27 +264,24 @@ impl Reset {
     pub fn display(&mut self, ui: &Ui) -> bool {
         let mut keep = true;
 
-        ui.show_viewport_immediate(
-            ViewportId::from_hash_of("reset"),
-            ViewportBuilder::default().with_title("reset"),
-            |ui, _| {
-                egui::CentralPanel::default().show_inside(ui, |ui| {
-                    ui.label("리셋하겠습니까? 복구할 수 없습니다.");
-                    ui.horizontal(|ui| {
-                        if ui.button("submit").clicked() {
-                            match fs::remove_file(DB_FILE)
-                                .and_then(|_| fs::remove_file(DB_BAK_FILE))
-                            {
-                                Ok(_) => keep = false,
-                                Err(error) => {
-                                    self.reset_error = error.to_string();
-                                }
+        egui::Window::new("reset").resizable([false, false]).interactable(false).show(ui, |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
+                ui.label("리셋하겠습니까? 복구할 수 없습니다.");
+                ui.horizontal(|ui| {
+                    if ui.button("submit").clicked() {
+                        match fs::remove_file(DB_FILE)
+                            .and_then(|_| fs::remove_file(DB_BAK_FILE))
+                        {
+                            Ok(_) => keep = false,
+                            Err(error) => {
+                                self.reset_error = error.to_string();
                             }
                         }
-                        if ui.button("cancel").clicked() {
-                            keep = false;
-                        }
-                        ui.label(&self.reset_error);
+                    }
+                    if ui.button("cancel").clicked() {
+                        keep = false;
+                    }
+                    ui.label(&self.reset_error);
                     })
                 })
             },

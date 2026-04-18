@@ -15,7 +15,7 @@ use eframe::{
     egui::ViewportBuilder
 };
 use eframe::egui::ViewportCommand;
-use eframe::wgpu::rwh::{HasRawWindowHandle, RawWindowHandle};
+use eframe::wgpu::rwh::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle};
 use single_instance::SingleInstance;
 use libsodium_sys::rust_wrappings::init::sodium_init;
 use graphical_user_interface::GraphicalUserInterface;
