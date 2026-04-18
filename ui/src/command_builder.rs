@@ -140,7 +140,8 @@ impl<'a, Output> CommandBuilderWithError<'a, Output> {
 
         #[cfg(target_os = "windows")]
         {
-            let center = [self.inner.center[0] as f32 - self.inner.size[0], self.inner.center[1] as f32 - self.inner.size[1]];
+            let pixels_per_point = ui.native_pixels_per_point().unwrap_or(ui.pixels_per_point());
+            let center = [self.inner.center[0] as f32 / pixels_per_point - self.inner.size[0] / 2.0, self.inner.center[1] as f32 / pixels_per_point - self.inner.size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
         }
 

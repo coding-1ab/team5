@@ -172,7 +172,8 @@ impl FirstLogin {
 
         #[cfg(target_os = "windows")]
         {
-            let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
+            let pixels_per_point = ui.native_pixels_per_point().unwrap_or(ui.pixels_per_point());
+            let center = [center[0] as f32 / pixels_per_point - size[0] / 2.0, center[1] as f32 / pixels_per_point - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
         }
 
@@ -307,7 +308,8 @@ impl RootSave {
 
         #[cfg(target_os = "windows")]
         {
-            let center = [center[0] as f32 - size[0] / 2.0, center[1] as f32 - size[1] / 2.0];
+            let pixels_per_point = ui.native_pixels_per_point().unwrap_or(ui.pixels_per_point());
+            let center = [center[0] as f32 / pixels_per_point - size[0] / 2.0, center[1] as f32 / pixels_per_point - size[1] / 2.0];
             viewport_builder = viewport_builder.with_position(center);
         }
 
