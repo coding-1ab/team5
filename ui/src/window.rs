@@ -1,10 +1,10 @@
 use std::fs;
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use eframe::{
     egui,
     egui::{Context, ViewportBuilder, ViewportCommand, ViewportId}
 };
-use eframe::egui::{Key, Ui};
+use eframe::egui::{Key, TextEdit, Ui};
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
@@ -30,7 +30,8 @@ pub enum RootSaveType {
 pub struct ExistingUser {
     password: String,
     error_message: String,
-    reset: Option<Reset>
+    reset: Option<Reset>,
+    loading: bool
 }
 
 impl ExistingUser {
@@ -64,8 +65,9 @@ impl ExistingUser {
                             .password(true),
                     );
                     ui.label(&self.error_message);
-                    if ui.button("login").clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
-                        loading(ui);
+                    let login_button = ui.button("login");
+                    if self.loading {
+                        self.loading = false;
                         if let Err(error) =
                             master_pw_validation(&self.password)
                         {
@@ -102,6 +104,11 @@ impl ExistingUser {
                         }
                     }
                     ui.label(warning_message);
+                    if login_button.clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
+                        ui.label("loading");
+                        self.loading = true;
+                        return;
+                    }
                 });
             },
         );
@@ -115,6 +122,7 @@ pub struct FirstLogin {
     password: String,
     recheck_password: String,
     error_message: String,
+    loading: bool,
 }
 
 impl FirstLogin {
@@ -155,8 +163,10 @@ impl FirstLogin {
                             .password(true),
                     );
                     ui.label(&self.error_message);
-                    if ui.button("Accept").clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
-                        loading(ui);
+                    let sign_in_button = ui.button("sign in");
+                    if self.loading {
+                        self.loading = false;
+                        ui.label("loading");
                         if let Err(err) =
                             master_pw_validation(&self.password)
                         {
@@ -195,6 +205,10 @@ impl FirstLogin {
                                 "password is mismatch".to_string();
                             return;
                         }
+                    }
+                    if sign_in_button.clicked() || ui.input(|input_state| input_state.key_pressed(Key::Enter)) {
+                        ui.label("loading");
+                        self.loading = true;
                     }
                     ui.label(warning_message);
                 });
@@ -550,6 +564,7 @@ impl RemoveUserPasswordWithSiteNameWithUserIdentifier {
 pub struct ChangeMasterPassword {
     password: String,
     error_message: String,
+    loading: bool,
 }
 
 impl ChangeMasterPassword {
@@ -561,39 +576,90 @@ impl ChangeMasterPassword {
         data_base_header: &mut DBHeader,
         graphical_user_interface_public_key: &mut Option<PubKey>
     ) -> bool {
-        CommandBuilder::new("change master password", "change master password")
-            .sensitive_input("master password", &mut self.password)
-            .set_database(data_base)
-            .set_key_mut(key)
-            .execute(|inputs, data_base, _, key_mut| {
-                let data_base = data_base.expect("unreachable");
-                if let Err(error) = master_pw_validation(inputs[0].value) {
-                    return Err(error.into());
+        let mut keep_open = true;
+
+        ui.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("change master password"),
+            egui::ViewportBuilder::default().with_title("change master password"),
+            |ui, _| {
+                if ui.input(|i| i.viewport().close_requested()) {
+                    keep_open = false;
+                    return;
                 }
-                let Some((wrapped_session_key, session_key_nonce)) = key_mut else {
-                    return Err(anyhow!("unreachable"));
-                };
-                loading(ui);
-                let (public_key, salt) = change_master_pw(
-                    data_base,
-                    &mut inputs[0].value,
-                    wrapped_session_key,
-                    session_key_nonce,
-                )?;
 
-                data_base_header.master_pw_salt = salt;
-                *graphical_user_interface_public_key = Some(public_key);
+                egui::CentralPanel::default().show_inside(ui, |ui| {
+                    ui.label("change master password");
 
-                save_db(
-                    data_base_header,
-                    encrypt_db(data_base, graphical_user_interface_public_key.as_ref().expect("unreachable")),
-                )?;
-                mark_as_graceful_exited_to_file()?;
-                Ok(())
-            })
-            .on_success(|_| {})
-            .error_message(&mut self.error_message)
-            .show(ui)
+                    ui.horizontal(|ui| {
+                        ui.label("master password");
+                        ui.add(TextEdit::singleline(&mut self.password).password(true));
+                    });
+
+                    ui.label(&*self.error_message);
+
+                    let submit_button = ui.button("submit");
+
+                    if self.loading {
+                        self.loading = false;
+
+                        // validation
+                        if self.password.trim().is_empty() {
+                            self.error_message = "모든 필드를 입력해주세요!".to_string();
+                            return;
+                        }
+
+                        // execute
+                        let result = (|| -> Result<(), Error> {
+                            if let Err(error) = master_pw_validation(&self.password) {
+                                return Err(error.into());
+                            }
+                            let (wrapped_session_key, session_key_nonce) = key;
+                            let (public_key, salt) = change_master_pw(
+                                data_base,
+                                &mut self.password,
+                                wrapped_session_key,
+                                session_key_nonce,
+                            )?;
+
+                            data_base_header.master_pw_salt = salt;
+                            *graphical_user_interface_public_key = Some(public_key);
+
+                            save_db(
+                                data_base_header,
+                                encrypt_db(
+                                    data_base,
+                                    graphical_user_interface_public_key
+                                        .as_ref()
+                                        .expect("unreachable"),
+                                ),
+                            )?;
+                            mark_as_graceful_exited_to_file()?;
+                            Ok(())
+                        })();
+
+                        // zeroize는 성공/실패 무관하게
+                        self.password.zeroize();
+
+                        match result {
+                            Ok(_) => {
+                                self.error_message.clear();
+                                keep_open = false;
+                            }
+                            Err(err) => {
+                                self.error_message = err.to_string();
+                            }
+                        }
+                    }
+
+                    if submit_button.clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+                        ui.label("loading");
+                        self.loading = true;
+                    }
+                });
+            },
+        );
+
+        keep_open
     }
 }
 
