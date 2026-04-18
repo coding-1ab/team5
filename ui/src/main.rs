@@ -6,7 +6,9 @@
 #![deny(clippy::too_many_lines)]
 #![warn(unused)]
 
+use ::image::open;
 use std::ffi::c_void;
+use std::path::Path;
 use eframe::{
     CreationContext,
     egui,
@@ -14,7 +16,7 @@ use eframe::{
     epaint::text::{FontInsert, FontPriority, InsertFontFamily},
     egui::ViewportBuilder
 };
-use eframe::egui::ViewportCommand;
+use eframe::egui::{IconData, ImageData, ViewportCommand};
 use eframe::wgpu::rwh::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle};
 use single_instance::SingleInstance;
 use libsodium_sys::rust_wrappings::init::sodium_init;
@@ -33,7 +35,9 @@ fn main() {
 
     let options = eframe::NativeOptions {
         centered: true,
-        viewport: ViewportBuilder::default().with_visible(false).with_resizable(false),
+        viewport: ViewportBuilder::default()
+            .with_visible(false).with_resizable(false)
+            .with_icon(load_icon()),
         ..eframe::NativeOptions::default()
     };
     let result = eframe::run_native(
@@ -53,6 +57,16 @@ fn main() {
         })
     );
     dbg!(result);
+}
+
+fn load_icon() -> IconData {
+    let bytes = include_bytes!("../icon.png");
+    let image = image::load_from_memory(bytes).unwrap().into_rgba8();
+
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+
+    IconData{rgba, width, height}
 }
 
 fn init_fonts(cc: &CreationContext) {
