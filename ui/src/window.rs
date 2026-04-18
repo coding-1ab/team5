@@ -68,32 +68,36 @@ impl ExistingUser {
                     let login_button = ui.button("login");
                     if self.loading {
                         self.loading = false;
-                        if let Err(error) =
-                            master_pw_validation(&self.password)
-                        {
-                            self.error_message = error.to_string();
-                        }
-                        let (secret_key, public_key, wrapped_session_key, session_key_nonce) =
-                            general_login(
-                                &mut self.password,
-                                master_password_salt,
-                            );
-                        self.password.zeroize();
-                        let decrypted_data_base = match decrypt_db(encrypted_data_base, secret_key)
-                        {
-                            Ok(decrypted_data_base) => decrypted_data_base,
-                            Err(error) => {
-                                self.error_message = error.to_string();
-                                return;
+
+                        let result = || -> Result<(DB, PubKey, KeyPair), Error> {
+                            if let Err(error) = master_pw_validation(&self.password) {
+                                return Err(error.into());
                             }
-                        };
 
-                        *data_base = decrypted_data_base;
-                        *graphical_user_interface_public_key = Some(public_key);
-                        *key = Some((wrapped_session_key, session_key_nonce));
+                            let (secret_key, public_key, wrapped_session_key, session_key_nonce) =
+                                general_login(&mut self.password, master_password_salt);
 
-                        *login = true;
-                        keep = false;
+                            self.password.zeroize();
+                            match decrypt_db(encrypted_data_base, secret_key) {
+                                Ok(decrypted_data_base) => Ok((decrypted_data_base, public_key, (wrapped_session_key, session_key_nonce))),
+                                Err(error) => { Err(error.into()) }
+                            }
+                        }();
+
+                        match result {
+                            Ok((decrypted_data_base, public_key, key_pair)) => {
+                                *data_base = decrypted_data_base;
+                                *graphical_user_interface_public_key = Some(public_key);
+                                *key = Some(key_pair);
+
+                                *login = true;
+                                keep = false;
+                            }
+                            Err(error) => {
+                                self.password.zeroize();
+                                self.error_message = error.to_string();
+                            }
+                        }
                     }
                     if ui.button("reset").clicked() {
                         self.reset = Some(Reset::default());
@@ -166,7 +170,6 @@ impl FirstLogin {
                     let sign_in_button = ui.button("sign in");
                     if self.loading {
                         self.loading = false;
-                        ui.label("loading");
                         if let Err(err) =
                             master_pw_validation(&self.password)
                         {
