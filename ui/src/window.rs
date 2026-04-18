@@ -47,7 +47,7 @@ impl ExistingUser {
         login: &mut bool,
         warning_message: &String,
         #[cfg(target_os = "windows")]
-        center: [usize; 2]
+        center: [i32; 2]
     ) -> bool {
         let mut keep = true;
 
@@ -154,7 +154,7 @@ impl FirstLogin {
         root_window: &mut Option<RootSave>,
         warning_message: &String,
         #[cfg(target_os = "windows")]
-        center: [usize; 2]
+        center: [i32; 2]
     ) -> bool {
         let mut keep = true;
 
@@ -293,7 +293,7 @@ pub struct RootSave {
 }
 
 impl RootSave {
-    pub fn display(&mut self, ui: &Ui, #[cfg(target_os = "windows")] center: [usize; 2]) -> Option<RootSaveType> {
+    pub fn display(&mut self, ui: &Ui, #[cfg(target_os = "windows")] center: [i32; 2]) -> Option<RootSaveType> {
         let mut root_save_type = None;
 
         let size = [250.0, 50.0];

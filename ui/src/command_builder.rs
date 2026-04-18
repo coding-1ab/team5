@@ -40,7 +40,7 @@ pub struct CommandBuilder<'a, Output> {
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new<Size: Into<Vec2>>(title: &'static str, screen_name: &'static str, size: Option<Size>, #[cfg(target_os = "windows")] center: [i32; 2]) -> Self {
+    pub fn new(title: &'static str, screen_name: &'static str, size: Option<Vec2>, #[cfg(target_os = "windows")] center: [i32; 2]) -> Self {
         // command_fn은 이제 new()에서 안 받음
         Self {
             title,
@@ -51,7 +51,7 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             key_mut: None,
             on_success: Box::new(|_| {}),
             execute: None,
-            size: size.unwrap_or([800.0, 600.0]),
+            size: size.unwrap_or(Vec2::new(800.0, 600.0)),
             #[cfg(target_os = "windows")]
             center
         }

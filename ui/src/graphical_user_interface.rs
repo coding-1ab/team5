@@ -101,6 +101,8 @@ pub struct GraphicalUserInterface {
     data_base_header: DBHeader,
     key: Option<KeyPair>,
     public_key: Option<PubKey>,
+    #[cfg(target_os = "windows")]
+    center: [i32; 2]
 }
 
 impl GraphicalUserInterface {
@@ -126,7 +128,10 @@ impl GraphicalUserInterface {
                                 &mut self.public_key,
                                 &mut self.key,
                                 &mut self.login,
-                                &self.string_values.master_login.warning_message
+                                &self.string_values.master_login.warning_message,
+                                #[cfg(target_os = "windows")]
+                                self.center
+
                             ) {
                                 self.window_open_list.existing_user = None;
                                 return;
@@ -146,7 +151,9 @@ impl GraphicalUserInterface {
                                 &mut self.public_key,
                                 &mut self.login,
                                 &mut self.window_open_list.root,
-                                &self.string_values.master_login.warning_message
+                                &self.string_values.master_login.warning_message,
+                                #[cfg(target_os = "windows")]
+                                self.center
                             ) {
                                 self.window_open_list.first_login = None;
                                 return;
@@ -209,7 +216,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.add_user_password = Some(AddUserPassword::default());
                 }
                 if let Some(add_user_password) = &mut self.window_open_list.add_user_password {
-                    if !add_user_password.display(ui, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
+                    if !add_user_password.display(ui, self.key.as_ref().expect("unreachable"), &mut self.data_base, #[cfg(target_os = "windows")] self.center) {
                         self.window_open_list.add_user_password = None;
                     }
                 }
@@ -217,7 +224,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.change_user_password = Some(ChangeUserPassword::default());
                 }
                 if let Some(change_user_password) = &mut self.window_open_list.change_user_password {
-                    if !change_user_password.display(ui, self.key.as_ref().expect("unreachable"), &mut self.data_base) {
+                    if !change_user_password.display(ui, self.key.as_ref().expect("unreachable"), &mut self.data_base, #[cfg(target_os = "windows")] self.center) {
                         self.window_open_list.change_user_password = None;
                     }
                 }
@@ -225,7 +232,7 @@ impl GraphicalUserInterface {
                     self.window_open_list.remove_user_password = Some(RemoveUserPassword::default());
                 }
                 if let Some(remove_user_password) = &mut self.window_open_list.remove_user_password {
-                    if !remove_user_password.display(ui, &mut self.data_base) {
+                    if !remove_user_password.display(ui, &mut self.data_base, #[cfg(target_os = "windows")] self.center) {
                         self.window_open_list.remove_user_password = None;
                     }
                 }
@@ -291,7 +298,7 @@ impl GraphicalUserInterface {
                                     self.window_open_list.add_user_password_with_site_name.insert(site_name.clone(), AddUserPasswordWithSiteName::default());
                                 }
                                 if let Some(add_user_password_site_name) = self.window_open_list.add_user_password_with_site_name.get_mut(site_name) {
-                                    if !add_user_password_site_name.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name) {
+                                    if !add_user_password_site_name.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name, #[cfg(target_os = "windows")] self.center) {
                                         self.window_open_list.add_user_password_with_site_name.remove(site_name);
                                     }
                                 }
@@ -299,7 +306,7 @@ impl GraphicalUserInterface {
                                     self.window_open_list.change_user_password_with_site_name.insert(site_name.clone(), ChangeUserPasswordWithSiteName::default());
                                 }
                                 if let Some(change_user_password_with_site_name) = self.window_open_list.change_user_password_with_site_name.get_mut(site_name) {
-                                    if !change_user_password_with_site_name.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name) {
+                                    if !change_user_password_with_site_name.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name, #[cfg(target_os = "windows")] self.center) {
                                         self.window_open_list.change_user_password_with_site_name.remove(site_name);
                                     }
                                 }
@@ -307,7 +314,7 @@ impl GraphicalUserInterface {
                                     self.window_open_list.remove_user_password_with_site_name.insert(site_name.clone(), RemoveUserPasswordWithSiteName::default());
                                 }
                                 if let Some(remove_user_password_with_site_name) = self.window_open_list.remove_user_password_with_site_name.get_mut(site_name) {
-                                    if !remove_user_password_with_site_name.display(ui, &mut self.data_base, site_name) {
+                                    if !remove_user_password_with_site_name.display(ui, &mut self.data_base, site_name, #[cfg(target_os = "windows")] self.center) {
                                         self.window_open_list.remove_user_password_with_site_name.remove(site_name);
                                     }
                                 }
@@ -324,7 +331,7 @@ impl GraphicalUserInterface {
                                                 self.window_open_list.change_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().entry(user_identifier.clone()).or_default();
                                             }
                                             if let Some(change_user_password_with_size_name_with_user_identifier) = self.window_open_list.change_user_password_with_site_name_with_user_identifier.get_mut(site_name).and_then(|value| value.get_mut(&user_identifier)) {
-                                                if !change_user_password_with_size_name_with_user_identifier.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name, &user_identifier) {
+                                                if !change_user_password_with_size_name_with_user_identifier.display(ui, self.key.as_ref().unwrap(), &mut self.data_base, site_name, &user_identifier, #[cfg(target_os = "windows")] self.center) {
                                                     self.window_open_list.change_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().remove(&user_identifier);
                                                 }
                                             }
@@ -332,7 +339,7 @@ impl GraphicalUserInterface {
                                                 self.window_open_list.remove_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().entry(user_identifier.clone()).or_default();
                                             }
                                             if let Some(remove_user_password_with_size_name_with_user_identifier) = self.window_open_list.remove_user_password_with_site_name_with_user_identifier.get_mut(site_name).and_then(|value| value.get_mut(&user_identifier)) {
-                                                if !remove_user_password_with_size_name_with_user_identifier.display(ui, &mut self.data_base, site_name, &user_identifier) {
+                                                if !remove_user_password_with_size_name_with_user_identifier.display(ui, &mut self.data_base, site_name, &user_identifier, #[cfg(target_os = "windows")] self.center) {
                                                     self.window_open_list.remove_user_password_with_site_name_with_user_identifier.entry(site_name.clone()).or_default().remove(&user_identifier);
                                                 }
                                             }
@@ -393,7 +400,7 @@ impl eframe::App for GraphicalUserInterface {
         }
 
         if let Some(root_save) = self.window_open_list.root.as_mut() {
-            match root_save.display(ui) {
+            match root_save.display(ui, #[cfg(target_os = "windows")] self.center) {
                 Some(display) => {
                     match display {
                         RootSaveType::Cancel => {
