@@ -625,7 +625,7 @@ impl ChangeMasterPassword {
         ui.show_viewport_immediate(
             ViewportId::from_hash_of("change_master_password"),
             ViewportBuilder::default().with_title("change master password").with_resizable(false),
-            |ui| {
+            |ui, _| {
                 if ui.input(|i| i.viewport().close_requested()) {
                     keep_open = false;
                     return;
