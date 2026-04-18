@@ -65,8 +65,8 @@ impl ExistingUser {
         #[cfg(feature = "windows")]
         {
             let pixels_per_point = ui.native_pixels_per_point().unwrap_or(ui.pixels_per_point());
-            let center = [center[0] as f32 - size[0] / 2.0 * pixels_per_point, center[1] as f32 - size[1] / 2.0 * pixels_per_point];
-            viewport_builder = viewport_builder.with_position(center);
+            let egui_center = [center[0] as f32 / pixels_per_point - size[0] / 2.0, center[1] as f32 / pixels_per_point - size[1] / 2.0];
+            viewport_builder = viewport_builder.with_position(egui_center);
         }
 
         ui.show_viewport_immediate(
