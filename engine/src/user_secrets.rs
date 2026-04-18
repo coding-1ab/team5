@@ -16,7 +16,7 @@ use rkyv::vec::{ArchivedVec, VecResolver};
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 use sha3::digest::generic_array::GenericArray;
 use sha3::Sha3_256;
-use libsodium_sys::rust_wrappings::aes256gcm::{aes256gcm_decrypt, aes256gcm_decrypt_from_ptr, aes256gcm_encrypt, aes256gcm_encrypt_from_ptr_to_sodium_box, AesKey, AesNonce, AES_KEY_SIZE, AES_NONCE_SIZE, AES_OUT_AUTH_TAG_SIZE};
+use libsodium_sys::rust_wrappings::aes256gcm::{aes256gcm_decrypt, aes256gcm_decrypt_from_ptr, aes256gcm_encrypt, aes256gcm_encrypt_from_ptr_to_sodium_box, get_aes256gcm_ciphertext_len, AesKey, AesNonce, AES_KEY_SIZE, AES_NONCE_SIZE};
 use libsodium_sys::rust_wrappings::hasher::Sha256;
 use libsodium_sys::rust_wrappings::sodium_box::SodiumBox;
 
@@ -210,7 +210,7 @@ impl Into<AesKey> for SessionKeyWrapper {
     }
 }
 
-const WRAPPED_SESSION_KEY_SIZE: usize = AES_KEY_SIZE + AES_OUT_AUTH_TAG_SIZE;
+const WRAPPED_SESSION_KEY_SIZE: usize = get_aes256gcm_ciphertext_len(AES_KEY_SIZE);
 pub struct WrappedSessionKey {
     inner: SodiumBox<u8>,
 }

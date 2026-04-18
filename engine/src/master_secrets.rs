@@ -7,9 +7,7 @@ use crate::{manual_zeroize, user_secrets};
 use argon2::password_hash::rand_core;
 use argon2::{Argon2, Params};
 use libsodium_sys as sodium;
-use libsodium_sys::rust_wrappings::aes256gcm::{
-    AES_NONCE_SIZE, AES_OUT_AUTH_TAG_SIZE, AesNonce, aes256gcm_decrypt, aes256gcm_encrypt_to_slice,
-};
+use libsodium_sys::rust_wrappings::aes256gcm::{AES_NONCE_SIZE, AesNonce, aes256gcm_decrypt, aes256gcm_encrypt_to_slice, get_aes256gcm_ciphertext_len};
 use libsodium_sys::rust_wrappings::init::sodium_init;
 use libsodium_sys::rust_wrappings::x25519::{
     ECIES_PK_SIZE, ECIES_SK_SIZE, PubKey, SecKey, SharedSecret, shared_secret_to_aes_key,
@@ -22,7 +20,6 @@ use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 use std::error::Error as StdError;
 use std::ffi::c_uchar;
 use std::fmt::{Display, Formatter};
-use std::io::Write;
 use std::ptr::{addr_of, addr_of_mut};
 use std::{hint, ptr, slice};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -227,7 +224,7 @@ pub fn encrypt_db(db: &DB, pk: &PubKey) -> EncryptedDB {
     drop(peer_sk);
     let nonce = AesNonce::gen_rand();
 
-    let len = CIPHERTEXT_BEGIN + serialized.len() + AES_OUT_AUTH_TAG_SIZE;
+    let len = CIPHERTEXT_BEGIN + get_aes256gcm_ciphertext_len(serialized.len());
     let mut result = Vec::with_capacity(len);
     unsafe { result.set_len(len) }
     aes256gcm_encrypt_to_slice(
