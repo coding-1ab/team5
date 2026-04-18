@@ -89,24 +89,6 @@ fn get_hwnd(raw: RawWindowHandle) -> Option<HWND> {
 }
 
 #[cfg(feature = "windows")]
-fn get_window_rect(hwnd: HWND) -> Option<(i32, i32, i32, i32)> {
-    unsafe {
-        let mut rect = RECT::default();
-
-        if GetWindowRect(hwnd, &mut rect).is_ok() {
-            Some((
-                rect.left,   // x
-                rect.top,    // y
-                rect.right - rect.left,  // width
-                rect.bottom - rect.top,  // height
-            ))
-        } else {
-            None
-        }
-    }
-}
-
-#[cfg(feature = "windows")]
 fn get_monitor_center(hwnd: HWND) -> Option<(i32, i32)> {
     unsafe {
         let hmonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
