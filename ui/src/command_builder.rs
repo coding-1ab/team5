@@ -36,11 +36,11 @@ pub struct CommandBuilder<'a, Output> {
     >,
     size: Vec2,
     #[cfg(target_os = "windows")]
-    center: [usize; 2],
+    center: [i32; 2],
 }
 
 impl<'a, Output> CommandBuilder<'a, Output> {
-    pub fn new<Size: Into<Vec2>>(title: &'static str, screen_name: &'static str, size: Option<Size>, #[cfg(target_os = "windows")] center: [usize; 2]) -> Self {
+    pub fn new<Size: Into<Vec2>>(title: &'static str, screen_name: &'static str, size: Option<Size>, #[cfg(target_os = "windows")] center: [i32; 2]) -> Self {
         // command_fn은 이제 new()에서 안 받음
         Self {
             title,
@@ -122,12 +122,6 @@ impl<'a, Output> CommandBuilder<'a, Output> {
             inner: self,
             error_message,
         }
-    }
-
-    #[cfg(target_os = "windows")]
-    pub fn center(mut self, center_position: [usize; 2]) -> Self {
-        self.center = center_position;
-        self
     }
 }
 
