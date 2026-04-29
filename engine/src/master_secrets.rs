@@ -17,6 +17,7 @@ use std::ptr::{addr_of, addr_of_mut};
 use std::{hint, ptr};
 use std::alloc::GlobalAlloc;
 use std::arch::x86_64::_mm_clflush;
+use std::sync::atomic::{fence, Ordering};
 use rkyv::util::AlignedVec;
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 use zeroize::{Zeroize};
@@ -289,7 +290,7 @@ impl ArrLike for Vec<u8> {
     fn len(&self) -> usize { self.len() }
     fn zeroize(&mut self) { Zeroize::zeroize(self) }
 }
-impl ArrLike for AlignedVec<16> {
+impl<const M: usize> ArrLike for AlignedVec<M> {
     fn as_mut_ptr(&mut self) -> *mut u8 { self.as_mut_ptr() }
     fn len(&self) -> usize { self.len() }
     fn zeroize(&mut self) { Zeroize::zeroize(self.as_mut_slice()); }
@@ -307,6 +308,7 @@ impl ArrLike for SecretBox<[u8]> {
 
 pub fn manual_zeroize<T: ArrLike>(data: &mut T) {
     flush_cache_line(data.as_mut_ptr(), data.len());
+    fence(Ordering::SeqCst);
     data.zeroize();
 }
 

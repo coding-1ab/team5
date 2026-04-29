@@ -4,6 +4,15 @@ use std::collections::{BTreeMap, HashMap};
 use rkyv::{Archive, Deserialize, Serialize};
 use std::error::Error;
 use std::str::FromStr;
+use std::fmt::{Display, Formatter};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+use crate::master_secrets::manual_zeroize;
+
+
+#[derive(Debug)]
+pub enum UserPWError {
+    Empty,
+}
 
 #[derive(
     Archive, Serialize, Deserialize,
@@ -11,10 +20,7 @@ use std::str::FromStr;
 )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct UserPW(pub(crate) String);
-#[derive(Debug)]
-pub enum UserPWError {
-    Empty,
-}
+
 impl UserPW {
     #[inline(always)]
     pub fn new(input: &str) -> Result<UserPW, UserPWError> {
@@ -36,11 +42,11 @@ impl UserPW {
 }
 impl Zeroize for UserPW {
     fn zeroize(&mut self) {
-        unsafe { _mm_clflush(self.0.as_mut_ptr()) }
-        self.0.zeroize();
+        manual_zeroize(&mut self.0)
     }
 }
 impl ZeroizeOnDrop for UserPW {}
+
 impl FromStr for UserPW {
     type Err = UserPWError;
     fn from_str(s: &str) -> Result<Self, UserPWError> { Ok(UserPW::new(s)?) }
@@ -54,8 +60,12 @@ impl Display for UserPWError {
 }
 impl Error for UserPWError {}
 
-use std::fmt::{Display, Formatter};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+
+#[derive(Debug)]
+pub enum UserIDError {
+    Empty,
+    // TooLong,
+}
 
 // const MAX_USER_ID_LEN: usize = 32;
 #[derive(
@@ -67,11 +77,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[derive(Clone)]
 pub struct UserID(pub(crate) String);
 
-#[derive(Debug)]
-pub enum UserIDError {
-    Empty,
-    // TooLong,
-}
 impl UserID {
     #[inline]
     pub fn new(input: &str) -> Result<UserID, UserIDError> {
@@ -93,11 +98,11 @@ impl UserID {
 }
 impl Zeroize for UserID {
     fn zeroize(&mut self) {
-        unsafe { _mm_clflush(self.0.as_mut_ptr()) }
-        self.0.zeroize();
+        manual_zeroize(&mut self.0)
     }
 }
 impl ZeroizeOnDrop for UserID {}
+
 impl FromStr for UserID {
     type Err = UserIDError;
     fn from_str(s: &str) -> Result<Self, UserIDError> { Ok(UserID::new(s)?) }
@@ -112,16 +117,11 @@ impl Display for UserIDError {
 }
 impl Error for UserIDError {}
 
+
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use url::Url;
 
-#[derive(Archive, Serialize, Deserialize, Debug, Clone, )]
-#[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
-pub struct SiteName {
-    pub(crate) full: String,
-    pub(crate) reg: String,
-}
 #[derive(Debug)]
 pub enum SiteNameError {
     Empty,
@@ -129,6 +129,13 @@ pub enum SiteNameError {
     InvalidUrl(String),
     InvalidHost,
     InvalidDomain,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, )]
+#[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
+pub struct SiteName {
+    pub(crate) full: String,
+    pub(crate) reg: String,
 }
 
 impl SiteName {
@@ -207,13 +214,12 @@ impl Borrow<str> for SiteName {
 }
 impl Zeroize for SiteName {
     fn zeroize(&mut self) {
-        unsafe { _mm_clflush(self.full.as_mut_ptr()) }
-        self.full.zeroize();
-        unsafe { _mm_clflush(self.reg.as_mut_ptr()) }
-        self.reg.zeroize();
+        manual_zeroize(&mut self.full);
+        manual_zeroize(&mut self.reg);
     }
 }
 impl ZeroizeOnDrop for SiteName {}
+
 impl FromStr for SiteName {
     type Err = SiteNameError;
     fn from_str(s: &str) -> Result<Self, SiteNameError> { Ok(SiteName::new(s)?) }
@@ -240,6 +246,7 @@ impl Display for SiteNameError {
     }
 }
 impl Error for SiteNameError {}
+
 
 pub type DB = BTreeMap<SiteName, HashMap<UserID, EncryptedUserPW>>;
 
