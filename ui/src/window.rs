@@ -37,7 +37,8 @@ pub struct ExistingUser {
     password: String,
     error_message: String,
     reset: Option<Reset>,
-    loading: bool
+    loading: bool,
+    not_first_frame: bool
 }
 
 impl ExistingUser {
@@ -78,10 +79,12 @@ impl ExistingUser {
                 }
                 egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.label("input master password");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.password)
+                    let response = ui.add(
+                        TextEdit::singleline(&mut self.password)
                             .password(true),
                     );
+                    if !self.not_first_frame { response.request_focus() }
+                    self.not_first_frame = true;
                     ui.label(&self.error_message);
                     let login_button = ui.button("login");
                     if self.loading {
@@ -147,6 +150,7 @@ pub struct FirstLogin {
     recheck_password: String,
     error_message: String,
     loading: bool,
+    not_first_frame: bool
 }
 
 impl FirstLogin {
@@ -187,10 +191,12 @@ impl FirstLogin {
                 }
                 egui::CentralPanel::default().show_inside(ui, |ui| {
                     ui.label("input new master password");
-                    ui.add(
+                    let response = ui.add(
                         egui::TextEdit::singleline(&mut self.password)
                             .password(true),
                     );
+                    if !self.not_first_frame { response.request_focus() }
+                    self.not_first_frame = true;
                     ui.label("recheck master password");
                     ui.add(
                         egui::TextEdit::singleline(

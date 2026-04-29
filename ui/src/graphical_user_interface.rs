@@ -96,6 +96,7 @@ struct StringValues {
 pub struct GraphicalUserInterface {
     login: bool,
     loading: bool,
+    not_first_frame: bool,
     string_values: StringValues,
     window_open_list: WindowOpenList,
     data_base: DB,
@@ -254,9 +255,13 @@ impl GraphicalUserInterface {
                 }
             });
             ui.label("search");
-            ui.add(egui::TextEdit::singleline(
+            let response = ui.add(egui::TextEdit::singleline(
                 &mut self.string_values.search_data_base,
             ));
+
+            if !self.not_first_frame { response.request_focus() }
+
+            self.not_first_frame = true;
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for (site_name, _) in
