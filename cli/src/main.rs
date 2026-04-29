@@ -86,8 +86,8 @@ fn main() {
                 let mut buf = [u8::default()];
                 io::stdin().read_exact(&mut buf).unwrap();
                 if buf[0] == 'C' as u8 || buf[0] == 'c' as u8 {
-                    pub_key.zeroize();
-                    wrapped_user_key.zeroize();
+                    drop(pub_key);
+                    drop(wrapped_user_key);
                     exit(0);
                 }
                 continue;
@@ -100,8 +100,8 @@ fn main() {
                 let mut buf = [u8::default()];
                 io::stdin().read_exact(&mut buf).unwrap();
                 if buf[0] == 'C' as u8 || buf[0] == 'c' as u8 {
-                    pub_key.zeroize();
-                    wrapped_user_key.zeroize();
+                    drop(pub_key);
+                    drop(wrapped_user_key);
                     exit(0);
                 }
                 continue;
@@ -132,8 +132,8 @@ fn main() {
                 Ok(v) => v,
                 Err(e) => {
                     println!("Error decrypting db: {}", e);
-                    pub_key.zeroize();
-                    wrapped_user_key.zeroize();
+                    drop(pub_key);
+                    drop(wrapped_user_key);
                     continue;
                 }
             };
@@ -309,8 +309,8 @@ fn main() {
                     // } else {
                     //     mark_as_graceful_exited_to_file().ok();
                     // }
-                    wrapped_user_key.zeroize();
-                    pub_key.zeroize();
+                    drop(wrapped_user_key);
+                    drop(pub_key);
                     drop(db);
                     exit(0);
                 }
@@ -318,8 +318,8 @@ fn main() {
                     // if !should_save_db {
                     mark_as_graceful_exited_to_file().ok();
                     // }
-                    wrapped_user_key.zeroize();
-                    pub_key.zeroize();
+                    drop(wrapped_user_key);
+                    drop(pub_key);
                     drop(db);
                     exit(0);
                 }

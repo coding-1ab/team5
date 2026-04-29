@@ -1,24 +1,18 @@
-use crate::master_secrets::static_type_zeroize;
-use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
-use sha3::{Digest};
-use std::cell::RefCell;
-use crossbeam_utils::atomic::AtomicCell;
 use crate::data_base::{DBIOError, SiteName, UserID, UserPW};
-use crate::manual_zeroize;
+
+use crate::master_secrets::static_type_zeroize;
 use argon2::{Argon2, Params};
-use std::{hint, process};
-use rand::rngs::OsRng;
-use sysinfo::{CpuExt, Pid, PidExt, ProcessExt, System, SystemExt};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
-use rkyv::{Archive, Archived, Deserialize, Place, Serialize};
-use rkyv::rancor::Fallible;
-use rkyv::vec::{ArchivedVec, VecResolver};
-use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
-use sha3::digest::generic_array::GenericArray;
-use sha3::Sha3_256;
 use libsodium_sys::rust_wrappings::aes256gcm::{aes256gcm_decrypt, aes256gcm_decrypt_from_ptr, aes256gcm_encrypt, aes256gcm_encrypt_from_ptr_to_sodium_box, get_aes256gcm_ciphertext_len, AesKey, AesNonce, AES_KEY_SIZE, AES_NONCE_SIZE};
 use libsodium_sys::rust_wrappings::hasher::Sha256;
 use libsodium_sys::rust_wrappings::sodium_box::SodiumBox;
+use rkyv::rancor::Fallible;
+use rkyv::vec::{ArchivedVec, VecResolver};
+use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
+use rkyv::{Archive, Archived, Deserialize, Place, Serialize};
+use secrecy::{ExposeSecret, SecretBox};
+use std::{hint, process};
+use sysinfo::{CpuExt, Pid, PidExt, ProcessExt, System, SystemExt};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 struct SecretBoxRef;
 
@@ -92,7 +86,7 @@ pub struct EncryptedUserPW (
     SecretBox<[u8]>,
 );
 impl EncryptedUserPW {
-    pub fn from_vec(mut v: Vec<u8>) -> Self {
+    pub fn from_vec(v: Vec<u8>) -> Self {
         let secret_boxed = SecretBox::from(Box::from(v));
         EncryptedUserPW(secret_boxed)
     }
@@ -175,11 +169,6 @@ impl AsRef<AesNonce> for SessionKeyNonce {
         &self.inner
     }
 }
-impl Zeroize for SessionKeyNonce {
-    fn zeroize(&mut self) {
-        self.inner.zeroize()
-    }
-}
 
 const SESSION_KEY_WRAPPER_SIZE: usize = AES_KEY_SIZE;
 pub struct SessionKeyWrapper {
@@ -223,11 +212,6 @@ impl WrappedSessionKey {
         self.inner.as_ptr()
     }
 }
-impl Zeroize for WrappedSessionKey {
-    fn zeroize(&mut self) {
-        self.inner.zeroize()
-    }
-}
 
 pub const SESSION_KEY_SIZE: usize = 32;
 pub struct SessionKey {
@@ -267,7 +251,7 @@ impl Default for SessionKey {
 
 
 pub fn get_session_key_wrapper() -> SessionKeyWrapper {
-    let mut hasher: Sha256 = Sha256::new();;
+    let mut hasher: Sha256 = Sha256::new();
     hasher.update(&[248, 106, 27, 141, 130, 70, 18, 189, 65, 15, 132, 220, 144, 144, 143, 196, 57, 128, 134, 145, 197, 235, 192, 209, 150, 152, 201, 113, 12, 189, 100, 93, 92, 69, 244, 146, 157, 57, 131, 56, 143, 160, 17, 233, 114, 23, 32, 13, 68, 9, 116, 95, 26, 104, 73, 81, 7, 7, 103, 206, 63, 251, 161, 223, 226, 125, 184, 225, 6, 164, 65, 13]);
     let mut sys = System::new();
     sys.refresh_all();
@@ -286,7 +270,7 @@ pub fn get_session_key_wrapper() -> SessionKeyWrapper {
     let mut start_time = sys.process(s_pid)
         .map(|p| p.start_time()).unwrap();
     combined_pids.zeroize();
-    manual_zeroize!(s_pid);
+    static_type_zeroize(&mut s_pid);
     hasher.update(&start_time.to_ne_bytes());
     start_time.zeroize();
 

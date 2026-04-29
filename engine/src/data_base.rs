@@ -1,11 +1,11 @@
-use crate::user_secrets::{EncryptedUserPW, WrappedSessionKey, decrypt_user_pw, encrypt_user_pw, SessionKey, SessionKeyNonce};
+use std::arch::x86_64::_mm_clflush;
+use crate::user_secrets::{EncryptedUserPW, WrappedSessionKey, decrypt_user_pw, encrypt_user_pw, SessionKeyNonce};
 use std::collections::{BTreeMap, HashMap};
 use rkyv::{Archive, Deserialize, Serialize};
 use std::error::Error;
 use std::str::FromStr;
 
 #[derive(
-    Zeroize, ZeroizeOnDrop,
     Archive, Serialize, Deserialize,
     PartialEq, Eq, Debug, Ord, PartialOrd, Clone
 )]
@@ -30,13 +30,17 @@ impl UserPW {
     pub fn from_unchecked(input: String) -> Self {
         Self {0: input}
     }
-    pub fn void() -> Self {
-        Self { 0: String::new() }
-    }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
+impl Zeroize for UserPW {
+    fn zeroize(&mut self) {
+        unsafe { _mm_clflush(self.0.as_mut_ptr()) }
+        self.0.zeroize();
+    }
+}
+impl ZeroizeOnDrop for UserPW {}
 impl FromStr for UserPW {
     type Err = UserPWError;
     fn from_str(s: &str) -> Result<Self, UserPWError> { Ok(UserPW::new(s)?) }
@@ -55,7 +59,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // const MAX_USER_ID_LEN: usize = 32;
 #[derive(
-    Zeroize, ZeroizeOnDrop,
     Archive, Serialize, Deserialize,
     PartialEq, Eq, Debug, Ord, PartialOrd,
 )]
@@ -88,6 +91,13 @@ impl UserID {
         self.0.as_str()
     }
 }
+impl Zeroize for UserID {
+    fn zeroize(&mut self) {
+        unsafe { _mm_clflush(self.0.as_mut_ptr()) }
+        self.0.zeroize();
+    }
+}
+impl ZeroizeOnDrop for UserID {}
 impl FromStr for UserID {
     type Err = UserIDError;
     fn from_str(s: &str) -> Result<Self, UserIDError> { Ok(UserID::new(s)?) }
@@ -106,7 +116,7 @@ use std::borrow::Borrow;
 use std::cmp::Ordering;
 use url::Url;
 
-#[derive(Zeroize, ZeroizeOnDrop, Archive, Serialize, Deserialize, Debug, Clone, )]
+#[derive(Archive, Serialize, Deserialize, Debug, Clone, )]
 #[rkyv(derive(PartialEq, Eq, PartialOrd, Ord))]
 pub struct SiteName {
     pub(crate) full: String,
@@ -195,6 +205,15 @@ impl Borrow<str> for SiteName {
         &self.reg
     }
 }
+impl Zeroize for SiteName {
+    fn zeroize(&mut self) {
+        unsafe { _mm_clflush(self.full.as_mut_ptr()) }
+        self.full.zeroize();
+        unsafe { _mm_clflush(self.reg.as_mut_ptr()) }
+        self.reg.zeroize();
+    }
+}
+impl ZeroizeOnDrop for SiteName {}
 impl FromStr for SiteName {
     type Err = SiteNameError;
     fn from_str(s: &str) -> Result<Self, SiteNameError> { Ok(SiteName::new(s)?) }

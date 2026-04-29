@@ -343,6 +343,31 @@ fn build_source_install() -> Result<(PathBuf, PathBuf), String>
     Ok((lib_dir, include_dir))
 }
 
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String>
+{
+    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+
+    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())?
+    {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if file_type.is_dir()
+        {
+            copy_dir_all(&src_path, &dst_path)?;
+        }
+        else
+        {
+            std::fs::copy(&src_path, &dst_path).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
 fn main()
 {
     println!("cargo:rerun-if-env-changed=SODIUM_DIST_DIR");
@@ -420,29 +445,4 @@ fn main()
     }
 
     println!("cargo:include={}", include_dir.display());
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String>
-{
-    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
-
-    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())?
-    {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let file_type = entry.file_type().map_err(|e| e.to_string())?;
-
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-
-        if file_type.is_dir()
-        {
-            copy_dir_all(&src_path, &dst_path)?;
-        }
-        else
-        {
-            std::fs::copy(&src_path, &dst_path).map_err(|e| e.to_string())?;
-        }
-    }
-
-    Ok(())
 }

@@ -1,10 +1,7 @@
 use crate::rust_wrappings::aes256gcm::{AesKey, AES_KEY_SIZE};
 use crate::rust_wrappings::hasher::Blake2b;
 use crate::rust_wrappings::sodium_box::SodiumBox;
-use crate::sodium_bindings::{
-    crypto_scalarmult, crypto_scalarmult_curve25519_base, randombytes_buf,
-};
-use zeroize::Zeroize;
+use crate::sodium_bindings::{crypto_scalarmult, crypto_scalarmult_curve25519_base, randombytes_buf};
 
 pub const ECIES_PK_SIZE: usize = 65;
 #[repr(C)]
@@ -18,7 +15,7 @@ impl PubKey {
 
         let rc = unsafe { crypto_scalarmult_curve25519_base(pk.as_mut_ptr(), sk.as_ptr()) };
         assert_eq!(rc, 0);
-
+        
         PubKey { inner: pk }
     }
     pub fn from_raw(src: *const u8) -> Self {
@@ -31,9 +28,6 @@ impl PubKey {
     }
     pub fn copy_to(&self, dst: *mut u8) {
         self.inner.copy_to(dst);
-    }
-    pub fn zeroize(&mut self) {
-        self.inner.zeroize();
     }
 }
 
@@ -62,7 +56,6 @@ impl SecKey {
         self.inner.as_ptr()
     }
     pub fn zeroize(&mut self) {
-        self.inner.zeroize()
     }
     pub fn copy_to(&self, ptr: *mut u8) {
         self.inner.copy_to(ptr)
@@ -88,21 +81,16 @@ impl SharedSecret {
     fn as_ptr(&self) -> *const u8 {
         self.inner.as_ptr()
     }
-    pub fn zeroize(&mut self) {
-        self.inner.zeroize()
-    }
 }
 pub fn shared_secret_to_aes_key(shared: &SharedSecret) -> AesKey {
-    unsafe {
-        let halo = &[
-            95u8, 213, 252, 194, 137, 54, 67, 46, 29, 206, 72, 249, 3, 152, 242, 90, 219, 64, 130,
-            21, 7, 96, 24, 187, 85, 69, 81, 233, 218, 40, 105, 233,
-        ];
-        let mut hasher = Blake2b::<{ AES_KEY_SIZE }>::new();
-        hasher.update(halo);
-        hasher.update_from_ptr(shared.as_ptr(), ECIES_SHARED_SECRET_SIZE);
-        let mut boxed = SodiumBox::new_with_size(AES_KEY_SIZE);
-        hasher.finalize_write_to(boxed.as_mut_ptr());
-        AesKey::from_sodium_box(boxed)
-    }
+    let halo = &[
+        95u8, 213, 252, 194, 137, 54, 67, 46, 29, 206, 72, 249, 3, 152, 242, 90, 219, 64, 130,
+        21, 7, 96, 24, 187, 85, 69, 81, 233, 218, 40, 105, 233,
+    ];
+    let mut hasher = Blake2b::<{ AES_KEY_SIZE }>::new();
+    hasher.update(halo);
+    hasher.update_from_ptr(shared.as_ptr(), ECIES_SHARED_SECRET_SIZE);
+    let mut boxed = SodiumBox::new_with_size(AES_KEY_SIZE);
+    hasher.finalize_write_to(boxed.as_mut_ptr());
+    AesKey::from_sodium_box(boxed)
 }

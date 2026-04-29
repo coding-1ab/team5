@@ -6,7 +6,6 @@ use crate::sodium_bindings::{
 };
 use core::ptr::null;
 use libc::c_ulonglong;
-use zeroize::Zeroize;
 
 /// blake2b
 pub const BLAKE2B_BLOCK_SIZE: usize = 128;
@@ -44,7 +43,7 @@ impl<const out_len: usize> Blake2b<out_len> {
             crypto_generichash_blake2b_update(self.begin, data, len as c_ulonglong);
         }
     }
-    pub fn finalize_write_to(mut self, dst: *mut u8) {
+    pub fn finalize_write_to(self, dst: *mut u8) {
         unsafe {
             crypto_generichash_blake2b_final(self.begin, dst, out_len);
         }
@@ -91,8 +90,5 @@ impl Sha256 {
         unsafe {
             crypto_hash_sha256_final(self.inner.as_mut_ptr(), dst);
         }
-    }
-    pub fn zeroize(&mut self) {
-        self.inner.zeroize();
     }
 }

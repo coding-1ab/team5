@@ -1,15 +1,17 @@
-use crate::sodium_bindings::{sodium_free, sodium_malloc, sodium_memzero};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem;
+use crate::sodium_bindings::{sodium_free, sodium_malloc,};
+use core::{mem};
+use core::arch::x86_64::_mm_clflush;
 use core::ptr::copy_nonoverlapping;
+use core::sync::atomic::{fence, Ordering};
 use secrecy::SecretBox;
 use zeroize::Zeroize;
 
 #[derive(Debug)]
 pub struct SodiumBox<T> {
     ptr: *mut T,
-    len: usize, // It's Counts T, No Byte
+    len: usize, // It's Counts T, Not Byte
 }
 impl<T> SodiumBox<T> {
     pub fn len(&self) -> usize {
@@ -53,7 +55,7 @@ impl<T> SodiumBox<T> {
         let mut len = self.len;
         let _ = mem::ManuallyDrop::new(self);
         const { assert!(size_of::<T>() % size_of::<U>() == 0) }
-        len *= (size_of::<T>() / size_of::<U>());
+        len *= size_of::<T>() / size_of::<U>();
         SodiumBox::<U> { ptr, len } // todo!
     }
 }
@@ -78,17 +80,19 @@ impl<T> Into<Vec<T>> for SodiumBox<T> where [T]: Zeroize,
         v
     }
 }
-impl<T> Zeroize for SodiumBox<T> {
-    fn zeroize(&mut self) {
-        unsafe {
-            sodium_memzero(self.ptr.cast(), self.len * size_of::<T>());
-        }
-    }
-}
 impl<T> Drop for SodiumBox<T> {
     fn drop(&mut self) {
         unsafe {
+            let mut curr = self.ptr as usize;
+            let end = curr + self.len * size_of::<T>();
+            while curr < end {
+                _mm_clflush(curr as *const u8);
+                curr += 64;
+            }
+
             sodium_free(self.ptr.cast());
+            
+            fence(Ordering::SeqCst);
         }
     }
 }

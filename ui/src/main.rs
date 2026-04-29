@@ -1,4 +1,4 @@
-#![deny(unused_mut)]
+//#![deny(unused_mut)]
 #![deny(unused_crate_dependencies)]
 //#![deny(deprecated)]
 #![deny(clippy::cognitive_complexity)]
@@ -6,21 +6,19 @@
 #![deny(clippy::too_many_lines)]
 #![warn(unused)]
 
-use ::image::open;
-use std::ffi::c_void;
-use std::path::Path;
+use eframe::egui::{IconData, ViewportCommand};
+use eframe::wgpu::rwh::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle};
 use eframe::{
-    CreationContext,
     egui,
     egui::FontData,
+    egui::ViewportBuilder,
     epaint::text::{FontInsert, FontPriority, InsertFontFamily},
-    egui::ViewportBuilder
+    CreationContext
 };
-use eframe::egui::{IconData, ImageData, ViewportCommand};
-use eframe::wgpu::rwh::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle};
-use single_instance::SingleInstance;
-use libsodium_sys::rust_wrappings::init::sodium_init;
 use graphical_user_interface::GraphicalUserInterface;
+use libsodium_sys::rust_wrappings::init::sodium_init;
+use single_instance::SingleInstance;
+use std::ffi::c_void;
 
 mod command_builder;
 mod graphical_user_interface;
@@ -36,7 +34,8 @@ fn main() {
     let options = eframe::NativeOptions {
         centered: true,
         viewport: ViewportBuilder::default()
-            .with_visible(false).with_resizable(false)
+            .with_visible(false)
+            .with_resizable(false)
             .with_icon(load_icon()),
         ..eframe::NativeOptions::default()
     };
@@ -55,8 +54,7 @@ fn main() {
             init_fonts(cc);
             Ok(Box::new(graphical_user_interface))
         })
-    );
-    dbg!(result);
+    ).unwrap();
 }
 
 fn load_icon() -> IconData {
@@ -85,10 +83,10 @@ fn init_fonts(cc: &CreationContext) {
 
 #[cfg(target_os = "windows")]
 use windows::Win32::{
-    Foundation::{HWND, RECT},
-    UI::WindowsAndMessaging::{GetWindowRect},
+    Foundation::HWND
+    ,
     Graphics::Gdi::{
-        MonitorFromWindow, GetMonitorInfoW, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     },
 };
 

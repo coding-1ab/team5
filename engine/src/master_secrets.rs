@@ -3,26 +3,24 @@ use crate::header::Salt;
 use crate::user_secrets::{
     SESSION_KEY_SIZE, SessionKey, SessionKeyNonce, WrappedSessionKey, wrap_session_key,
 };
-use crate::{manual_zeroize, user_secrets};
 use argon2::password_hash::rand_core;
 use argon2::{Argon2, Params};
-use libsodium_sys as sodium;
-use libsodium_sys::rust_wrappings::aes256gcm::{AES_NONCE_SIZE, AesNonce, aes256gcm_decrypt, aes256gcm_encrypt_to_slice, get_aes256gcm_ciphertext_len};
+use libsodium_sys::rust_wrappings::aes256gcm::{AES_NONCE_SIZE, AesNonce, get_aes256gcm_ciphertext_len, get_aes256gcm_plaintext_len, aes256gcm_decrypt_write_to_ptr, aes256gcm_encrypt_write_to_ptr};
 use libsodium_sys::rust_wrappings::init::sodium_init;
-use libsodium_sys::rust_wrappings::x25519::{
-    ECIES_PK_SIZE, ECIES_SK_SIZE, PubKey, SecKey, SharedSecret, shared_secret_to_aes_key,
-};
-use libsodium_sys::*;
+use libsodium_sys::rust_wrappings::x25519::*;
 use rand_core::OsRng;
 use rand_core::RngCore;
 use rkyv::rancor::Error;
-use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
 use std::error::Error as StdError;
-use std::ffi::c_uchar;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ptr::{addr_of, addr_of_mut};
-use std::{hint, ptr, slice};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use std::{hint, ptr};
+use std::alloc::GlobalAlloc;
+use std::arch::x86_64::_mm_clflush;
+use rkyv::util::AlignedVec;
+use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox};
+use zeroize::{Zeroize};
+use libsodium_sys::rust_wrappings::sodium_box::SodiumBox;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MasterPWError {
@@ -90,7 +88,7 @@ fn master_pw_kdf(master_pw: &str, salt: &Salt) -> SecKey {
         .hash_password_into(master_pw.as_bytes(), salt, kdf_out.as_mut())
         .unwrap();
     let sec_key = SecKey::from_raw(kdf_out.as_ptr());
-    kdf_out.zeroize();
+    manual_zeroize(&mut kdf_out);
     sec_key
 }
 
@@ -122,9 +120,9 @@ fn get_wrapped_session_key(sec_key: &SecKey) -> (WrappedSessionKey, SessionKeyNo
             rust_owned_sess_key.as_mut_slice(),
         )
         .unwrap();
-    rust_owned_sec_key.zeroize();
+    manual_zeroize(&mut rust_owned_sec_key);
     let session_key = SessionKey::from_raw(rust_owned_sess_key.as_ptr());
-    rust_owned_sess_key.zeroize();
+    manual_zeroize(&mut rust_owned_sess_key);
 
     wrap_session_key(session_key)
 }
@@ -134,7 +132,7 @@ pub fn general_login(
     salt: &Salt,
 ) -> (SecKey, PubKey, WrappedSessionKey, SessionKeyNonce) {
     let sec_key = master_pw_kdf(master_pw, salt);
-    master_pw.zeroize();
+    manual_zeroize(master_pw);
     let pub_key = PubKey::from_sec_key(&sec_key);
     let (wrapped_session_key, session_key_nonce) = get_wrapped_session_key(&sec_key);
 
@@ -145,7 +143,7 @@ pub fn first_login(master_pw: &mut String) -> (PubKey, Salt, WrappedSessionKey, 
     OsRng.fill_bytes(salt.as_mut_slice());
     let sec_key = master_pw_kdf(master_pw.trim(), &salt);
 
-    master_pw.zeroize();
+    manual_zeroize(master_pw);
 
     let pub_key = PubKey::from_sec_key(&sec_key);
     let (wrapped_session_key, session_key_nonce) = get_wrapped_session_key(&sec_key);
@@ -163,9 +161,9 @@ pub fn change_master_pw(
     OsRng.fill_bytes(salt.as_mut_slice());
     let sec_key = master_pw_kdf(new_master_pw.trim(), &salt);
 
-    new_master_pw.zeroize();
+    manual_zeroize(new_master_pw);
 
-    let mut pub_key = PubKey::from_sec_key(&sec_key);
+    let pub_key = PubKey::from_sec_key(&sec_key);
     let (new_wrapped_user_key, new_user_key_nonce) = get_wrapped_session_key(&sec_key);
     drop(sec_key);
 
@@ -183,8 +181,7 @@ pub fn change_master_pw(
             &user.1,
             &wrapped_session_key,
             &session_key_nonce,
-        )
-        .unwrap();
+        )?;
 
         change_user_pw(
             &mut *db,
@@ -196,26 +193,23 @@ pub fn change_master_pw(
         )?;
     }
 
-    wrapped_session_key.zeroize();
     *wrapped_session_key = new_wrapped_user_key;
-    session_key_nonce.zeroize();
     *session_key_nonce = new_user_key_nonce;
-    Ok((pub_key, salt))
+    Ok( (pub_key, salt) )
 }
 
 thread_local! {
     static __SODIUM_INIT: () = sodium_init().unwrap();
 }
 
-const AES_NONCE_BEGIN: usize = ECIES_PK_SIZE;
+const AES_PK_BEGIN: usize = 0;
+const AES_NONCE_BEGIN: usize = AES_PK_BEGIN + ECIES_PK_SIZE;
 const AES_NONCE_END: usize = AES_NONCE_BEGIN + AES_NONCE_SIZE;
 const CIPHERTEXT_BEGIN: usize = AES_NONCE_END.next_power_of_two();
 
 pub type EncryptedDB = Vec<u8>;
 
 pub fn encrypt_db(db: &DB, pk: &PubKey) -> EncryptedDB {
-    let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
-
     let peer_sk = SecKey::gen_rand();
     let shared = SharedSecret::from_sk_pk(&peer_sk, &pk);
     let once_aes_key = shared_secret_to_aes_key(&shared);
@@ -224,17 +218,19 @@ pub fn encrypt_db(db: &DB, pk: &PubKey) -> EncryptedDB {
     drop(peer_sk);
     let nonce = AesNonce::gen_rand();
 
+    let mut serialized = rkyv::to_bytes::<Error>(db).unwrap();
     let len = CIPHERTEXT_BEGIN + get_aes256gcm_ciphertext_len(serialized.len());
-    let mut result = Vec::with_capacity(len);
-    unsafe { result.set_len(len) }
-    aes256gcm_encrypt_to_slice(
+
+    let mut result = vec![Default::default(); len];
+    aes256gcm_encrypt_write_to_ptr(
         &once_aes_key,
         &nonce,
         &serialized,
-        &mut result[CIPHERTEXT_BEGIN..],
+        addr_of_mut!(result[CIPHERTEXT_BEGIN]),
     );
-    serialized.zeroize();
-    peer_pk.copy_to(addr_of_mut!(result[0]));
+    manual_zeroize(&mut serialized);
+
+    peer_pk.copy_to(addr_of_mut!(result[AES_PK_BEGIN]));
     nonce.copy_to(addr_of_mut!(result[AES_NONCE_BEGIN]));
 
     result
@@ -250,29 +246,68 @@ pub fn decrypt_db(bytes: &Vec<u8>, sk: SecKey) -> Result<DB, MasterPWError> {
     let once_aes_key = shared_secret_to_aes_key(&shared);
     drop(shared);
 
-    let mut plaintext = aes256gcm_decrypt(&once_aes_key, &nonce, &ciphertext)
+    let plaintext_len = get_aes256gcm_plaintext_len(ciphertext.len());
+    let mut plaintext = vec![Default::default(); plaintext_len];
+    aes256gcm_decrypt_write_to_ptr(&once_aes_key, &nonce, &ciphertext, plaintext.as_mut_ptr())
         .map_err(|_| MasterPWError::IncorrectPW)?;
     drop(once_aes_key);
-    let mut rust_owned_buf = Vec::with_capacity(plaintext.len());
-    unsafe {
-        rust_owned_buf.set_len(plaintext.len());
-    }
-    plaintext.copy_to(rust_owned_buf.as_mut_ptr());
-    plaintext.zeroize();
 
-    let db = rkyv::from_bytes::<DB, Error>(&rust_owned_buf).unwrap();
-    rust_owned_buf.zeroize();
-
+    let db = rkyv::from_bytes::<DB, Error>(&plaintext).unwrap();
+    manual_zeroize(&mut plaintext);
     Ok(db)
 }
 
-#[macro_export]
-macro_rules! manual_zeroize {
-    ($($var:expr),+ $(,)?) => {
-        $(
-            static_type_zeroize(&mut $var);
-        )+
-    };
+// #[macro_export]
+// macro_rules! manual_zeroize {
+//     ($($var:expr),+ $(,)?) => {
+//         $(
+//             static_type_zeroize(&mut $var);
+//         )+
+//     };
+// }
+
+#[inline(always)]
+fn make_safety_array<const N: usize>() -> [u8; N] {
+    let mut arr = [0u8; N];
+    hint::black_box(arr.as_mut_ptr());
+    //todo
+    arr
+}
+
+trait ArrLike {
+    fn as_mut_ptr(&mut self) -> *mut u8;
+    fn len(&self) -> usize;
+    fn zeroize(&mut self);
+}
+impl<const N: usize> ArrLike for [u8; N] {
+    fn as_mut_ptr(&mut self) -> *mut u8 { addr_of_mut!(self[0]) }
+    fn len(&self) -> usize { N }
+    fn zeroize(&mut self) { Zeroize::zeroize(self); }
+}
+impl ArrLike for Vec<u8> {
+    fn as_mut_ptr(&mut self) -> *mut u8 { self.as_mut_ptr() }
+    fn len(&self) -> usize { self.len() }
+    fn zeroize(&mut self) { Zeroize::zeroize(self) }
+}
+impl ArrLike for AlignedVec<16> {
+    fn as_mut_ptr(&mut self) -> *mut u8 { self.as_mut_ptr() }
+    fn len(&self) -> usize { self.len() }
+    fn zeroize(&mut self) { Zeroize::zeroize(self.as_mut_slice()); }
+}
+impl ArrLike for String {
+    fn as_mut_ptr(&mut self) -> *mut u8 { self.as_mut().as_mut_ptr() }
+    fn len(&self) -> usize { self.len() }
+    fn zeroize(&mut self) { Zeroize::zeroize(self) }
+}
+impl ArrLike for SecretBox<[u8]> {
+    fn as_mut_ptr(&mut self) -> *mut u8 { self.expose_secret_mut().as_mut_ptr() }
+    fn len(&self) -> usize { self.expose_secret().len() }
+    fn zeroize(&mut self) { Zeroize::zeroize(self) }
+}
+
+pub fn manual_zeroize<T: ArrLike>(data: &mut T) {
+    flush_cache_line(data.as_mut_ptr(), data.len());
+    data.zeroize();
 }
 
 pub fn static_type_zeroize<T>(data: &mut T) {
@@ -283,4 +318,22 @@ pub fn static_type_zeroize<T>(data: &mut T) {
             ptr::write_volatile(ptr.add(i), 0);
         }
     }
+}
+
+pub fn flush_cache_line<T>(ptr: *mut T, len: usize) {
+    let ptr_cast = ptr as *mut u8;
+    let len_bytes = len * size_of::<T>() / 8;
+
+    let mut p_cache_line = ptr_cast;
+    loop {
+        unsafe {
+            _mm_clflush(p_cache_line);
+
+            if p_cache_line < ptr_cast.add(len_bytes) {
+                p_cache_line = p_cache_line.add(64);
+            } else {
+                break;
+            }
+        }
+    };
 }

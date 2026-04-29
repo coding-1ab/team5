@@ -1611,7 +1611,7 @@ pub trait NetworksExt: Debug {
     ///     println!("in: {} B", network.received());
     /// }
     /// ```
-    fn iter(&self) -> NetworksIter;
+    fn iter(&'_ self) -> NetworksIter<'_>;
 
     /// Refreshes the network interfaces list.
     ///
