@@ -305,21 +305,10 @@ impl ArrLike for SecretBox<[u8]> {
     fn len(&self) -> usize { self.expose_secret().len() }
     fn zeroize(&mut self) { Zeroize::zeroize(self) }
 }
-
 pub fn manual_zeroize<T: ArrLike>(data: &mut T) {
     flush_cache_line(data.as_mut_ptr(), data.len());
     fence(Ordering::SeqCst);
     data.zeroize();
-}
-
-pub fn static_type_zeroize<T>(data: &mut T) {
-    let size = std::mem::size_of::<T>();
-    let ptr = data as *mut T as *mut u8;
-    unsafe {
-        for i in 0..size {
-            ptr::write_volatile(ptr.add(i), 0);
-        }
-    }
 }
 
 pub fn flush_cache_line<T>(ptr: *mut T, len: usize) {
@@ -338,4 +327,14 @@ pub fn flush_cache_line<T>(ptr: *mut T, len: usize) {
             }
         }
     };
+}
+
+pub fn static_type_zeroize<T>(data: &mut T) {
+    let size = std::mem::size_of::<T>();
+    let ptr = data as *mut T as *mut u8;
+    unsafe {
+        for i in 0..size {
+            ptr::write_volatile(ptr.add(i), 0);
+        }
+    }
 }
