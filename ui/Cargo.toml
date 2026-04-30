@@ -13,4 +13,4 @@ libsodium-sys-stable = { path = "../engine/fork/libsodium-sys-stable-1.23.2-fork
 image = "*"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2" }
+windows = { version = "0.62.0" }
