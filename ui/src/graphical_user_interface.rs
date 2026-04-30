@@ -171,7 +171,10 @@ impl GraphicalUserInterface {
                     ViewportBuilder::default()
                         .with_title("error")
                         .with_always_on_top()
-                        .with_inner_size([350.0, 25.0]),
+                        .with_inner_size([350.0, 25.0])
+                        .with_resizable(false)
+                        .with_maximized(false)
+                        .with_minimize_button(false),
                     |ui, _| {
                         if ui.input(|input_state| input_state.viewport().close_requested()) {
                             exit_root(ui, &mut self.window_open_list.root);

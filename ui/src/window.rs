@@ -1,16 +1,6 @@
 use std::fs;
 use anyhow::{anyhow, Error};
-use eframe::egui::{
-    self,
-    ViewportBuilder,
-    ViewportCommand,
-    ViewportId,
-    Key,
-    Pos2,
-    TextEdit,
-    Ui,
-    Vec2
-};
+use eframe::egui::{self, ViewportBuilder, ViewportCommand, ViewportId, Key, Pos2, TextEdit, Ui, Vec2, vec2, pos2};
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
@@ -60,8 +50,11 @@ impl ExistingUser {
 
         let size = [300.0, 175.0];
 
-        let mut viewport_builder = ViewportBuilder::default().with_title("마스터 로그인")
-            .with_inner_size(size).with_resizable(false);
+        let mut viewport_builder = ViewportBuilder::default()
+            .with_title("마스터 로그인")
+            .with_inner_size(size)
+            .with_resizable(false)
+            .with_maximize_button(false);
 
         #[cfg(target_os = "windows")]
         {
@@ -171,8 +164,10 @@ impl FirstLogin {
 
         let size = [300.0, 175.0];
 
-        let mut viewport_builder = ViewportBuilder::default().with_title("첫 마스터 로그인")
-            .with_inner_size(size).with_resizable(false);
+        let mut viewport_builder = ViewportBuilder::default()
+            .with_title("첫 마스터 로그인")
+            .with_inner_size(size).with_resizable(false)
+            .with_maximize_button(false);
 
         #[cfg(target_os = "windows")]
         {
@@ -271,9 +266,23 @@ impl Reset {
     pub fn display(&mut self, ui: &Ui) -> bool {
         let mut keep = true;
 
-        egui::Window::new("reset").resizable([false, false]).interactable(false).title_bar(false).show(ui, |ui| {
+        egui::Window::new("reset")
+            .resizable([false, false])
+            .collapsible(false)
+            .interactable(false)
+            .title_bar(false)
+            .fixed_pos(pos2(0.0, 10.0))
+            .fixed_size(vec2(300.0, 100.0))
+            .frame(egui::Frame {
+                fill: ui.style().visuals.window_fill(),
+                shadow: egui::epaint::Shadow::NONE,
+                stroke: egui::epaint::Stroke::NONE,
+                ..Default::default()
+            })
+            .show(ui, |ui| {
             egui::CentralPanel::default().show_inside(ui, |ui| {
-                ui.label("리셋하겠습니까? 복구할 수 없습니다.");
+                ui.label("DB를 초기화하시겠습니까? 복구할 수 없습니다.");
+                ui.label("");
                 ui.horizontal(|ui| {
                     if ui.button("submit").clicked() {
                         match fs::remove_file(DB_FILE)
@@ -309,8 +318,13 @@ impl RootSave {
 
         let size = [250.0, 50.0];
 
-        let mut viewport_builder = ViewportBuilder::default().with_title("close")
-            .with_inner_size(size).with_resizable(false);
+        let mut viewport_builder = ViewportBuilder::default()
+            .with_title("close")
+            .with_always_on_top()
+            .with_inner_size(size)
+            .with_resizable(false)
+            .with_maximize_button(false)
+            .with_minimize_button(false);
 
         #[cfg(target_os = "windows")]
         {
