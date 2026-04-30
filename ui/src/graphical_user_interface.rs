@@ -109,7 +109,7 @@ pub struct GraphicalUserInterface {
 }
 
 impl GraphicalUserInterface {
-    fn login(&mut self, ui: &Ui) {
+    fn login(&mut self, ui: &mut Ui) {
         match load_db() {
             Ok((user_warning, data_base_header, encrypted_data_base)) => {
                 self.data_base_header = data_base_header;

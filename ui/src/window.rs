@@ -34,7 +34,7 @@ pub struct ExistingUser {
 impl ExistingUser {
     pub fn display(
         &mut self,
-        ui: &Ui,
+        ui: &mut Ui,
         encrypted_data_base: &EncryptedDB,
         root_window: &mut Option<RootSave>,
         master_password_salt: &Salt,
@@ -71,15 +71,17 @@ impl ExistingUser {
                     exit_root(ui, root_window);
                 }
                 egui::CentralPanel::default().show_inside(ui, |ui| {
-                    ui.label("input master password");
-                    let response = ui.add(
-                        TextEdit::singleline(&mut self.password)
-                            .password(true),
-                    );
-                    if !self.not_first_frame { response.request_focus() }
-                    self.not_first_frame = true;
-                    ui.label(&self.error_message);
-                    let login_button = ui.button("login");
+                    let login_button = ui.add_enabled_ui(!self.reset.is_some(), |ui| {
+                        ui.label("input master password");
+                        let response = ui.add(
+                            TextEdit::singleline(&mut self.password)
+                                .password(true),
+                        );
+                        if !self.not_first_frame { response.request_focus() }
+                        self.not_first_frame = true;
+                        ui.label(&self.error_message);
+                        ui.button("login")
+                    }).inner;
                     if self.loading {
                         self.loading = false;
 
@@ -113,9 +115,11 @@ impl ExistingUser {
                             }
                         }
                     }
-                    if ui.button("reset").clicked() {
-                        self.reset = Some(Reset::default());
-                    }
+                    ui.add_enabled_ui(!self.reset.is_some(), |ui| {
+                        if ui.button("reset").clicked() {
+                            self.reset = Some(Reset::default());
+                        }
+                    });
                     if let Some(reset) = &mut self.reset {
                         if !reset.display(ui) {
                             self.reset = None;
