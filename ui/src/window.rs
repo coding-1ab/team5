@@ -11,6 +11,7 @@ use engine::{
     file_io::mark_as_graceful_exited_to_file,
     master_secrets::{change_master_pw, first_login}
 };
+use engine::file_io::remove_db;
 use crate::{
     command_builder::CommandBuilder,
     graphical_user_interface::KeyPair
@@ -289,8 +290,7 @@ impl Reset {
                 ui.label("");
                 ui.horizontal(|ui| {
                     if ui.button("submit").clicked() {
-                        match fs::remove_file(DB_FILE)
-                            .and_then(|_| fs::remove_file(DB_BAK_FILE))
+                        match remove_db()
                         {
                             Ok(_) => keep = false,
                             Err(error) => {

@@ -305,3 +305,12 @@ pub fn check_can_directly_exit() -> bool {
         _ => false,
     }
 }
+
+pub fn remove_db() -> Result<(), FileIOError> {
+    let db_path = Path::new(DB_FILE);
+
+    remove_file(db_path)
+        .map_err(FileIOError::FileDeleteFailed)?;
+
+    Ok( () )
+}
