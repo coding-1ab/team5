@@ -1,12 +1,11 @@
-use std::arch::x86_64::_mm_clflush;
-use crate::user_secrets::{EncryptedUserPW, WrappedSessionKey, decrypt_user_pw, encrypt_user_pw, SessionKeyNonce};
-use std::collections::{BTreeMap, HashMap};
-use rkyv::{Archive, Deserialize, Serialize};
-use std::error::Error;
-use std::str::FromStr;
-use std::fmt::{Display, Formatter};
-use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::master_secrets::manual_zeroize;
+use crate::user_secrets::{decrypt_user_pw, encrypt_user_pw, EncryptedUserPW, SessionKeyNonce, WrappedSessionKey};
+use rkyv::{Archive, Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 
 #[derive(Debug)]
