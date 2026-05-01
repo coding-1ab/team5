@@ -36,6 +36,7 @@ fn main() {
         viewport: ViewportBuilder::default()
             .with_visible(false)
             .with_resizable(false)
+            .with_maximize_button(false)
             .with_icon(load_icon()),
         ..eframe::NativeOptions::default()
     };

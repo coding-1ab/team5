@@ -7,6 +7,7 @@ use crate::sodium_bindings::{
 use core::ptr::null;
 use libc::c_ulonglong;
 
+
 /// blake2b
 pub const BLAKE2B_BLOCK_SIZE: usize = 128;
 pub const BLAKE2B_STATE_SIZE: usize = size_of::<crypto_generichash_blake2b_state>();
@@ -16,7 +17,7 @@ pub struct Blake2b<const out_len: usize> {
 }
 impl<const out_len: usize> Blake2b<out_len> {
     const STATE_SIZE: usize = BLAKE2B_STATE_SIZE;
-    const ALIGN_BYTES: usize = 64;
+    const ALIGN_BYTES: usize = align_of::<crypto_generichash_blake2b_state>();
     const MEM_SIZE: usize = BLAKE2B_STATE_SIZE + Self::ALIGN_BYTES;
     pub fn new() -> Self {
         unsafe {
@@ -47,11 +48,6 @@ impl<const out_len: usize> Blake2b<out_len> {
         unsafe {
             crypto_generichash_blake2b_final(self.begin, dst, out_len);
         }
-    }
-    pub fn zeroize(&mut self) {
-        unsafe {
-            sodium_memzero(self.begin.cast(), Self::STATE_SIZE);
-        };
     }
 }
 

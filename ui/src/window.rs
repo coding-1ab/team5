@@ -4,7 +4,7 @@ use eframe::egui::{self, ViewportBuilder, ViewportCommand, ViewportId, Key, Pos2
 use zeroize::Zeroize;
 use engine::{
     data_base::{add_user_pw, change_user_pw, remove_user_pw, SiteName, UserID, UserPW, DB},
-    file_io::{check_can_directly_exit, mark_as_ungraceful_exited_to_file, save_db, DB_BAK_FILE, DB_FILE},
+    file_io::{check_can_directly_exit, mark_as_ungraceful_exited_to_file, save_db},
     header::{DBHeader, Salt},
     master_secrets::{decrypt_db, encrypt_db, general_login, master_pw_validation, EncryptedDB},
     x25519::PubKey,
