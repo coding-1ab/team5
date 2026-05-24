@@ -15,7 +15,7 @@ resolver = "3"
 [workspace.dependencies]
 zeroize = { version = "*", features = ["derive"] }
 arboard = "*"
-cli = {path = "./cli"}
+cli = { path = "./cli" }
 single-instance = "*"
 libsodium-sys-stable = { path = "engine/fork/libsodium-sys-stable-1.23.2-fork" }
 

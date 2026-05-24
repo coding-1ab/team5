@@ -72,7 +72,7 @@ impl ExistingUser {
                     exit_root(ui, root_window);
                 }
                 egui::CentralPanel::default().show_inside(ui, |ui| {
-                    let login_button = ui.add_enabled_ui(!self.reset.is_some(), |ui| {
+                    let (login_button, password_text_input) = ui.add_enabled_ui(!self.reset.is_some(), |ui| {
                         ui.label("input master password");
                         let response = ui.add(
                             TextEdit::singleline(&mut self.password)
@@ -81,7 +81,7 @@ impl ExistingUser {
                         if !self.not_first_frame { response.request_focus() }
                         self.not_first_frame = true;
                         ui.label(&self.error_message);
-                        ui.button("login")
+                        (ui.button("login"), response)
                     }).inner;
                     if self.loading {
                         self.loading = false;
@@ -113,6 +113,7 @@ impl ExistingUser {
                             Err(error) => {
                                 self.password.zeroize();
                                 self.error_message = error.to_string();
+                                password_text_input.request_focus();
                             }
                         }
                     }
