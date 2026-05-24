@@ -245,6 +245,7 @@ impl FirstLogin {
                             self.recheck_password.zeroize();
                             self.error_message =
                                 "password is mismatch".to_string();
+                            response.request_focus();
                             return;
                         }
                     }
